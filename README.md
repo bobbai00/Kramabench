@@ -144,21 +144,22 @@ data/
             └── ta_readme.html
 ```
 
-## EEO (Equal Employment Opportunity and Diversity Reports)
+### papers (Staff Papers and Analyses)
 
-It contains yearly data from 2011. Mainly `pdf`s.
+It contains yearly data from 2007. Mainly `pdf`s.
 
 ```bash
-python3 scripts/EEO/EEO.py
+python3 scripts/DERA/papers.py
 ```
 
 File structure:
 ```
 data/
 └── SEC/
-    └── EEO/
-        └── <year>/
-            └── *.pdf
+    └── DERA/
+        └── papers/
+            └── <year>/
+                └── *.pdf
 ```
 
 ## DATA (SEC Data Library)
@@ -192,3 +193,13 @@ data/
 # Queries
 
 Manually created JSON queries are under `quereis/*`. Currently it is classified into `easy`, `medium` and `hard`.
+
+# Update Log
+
+## 2024.12.19
+
+- Added PDF readmes for SEC datasets
+
+- Added text content and header to EDGAR filings
+
+- Added the DERA/papers dataset
