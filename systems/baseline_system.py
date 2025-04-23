@@ -77,7 +77,7 @@ class BaselineLLMSystem(System):
         Initialize the output directory for the question.
         :param question: Question object
         """
-        question_output_dir = os.path.join(self.output_dir, self.variance, query_id)
+        question_output_dir = os.path.join(self.output_dir, query_id)
         if not os.path.exists(question_output_dir):
             os.makedirs(question_output_dir)
         self.question_output_dir = question_output_dir
@@ -93,7 +93,7 @@ class BaselineLLMSystem(System):
         """
         data_string = ""
         for file_name, data in self.dataset.items():
-            if self.verbose: print(f"Reading {file_name}...")
+            if self.verbose: print(f"{self.name}: Reading {file_name}...")
             data_string += f"\nFile name: {file_name}\n"
             data_string += f"Column data types: {data.dtypes}\n"
             data_string += f"Table:\n"
@@ -164,7 +164,7 @@ class BaselineLLMSystem(System):
         prompt_fp = os.path.join(self.question_output_dir, f"prompt.txt")
         with open(prompt_fp, 'w') as f:
             f.write(prompt)
-        print(f"Prompt saved to {prompt_fp}")
+        print(f"{self.name}: Prompt saved to {prompt_fp}")
         return prompt
     
     def extract_response(self, response, try_number:int):
@@ -179,7 +179,7 @@ class BaselineLLMSystem(System):
         response_fp = os.path.join(self.question_output_dir, f"initial_response.txt")
         with open(response_fp, 'w') as f:
             f.write(response)
-        print(f"Response saved to {response_fp}")
+        print(f"{self.name}: Response saved to {response_fp}")
 
         # Assume the step-by-step plan is fixed after the first try
         if try_number == 0:
@@ -190,7 +190,7 @@ class BaselineLLMSystem(System):
             json_fp = os.path.join(self.question_output_dir, f"answer.json")
             with open(json_fp, 'w') as f:
                 f.write(json_response)
-            print(f"JSON response saved to {json_fp}")
+            print(f"{self.name}: JSON response saved to {json_fp}")
         
         # Extract the code from the response
         code = extract_code(response, pattern=r'```python(.*?)```')
@@ -199,7 +199,7 @@ class BaselineLLMSystem(System):
         code_fp = os.path.join(self.question_output_dir, '_intermediate', f"pipeline-{try_number}.py") #{question.id}-{try_number}
         with open(code_fp, 'w') as f:
             f.write(code)
-        print(f"Code saved to {code_fp}")
+        print(f"{self.name}: Code saved to {code_fp}")
 
         return json_fp, code_fp
     
@@ -242,13 +242,13 @@ class BaselineLLMSystem(System):
             with open(json_fp, 'r') as f:
                 answer = json.load(f)
         except json.JSONDecodeError as e:
-            print(f"** ERRORS ** decoding answer JSON: {e}")
+            print(f"ERROR: {self.name}: ** ERRORS ** decoding answer JSON: {e}")
             return {}
 
         # Check if the error file is empty
         if error_fp is not None:
             if os.path.getsize(error_fp) > 0:
-                print(f"** ERRORS ** found in {error_fp}. Skipping JSON update.")
+                print(f"ERROR: {self.name}: ** ERRORS ** found in {error_fp}. Skipping JSON update.")
                 return answer
 
         # Load the output file
@@ -256,7 +256,7 @@ class BaselineLLMSystem(System):
             with open(output_fp, 'r') as f:
                 output = json.load(f)
         except json.JSONDecodeError as e:
-            print(f"** ERRORS ** decoding output JSON: {e}")
+            print(f"ERROR: {self.name}: ** ERRORS ** decoding output JSON: {e}")
             return answer
 
         # Fill in the JSON answer with the execution result
@@ -278,7 +278,7 @@ class BaselineLLMSystem(System):
             # Clean NaN values to null for strict JSON compliance
             answer = clean_nan(answer)
             json.dump(answer, f, indent=4)
-        print(f"Updated JSON answer saved to {json_fp}")
+        print(f"{self.name}: Updated JSON answer saved to {json_fp}")
         return answer
     
     def run_one_shot(self, query:str, query_id:str) -> Dict[str, str | Dict | List]:
@@ -289,7 +289,8 @@ class BaselineLLMSystem(System):
             
         # Generate the prompt
         prompt = self.generate_prompt(query)
-        print("Prompt:", prompt)
+        if self.verbose:
+            print(f"{self.name}: Prompt:", prompt)
 
         # Get the model's response
         messages=[
@@ -297,7 +298,8 @@ class BaselineLLMSystem(System):
             {"role": "user", "content": prompt}
         ]
         response = call_gpt(messages)
-        print("Response:", response)
+        if self.verbose:
+            print(f"{self.name}: Response:", response)
 
         # Process the response
         json_fp, code_fp = self.extract_response(response, try_number=0)
@@ -319,7 +321,8 @@ class BaselineLLMSystem(System):
 
         # Generate the prompt
         prompt = self.generate_prompt(query)
-        print("Prompt:", prompt)
+        if self.verbose:
+            print(f"{self.name}: Prompt:", prompt)
 
         messages=[
             {"role": "system", "content": "You are an experienced data scientist."},
@@ -329,7 +332,8 @@ class BaselineLLMSystem(System):
             messages.append({"role": "user", "content": prompt})
             # Get the model's response
             response = call_gpt(messages)
-            print("Response:", response)
+            if self.verbose:
+                print(f"{self.name}: Response:", response)
             messages.append({"role": "assistant", "content": response})
 
             # Process the response
@@ -401,7 +405,8 @@ def main():
     # Process the dataset
     baseline_llm.process_dataset(questions[0]["dataset_directory"])
     for question in questions:
-        print(f"Processing question: {question['id']}")
+        if self.verbose:
+            print(f"Processing question: {question['id']}")
         # For debugging purposes, also input question.id
         response = baseline_llm.serve_query(question["query"], question["id"])
 

@@ -13,23 +13,23 @@ def main():
     parser.add_argument("--sut", type=str, default="BaselineLLMSystemGPT4oFewShot", help="The system under test.")
     parser.add_argument("--dataset_name", type=str, default="environment", help="Name of dataset.")
     parser.add_argument("--workload_filename", type=str, default="environment.json", help="Name of workload JSON file.")
-    parser.add_argument("--result", type=str, default="./results", help="Directory to store benchmark results.")
-    parser.add_argument("--task_fixtures", type=str, default="fixtures", help="Directory containing task fixture files.")
+    parser.add_argument("--result_directory", type=str, default="results", help="Directory to store benchmark results.")
+    parser.add_argument("--task_fixtures", type=str, default="benchmark/fixtures", help="Directory containing task fixture files.")
     parser.add_argument("--project_root", type=str, default=os.getcwd(), help="Project root.")
-    parser.add_argument("--use-cache", action="store_true", help="Use cached system outputs if available.")
-    parser.add_argument("--verbose", action="store_true", help="Verbose logging.")
+    parser.add_argument("--use-cache", action="store_true", default=True, help="Use cached system outputs if available.")
+    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose logging.")
     args = parser.parse_args()
 
     system_name = args.sut
-    result_root_dir = args.result
-    task_fixture_dir = args.task_fixtures
+    result_root_dir = os.path.join(args.project_root, args.result_directory)
+    task_fixture_dir = os.path.join(args.project_root, args.task_fixtures)
     use_cache = args.use_cache
     verbose = args.verbose
     project_root_dir = args.project_root
     dataset_name = args.dataset_name
     workload_filename = args.workload_filename
     # Setup output directory for system under test
-    system_output_dir = os.path.join(project_root_dir, f"test_outputs/{system_name}")
+    system_output_dir = os.path.join(project_root_dir, f"system_scratch/{system_name}")
     os.makedirs(system_output_dir, exist_ok=True)
 
     workload_name = os.path.basename(workload_filename)

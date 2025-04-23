@@ -1,9 +1,11 @@
+import datetime
+import glob
 import json
 import logging
 import os
 import re
 from rouge_score import rouge_scorer
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 from benchmark.benchmark_api import System
@@ -13,6 +15,7 @@ class Executor:
     def __init__(
             self,
             system: System,
+            system_name: str,
             workload_path: str | os.PathLike,
             results_directory: str | os.PathLike,
             verbose=False
@@ -21,6 +24,7 @@ class Executor:
         `workload_path` is a json file containing workloads.
         """
         self.system = system
+        self.system_name = system_name
         if self.system.dataset_directory is None:
             raise Exception("Executor __init__ error: System.process_dataset was not called.")
         with open(workload_path) as f:
@@ -45,14 +49,15 @@ class Executor:
         if self.verbose:
             print(f"task_id: {task['id']}")
             print(f"query: {task['query']}")
-        model_output = self.system.serve_query(task["query"])
+        model_output = self.system.serve_query(query=task["query"], query_id=task["id"])
         response = {}
         response["task_id"] = task["id"]
         response["model_output"] = model_output
-        response["subresponses"] = []
-        for subtask in task["subtasks"]:
-            subresponse = self.run_task(subtask)
-            response["subresponses"].append(subresponse)
+        if "subtasks" in task:
+            response["subresponses"] = []
+            for subtask in task["subtasks"]:
+                subresponse = self.run_task(subtask)
+                response["subresponses"].append(subresponse)
         return response
     
     def run_next_task(self):
@@ -68,7 +73,19 @@ class Executor:
     def reset_task_iterator(self):
         self.cur_query_id = 0
     
-    def run_workload(self, cache_system_output: bool = True):
+    def _get_most_recent_cache(self, basename: str) -> Optional[str | os.PathLike]:
+        pattern = os.path.join(self.results_directory, f"response_cache/{basename}_*.json")
+        files = glob.glob(pattern)
+        if not files:
+            return None
+        def extract_timestamp(file_path):
+            filename = os.path.basename(file_path)
+            timestamp_str = filename.replace(f"{basename}_", "").replace(".json", "")
+            return datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+        files.sort(key=lambda f: extract_timestamp(f), reverse=True)
+        return files[0]
+    
+    def run_workload(self, cache_system_output: bool = True) -> List[Dict[str, Any]]:
         """
         Runs all the tasks in the given workload.
         Results are cached under self.results_directory/output_cache.
@@ -77,6 +94,18 @@ class Executor:
         """
         if self.verbose:
             print(f"------------- Running workload at {self.workload_path} ----------------")
+        
+        workload_filename = os.path.basename(self.workload_path)
+        basename, ext = os.path.splitext(workload_filename)
+        if cache_system_output:
+            cache_path = self._get_most_recent_cache(basename=basename)
+            if cache_path:
+                with open(cache_path, 'r') as f:
+                    results = json.load(f)
+                if self.verbose:
+                    print(f"Using cached output {cache_path}...")
+                return results
+        
         results = []
         while True:
             result = self.run_next_task()
@@ -85,9 +114,15 @@ class Executor:
             results.append(result)
         
         if cache_system_output:
-            #TODO: implement me
-            logging.warning("Executor.run_workload not implemented.")
-            pass
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            new_filename = f"{basename}_{timestamp}{ext}"
+            cache_dir = cache_path = os.path.join(self.results_directory, f"response_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_path = os.path.join(cache_dir, new_filename)
+            with open(cache_path, 'w') as f:
+                if self.verbose:
+                    print(f"Caching output at {cache_path}...")
+                json.dump(results, f, indent=2)
 
         return results
 
@@ -108,13 +143,13 @@ class Evaluator:
         self.results_directory = results_directory
         with open(workload_path) as f:
             self.workload = json.load(f)
-        with open(task_fixture_directory/'task_fixtures.json') as f:
+        with open(os.path.join(task_fixture_directory, 'task_fixtures.json')) as f:
             self.task_fixtures = json.load(f)
-        with open(task_fixture_directory/'input_type_fixtures.json') as f:
+        with open(os.path.join(task_fixture_directory, 'input_type_fixtures.json')) as f:
             self.input_type_fixtures = json.load(f)
-        with open(task_fixture_directory/'output_type_fixtures.json') as f:
+        with open(os.path.join(task_fixture_directory, 'output_type_fixtures.json')) as f:
             self.output_type_fixtures = json.load(f)
-        with open(task_fixture_directory/'answer_type_fixtures.json') as f:
+        with open(os.path.join(task_fixture_directory, 'answer_type_fixtures.json')) as f:
             self.answer_type_fixtures = json.load(f)
         
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
@@ -172,9 +207,10 @@ class Evaluator:
             score = self.evaluate_response_with_metric(system_answer, task["model_output"], metric)
             evaluation_result[metric] = score
         all_evaluation_results.append(evaluation_result)
-        for i, subtask in enumerate(task["subtasks"]):
-            subtask_result = self._evaluate_result_for_task(response["subresponses"][i], subtask)
-            all_evaluation_results.append(subtask_result)
+        if "subtasks" in task:
+            for i, subtask in enumerate(task["subtasks"]):
+                subtask_result = self._evaluate_result_for_task(response["subresponses"][i], subtask)
+                all_evaluation_results.append(subtask_result)
         
         return all_evaluation_results
 
@@ -200,6 +236,7 @@ class Benchmark:
     ):
         systems_module = __import__("systems")
         system_class_ = getattr(systems_module, system_name)
+        self.system_name = system_name
         self.system = system_class_(verbose=verbose, output_dir=system_output_directory)
         self.cache_system_output = cache_system_output
         self.task_fixture_directory = task_fixture_directory
@@ -215,6 +252,7 @@ class Benchmark:
         # Returns raw results from the system and evaluation results
         self.system.process_dataset(dataset_directory)
         executor = Executor(
+            system_name=self.system_name,
             system=self.system,
             workload_path=workload_path,
             results_directory=results_directory,
