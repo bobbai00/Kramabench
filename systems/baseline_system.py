@@ -2,7 +2,7 @@ import sys
 sys.path.append('./')
 from typeguard import typechecked
 
-from systems.generator_util import Generator, pdf_to_text
+from systems.generator_util import Generator
 from benchmark.benchmark_api import System
 from utils.baseline_utils import * 
 

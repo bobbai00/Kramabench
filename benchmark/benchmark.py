@@ -1,7 +1,6 @@
 import datetime
 import glob
 import json
-import logging
 import os
 import re
 from rouge_score import rouge_scorer

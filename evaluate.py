@@ -1,11 +1,8 @@
 import argparse
-import json
 import os
 import pandas as pd
-import traceback
 
 from benchmark import Benchmark
-from benchmark.metrics import metric_factory
 
 
 def main():
@@ -22,22 +19,22 @@ def main():
     args = parser.parse_args()
 
     system_name = args.sut
-    result_root_dir = os.path.join(args.project_root, args.result_directory)
-    task_fixture_dir = os.path.join(args.project_root, args.task_fixtures)
-    use_system_cache = args.use_system_cache
-    cache_system_output = args.cache_system_output
     verbose = args.verbose
-    project_root_dir = args.project_root
-    dataset_name = args.dataset_name
-    workload_filename = args.workload_filename
-    # Setup output directory for system under test
-    system_output_dir = os.path.join(project_root_dir, f"system_scratch/{system_name}")
-    os.makedirs(system_output_dir, exist_ok=True)
 
+    project_root_dir = args.project_root
+    result_root_dir = os.path.join(project_root_dir, args.result_directory)
+
+    # Setup output (cache maintained by benchmark) and scratch directories for system under test
+    system_result_dir = os.path.join(result_root_dir, system_name)
+    workload_filename = args.workload_filename
     workload_name = os.path.basename(workload_filename)
     workload_path = os.path.join(project_root_dir, f"workload/{workload_filename}")
-    system_result_dir = os.path.join(result_root_dir, system_name)
+    system_output_dir = os.path.join(project_root_dir, f"system_scratch/{system_name}")
+    os.makedirs(system_output_dir, exist_ok=True)
     os.makedirs(system_result_dir, exist_ok=True)
+
+    # Setup benchmark evaluation util directory
+    task_fixture_dir = os.path.join(project_root_dir, args.task_fixtures)
     measures_path = os.path.join(system_result_dir, f"{workload_name}_measures.csv")
     aggregated_results_path = os.path.join(result_root_dir, "aggregated_results.csv")
 
@@ -45,14 +42,14 @@ def main():
         system_name=system_name,
         task_fixture_directory=task_fixture_dir,
         system_output_directory=system_output_dir,
-        use_system_cache=use_system_cache,
-        cache_system_output=cache_system_output,
+        use_system_cache=args.use_system_cache,
+        cache_system_output=args.cache_system_output,
         verbose=verbose,
     )
 
     print(f"Running benchmark on workload: {workload_name}")
     _, evaluation_results = benchmark.run_benchmark(
-        dataset_directory=os.path.join(project_root_dir, f"data/{dataset_name}/input"),
+        dataset_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/input"),
         results_directory=system_result_dir,
         workload_path=workload_path,
         verbose=verbose
