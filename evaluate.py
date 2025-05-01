@@ -8,8 +8,8 @@ from benchmark import Benchmark
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sut", type=str, default="BaselineLLMSystemGPT4oFewShot", help="The system under test.")
-    parser.add_argument("--dataset_name", type=str, default="environment", help="Name of dataset.")
-    parser.add_argument("--workload_filename", type=str, default="environment.json", help="Name of workload JSON file.")
+    parser.add_argument("--dataset_name", type=str, default="legal", help="Name of dataset.")
+    parser.add_argument("--workload_filename", type=str, default="legal-ferdi.json", help="Name of workload JSON file.")
     parser.add_argument("--result_directory", type=str, default="results", help="Directory to store benchmark results.")
     parser.add_argument("--task_fixtures", type=str, default="benchmark/fixtures", help="Directory containing task fixture files.")
     parser.add_argument("--project_root", type=str, default=os.getcwd(), help="Project root.")
@@ -81,15 +81,17 @@ def main():
     print("Aggregating results...")
     workload_results = []
     for (workload, metric), group in results_df.groupby(["workload", "metric"]):
-        mean = group["value"].mean()
-        std = group["value"].std() if len(group) > 1 else 0
+        group_dropped_na = group.dropna()
+        mean = group_dropped_na["value"].mean()
+        std = group_dropped_na["value"].std() if len(group_dropped_na) > 1 else 0
         workload_results.append({
             "sut": system_name,
             "workload": workload,
             "metric": metric,
             "value_mean": mean,
             "value_std": std,
-            "value_support": len(group)
+            "value_support": len(group_dropped_na),
+            "total_value_support": len(group)
         })
 
     aggregated_df = pd.DataFrame(workload_results)

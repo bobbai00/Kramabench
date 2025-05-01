@@ -237,6 +237,27 @@ class BaselineLLMSystem(System):
 
         return output_fp, error_fp
     
+    @typechecked
+    def _format_answer_on_fail(self, answer: Dict | List, error_msg: str = "Warning: No answer found in the Python pipeline.") -> Dict[str, str | Dict | List]:
+        formatted_answer = {}
+        for step in answer:
+            if step["id"] == "main-task":
+                formatted_answer |= step
+                if "answer" not in formatted_answer:
+                    formatted_answer["answer"] = error_msg
+            else:
+                if "subtasks" in formatted_answer:
+                    found = False
+                    for subtask in formatted_answer["subtasks"]:
+                        if subtask["id"] == step["id"]:
+                            found = True
+                        if "answer" not in subtask:
+                            subtask["answer"] = error_msg
+                    if not found:
+                        formatted_answer["subtasks"].append(step)
+        return formatted_answer
+    
+    @typechecked
     def process_response(self, json_fp, output_fp, error_fp=None) -> Dict[str, str | Dict | List]:
         """
         Process the response and fill in the JSON response with the execution result.
@@ -250,13 +271,16 @@ class BaselineLLMSystem(System):
                 answer = json.load(f)
         except json.JSONDecodeError as e:
             print(f"ERROR: {self.name}: ** ERRORS ** decoding answer JSON: {e}")
-            return {}
+            return {
+                "id": "main-task",
+                "answer": "SUT failed to answer this question."
+                }
 
         # Check if the error file is empty
         if error_fp is not None:
             if os.path.getsize(error_fp) > 0:
                 print(f"ERROR: {self.name}: ** ERRORS ** found in {error_fp}. Skipping JSON update.")
-                return answer
+                return self._format_answer_on_fail(answer, f"** ERRORS ** found during execution in {error_fp}")
 
         # Load the output file
         try: 
@@ -264,7 +288,7 @@ class BaselineLLMSystem(System):
                 output = json.load(f)
         except json.JSONDecodeError as e:
             print(f"ERROR: {self.name}: ** ERRORS ** decoding output JSON: {e}")
-            return answer
+            return self._format_answer_on_fail(answer, f"** ERRORS ** decoding output in {output_fp}")
 
         # Fill in the JSON answer with the execution result
         for step in answer:
@@ -345,6 +369,8 @@ class BaselineLLMSystem(System):
             {"role": "system", "content": "You are an experienced data scientist."},
         ]
 
+        answer = None
+
         for try_number in range(5):
             messages.append({"role": "user", "content": prompt})
             # Get the model's response
@@ -368,7 +394,9 @@ class BaselineLLMSystem(System):
                 # Fill in JSON response with the execution result
                 answer = self.process_response(json_fp, output_fp, error_fp=None)
                 break
-
+        
+        if answer is None:
+            answer = {"id": "main-task", "answer": "Pipeline not successful after 5 tries."}
         return answer
     
     def process_dataset(self, dataset_directory: str | os.PathLike) -> None:
@@ -381,7 +409,10 @@ class BaselineLLMSystem(System):
         # read the files
         for file in os.listdir(dataset_directory):
             if file.endswith(".csv"):
-                self.dataset[file] = pd.read_csv(os.path.join(dataset_directory, file), engine='python', on_bad_lines='warn')
+                try:
+                    self.dataset[file] = pd.read_csv(os.path.join(dataset_directory, file), engine='python', on_bad_lines='warn')
+                except UnicodeDecodeError:
+                    self.dataset[file] = pd.read_csv(os.path.join(dataset_directory, file), engine='python', on_bad_lines='warn', encoding='latin-1')
     
     @typechecked
     def serve_query(self, query: str, query_id:str="default_name-0") -> Dict:
