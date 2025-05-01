@@ -81,15 +81,17 @@ def main():
     print("Aggregating results...")
     workload_results = []
     for (workload, metric), group in results_df.groupby(["workload", "metric"]):
-        mean = group["value"].mean()
-        std = group["value"].std() if len(group) > 1 else 0
+        group_dropped_na = group.dropna()
+        mean = group_dropped_na["value"].mean()
+        std = group_dropped_na["value"].std() if len(group_dropped_na) > 1 else 0
         workload_results.append({
             "sut": system_name,
             "workload": workload,
             "metric": metric,
             "value_mean": mean,
             "value_std": std,
-            "value_support": len(group)
+            "value_support": len(group_dropped_na),
+            "total_value_support": len(group)
         })
 
     aggregated_df = pd.DataFrame(workload_results)

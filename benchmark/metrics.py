@@ -1,5 +1,8 @@
 import json
+import logging
 from typing import List
+
+logging.basicConfig(level=logging.ERROR)
 
 import nltk
 from rouge_score import rouge_scorer
@@ -38,7 +41,8 @@ class Precision(Metric):
             true_positives = pred_set & target_set
             precision = len(true_positives) / len(pred_set)
             return precision
-        raise TypeError("Precision Metric: unsupported argument types")
+        logging.error("TypeError: Precision Metric: unsupported argument types")
+        return 0.0
 
 
 class Recall(Metric):
@@ -60,63 +64,80 @@ class Recall(Metric):
             true_positives = pred_set & target_set
             precision = len(true_positives) / len(target_set)
             return precision
-        raise TypeError("Precision Metric: unsupported argument types")
+        logging.error("TypeError: Precision Metric: unsupported argument types")
+        return 0.0
 
 
 class F1(Metric):
     name = "f1"
 
     def __call__(self, predicted: List[str], target: List[str] | str):
-        if isinstance(predicted, list) and isinstance(target, str):
-            target = json.loads(target)
-        normalize = lambda s: s.strip().lower()
-        pred_set = set(map(normalize, predicted))
-        target_set = set(map(normalize, target))
-        if not pred_set and not target_set:
-            return 1.0  # both empty — define F1 as perfect match
-        if not pred_set or not target_set:
-            return 0.0
+        try: 
+            if isinstance(predicted, list) and isinstance(target, str):
+                target = json.loads(target)
+            normalize = lambda s: s.strip().lower()
+            pred_set = set(map(normalize, predicted))
+            target_set = set(map(normalize, target))
+            if not pred_set and not target_set:
+                return 1.0  # both empty — define F1 as perfect match
+            if not pred_set or not target_set:
+                return 0.0
 
-        true_positives = pred_set & target_set
-        precision = len(true_positives) / len(pred_set) if pred_set else 0.0
-        recall = len(true_positives) / len(target_set) if target_set else 0.0
-        if precision + recall == 0:
+            true_positives = pred_set & target_set
+            precision = len(true_positives) / len(pred_set) if pred_set else 0.0
+            recall = len(true_positives) / len(target_set) if target_set else 0.0
+            if precision + recall == 0:
+                return 0.0
+            f1 = 2 * precision * recall / (precision + recall)
+            return f1
+        except Exception as e:
+            logging.error(f"F1 Metric: {e}")
             return 0.0
-        f1 = 2 * precision * recall / (precision + recall)
-        return f1
 
 class MeanSquaredError(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
     name = "mean_squared_error"
 
     def __call__(self, predicted: str | int | float, target: str | int | float):
-        if isinstance(predicted, str):
-            predicted = str_to_float(predicted)
-        if isinstance(target, str):
-            target = str_to_float(target)
-        return (predicted - target) * (predicted - target)
+        try:
+            if isinstance(predicted, str):
+                predicted = str_to_float(predicted)
+            if isinstance(target, str):
+                target = str_to_float(target)
+            return (predicted - target) * (predicted - target)
+        except Exception as e:
+            logging.error(f"MeanSquared Error Metric: {e}")
+            return None
     
 class MeanAbsoluteError(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
     name = "mean_absolute_error"
 
     def __call__(self, predicted: str | int | float, target: str | int | float):
-        if isinstance(predicted, str):
-            predicted = str_to_float(predicted)
-        if isinstance(target, str):
-            target = str_to_float(target)
-        return abs(predicted - target)
+        try:
+            if isinstance(predicted, str):
+                predicted = str_to_float(predicted)
+            if isinstance(target, str):
+                target = str_to_float(target)
+            return abs(predicted - target)
+        except Exception as e:
+            logging.error(f"MeanAbsoluteError Metric: {e}")
+            return None
 
 class MeanRelativeAbsoluteError(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
     name = "mean_relative_absolute_error"
 
     def __call__(self, predicted: str | int | float, target: str | int | float):
-        if isinstance(predicted, str):
-            predicted = str_to_float(predicted)
-        if isinstance(target, str):
-            target = str_to_float(target)
-        return abs(predicted - target) / target
+        try:
+            if isinstance(predicted, str):
+                predicted = str_to_float(predicted)
+            if isinstance(target, str):
+                target = str_to_float(target)
+            return abs(predicted - target) / target
+        except Exception as e:
+            logging.error(f"MeanRelativeAbsoluteError Metric: {e}")
+            return 1.0
 
 
 class BleuScore(Metric):
@@ -134,8 +155,6 @@ class RougeScore(Metric):
         # Using Rouge-1, the overlap of words
         rouge = rouge_scorer.RougeScorer(['rouge1'])
         results = rouge.score(target=target, prediction=predicted)
-        precision = results['rouge1'].precision
-        recall = results['rouge1'].recall
         f1 = results['rouge1'].fmeasure
         return f1
 
@@ -143,7 +162,7 @@ class RougeScore(Metric):
 class Success(Metric):
     name = "success"
 
-    def __call__(self, predicted: str, target: str):
+    def __call__(self, predicted: str | int | float, target: str | int | float):
         return int(predicted == target)
 
 def metric_factory(metric_name: str):
