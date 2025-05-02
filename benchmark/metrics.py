@@ -7,6 +7,8 @@ logging.basicConfig(level=logging.ERROR)
 import nltk
 from rouge_score import rouge_scorer
 
+from llm_tools import GPTInterface, LLMInterface, OllamaInterface
+
 def str_to_float(num_string: str) -> float:
     if num_string.endswith("%"):
         return float(num_string.strip("%")) / 100
@@ -157,6 +159,18 @@ class RougeScore(Metric):
         results = rouge.score(target=target, prediction=predicted)
         f1 = results['rouge1'].fmeasure
         return f1
+
+class LLMParaphrase(Metric):
+    name = "llm_paraphrase"
+
+    def __call__(self, predicted: str, target: str, llm_interface: LLMInterface):
+        """
+        REQUIRES: llm_interface is already initialized.
+        """
+        is_paraphrase = llm_interface.evaluate_paraphrase(predicted, target)
+        if is_paraphrase is not None:
+            return int(is_paraphrase)
+        return None
 
 
 class Success(Metric):
