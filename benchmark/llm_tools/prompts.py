@@ -43,3 +43,21 @@ PARAPHRASE_INSTRUCTION_PROMPT = [
         "content": "No"
     }
 ]
+
+CODE_UNDERSTANDING_PROMPT = [
+    {
+        "role": "user",
+        "content": ("You are a helpful code understanding bot. You will be provided with a problem statement, and a data science code snippet that correctly solves the problem, and a list of filenames used as inputs to the code.",
+            "Action Steps: 1. Read the problem statement carefully. 2. Read the code snippet carefully to identify key functionalities in the implementation. Since you are working with data science code, data handling details and edge cases are important.",
+            "For example, dropping null values and converting the type of a column, are considered key steps. On the contrary, whether the code uses scikit-learn or statsmodels for a regression is unimportant - having a regression and what variables it controlls for are key elements.",
+            "Please describe the key steps in a json list of strings.")
+    },
+    {
+        "role": "system",
+        "content": "I understand. Please give me the problem statement, the code, and the data sources."
+    },
+    {
+        "role": "user",
+        "content": ""
+    }
+]
