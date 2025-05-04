@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 
 from benchmark.benchmark_api import System
+from benchmark.llm_tools import GPTInterface
 from benchmark.metrics import metric_factory
 
 class Executor:
@@ -131,6 +132,7 @@ class Evaluator:
     def __init__(
             self,
             workload_path: str | os.PathLike,
+            code_understanding_directory: str | os.PathLike,
             task_fixture_directory: str | os.PathLike,
             results_directory: str | os.PathLike
         ):
@@ -139,6 +141,7 @@ class Evaluator:
         evaluation methods of each type of task and response.
         """
         self.workload_path = workload_path
+        self.code_understanding_directory = code_understanding_directory
         self.task_fixture_directory = task_fixture_directory
         self.results_directory = results_directory
         with open(workload_path) as f:
@@ -156,6 +159,7 @@ class Evaluator:
                 self.answer_to_metric_dict[answer_type["name"]] = answer_type["metrics"]
         
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+        self.pipeline_score_engine = GPTInterface(model="gpt-4o-mini")
     
     def _normalize_string(s: str) -> str:
         """Normalize a string by removing spaces, punctuation, and making it lowercase."""
@@ -226,6 +230,9 @@ class Evaluator:
         for task_idx, task in enumerate(self.workload):
             evaluation_results = self._evaluate_result_for_task(responses[task_idx], task)
             all_evaluation_results.extend(evaluation_results)
+
+        # TODO: Implement workload-wise code understanding evaluation.
+
         return all_evaluation_results
 
 class Benchmark:
@@ -251,6 +258,7 @@ class Benchmark:
             self,
             dataset_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
+            code_understanding_directory: str | os.PathLike,
             workload_path: str | os.PathLike,
             verbose: bool = False
         ):
@@ -267,6 +275,7 @@ class Benchmark:
         print("Evaluating results...")
         evaluator = Evaluator(
             workload_path=workload_path,
+            code_understanding_directory=code_understanding_directory,
             task_fixture_directory=self.task_fixture_directory,
             results_directory=results_directory
         )

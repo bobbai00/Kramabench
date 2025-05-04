@@ -13,7 +13,7 @@ import untruncate_json
 from .llm_interface import LLMInterface
 from .prompts import PARAPHRASE_INSTRUCTION_PROMPT, CODE_UNDERSTANDING_PROMPT, PIPELINE_EVALUATION_PROMPT
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 class GPTInterface(LLMInterface):
@@ -93,7 +93,7 @@ class GPTInterface(LLMInterface):
             "role": "user",
             "content": [{
                 "type": "text",
-                "text": f"Problem statement: {task['query']} \n Data pipeline: {json.dumps(sut_generated_pipeline)} \n Key functionalities: {json.dumps(understanding_filepath)} \n\n"
+                "text": f"Problem statement: {task['query']} \n Data pipeline: {json.dumps(sut_generated_pipeline)} \n Key functionalities: {json.dumps(understanding_list)} \n\n"
             }]
         })
         return formatted_instruction_prompts
@@ -194,4 +194,4 @@ class GPTInterface(LLMInterface):
                 ans = v
                 break
             json_answer = ans
-        return ["yes" in ans_item.lower for ans_item in json_answer]
+        return ["yes" in ans_item.lower() for ans_item in json_answer]

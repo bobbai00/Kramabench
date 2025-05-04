@@ -50,6 +50,7 @@ def main():
     print(f"Running benchmark on workload: {workload_name}")
     _, evaluation_results = benchmark.run_benchmark(
         dataset_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/input"),
+        code_understanding_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/studies/understanding"),
         results_directory=system_result_dir,
         workload_path=workload_path,
         verbose=verbose
