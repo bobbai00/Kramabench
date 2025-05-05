@@ -30,8 +30,12 @@ class System:
     def serve_query(self, query: str, query_id: str) -> Dict:
         """
         `query` contains the task that the implementation is to perform in natural language
-        in English. The system may be instructed to generate responses in natural language or
-        in json format. If the response is expected to be in json format, it will be clearly
-        requested in `query`.
+        in English. The response is expected to be in the following json format.
+        {
+            "explanation": {
+                "answer": text or json - SUT's overall answer to the query.
+            },
+            "pipeline_code": <code str>
+        }
         """
         raise NotImplementedError("System must implement the process_dataset method.")

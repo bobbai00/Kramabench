@@ -167,7 +167,7 @@ class LLMParaphrase(Metric):
         """
         REQUIRES: llm_interface is already initialized.
         """
-        llm_interface = GPTInterface(model="gpt-3.5-turbo")
+        llm_interface = GPTInterface(model="gpt-4o-mini")
         is_paraphrase = llm_interface.evaluate_paraphrase(predicted, target)
         if is_paraphrase is not None:
             return int(is_paraphrase)

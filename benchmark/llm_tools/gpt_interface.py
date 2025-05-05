@@ -72,7 +72,7 @@ class GPTInterface(LLMInterface):
         return formatted_instruction_prompts
     
     @typechecked
-    def _format_pipeline_evaluation_messages(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: List, task: Dict) -> List[Dict]:
+    def _format_pipeline_evaluation_messages(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: str, task: Dict) -> List[Dict]:
         """
         Raises a FileNotFound error when `understanding_filepath` does not exist.
         """
@@ -93,7 +93,7 @@ class GPTInterface(LLMInterface):
             "role": "user",
             "content": [{
                 "type": "text",
-                "text": f"Problem statement: {task['query']} \n Data pipeline: {json.dumps(sut_generated_pipeline)} \n Key functionalities: {json.dumps(understanding_list)} \n\n"
+                "text": f"Problem statement: {task['query']} \n Data pipeline: {sut_generated_pipeline} \n Key functionalities: {json.dumps(understanding_list)} \n\n"
             }]
         })
         return formatted_instruction_prompts
@@ -161,7 +161,7 @@ class GPTInterface(LLMInterface):
         return json_answer
     
     @typechecked
-    def evaluate_data_pipeline(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: List, task: Dict) -> List[bool]:
+    def evaluate_data_pipeline(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: str, task: Dict) -> List[bool]:
         """
         On LLM induced error, return None. Caller takes care of error handling.
         """

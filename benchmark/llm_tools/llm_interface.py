@@ -23,3 +23,7 @@ class LLMInterface:
     @abstractmethod
     def get_code_key_functionalities(self, file_path: str | os.PathLike, task: Dict) -> Optional[List[str]]:
         raise NotImplementedError("LLMInterface: This method should be implemented by the subclass!")
+
+    @abstractmethod
+    def evaluate_data_pipeline(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: str, task: Dict) -> List[bool]:
+        raise NotImplementedError("LLMInterface: This method should be implemented by the subclass!")

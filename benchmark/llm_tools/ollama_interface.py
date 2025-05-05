@@ -121,5 +121,5 @@ class OllamaInterface(LLMInterface):
         return json_answer
     
     @typechecked
-    def evaluate_data_pipeline(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: List, task: Dict) -> List[bool]:
+    def evaluate_data_pipeline(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: str, task: Dict) -> List[bool]:
         raise NotImplementedError("OllamaInterface.evaluate_data_pipeline not implemented yet")

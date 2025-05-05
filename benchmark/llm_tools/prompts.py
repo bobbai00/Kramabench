@@ -160,7 +160,7 @@ CODE_UNDERSTANDING_PROMPT = [
 PIPELINE_EVALUATION_PROMPT = [
     {
         "role": "user",
-        "content": "You are a helpful data pipeline evaluation bot. You will be provided with a problem statement, a data pipeline represented as a list of json objects each containing a step description and a code snippet that supposedly addresses the problem. Then, you'll be given some key functionalities important to solving the problem. \n Evaluation steps: 1. Read the problem statement and the data pipeline carefully. \n 2. For each functionality you are given, check if the data pipeline implemented that functionality. Say \"Yes\" if it does and \"No\" otherwise. Do not give any explanations or corrections. Note that a functionality may not be implemented with only one or a few contiguous lines of code or one step in the pipeline. Your answer should be a json list of Yes/No's."
+        "content": "You are a helpful data pipeline evaluation bot. You will be provided with a problem statement, a data pipeline represented in plaintext code that supposedly solves the problem. Then, you'll be given some key functionalities important to solving the problem. \n Evaluation steps: 1. Read the problem statement and the data pipeline code carefully. \n 2. For each functionality you are given, check if the data pipeline implemented that functionality. Say \"Yes\" if it does and \"No\" otherwise. Do not give any explanations or corrections. Note that a functionality may not be implemented with only one or a few contiguous lines of code or one step in the pipeline. Your answer should be a json list of Yes/No's."
     },
     {
         "role": "system",
@@ -168,14 +168,15 @@ PIPELINE_EVALUATION_PROMPT = [
     },
     {
         "role": "user",
-        "content": "Problem statement: What is the minimum number of report categories that collectively account for at least 50% of reports in 2024? \n Data pipeline: [\{\"step\": \"Read and clean report categories data.\", \"code\": \"import pandas as pd\
+        "content": "Problem statement: What is the minimum number of report categories that collectively account for at least 50% of reports in 2024? \n Data pipeline: import pandas as pd\
 \
 cat_df = pd.read_csv('../../input/csn-data-book-2024-csv/CSVs/\2024_CSN_Report_Categories.csv', skiprows=2, encoding=\"unicode_escape\")\
 cat_df = cat_df.dropna()\
 cat_df['Percentage'] = cat_df['Percentage'].str.replace('%', '').astype (float) / 100\
-cat_df['Rank'] = cat_df['Rank'].astype(int)\"\}, \{\"step\": \"Calculate running sum and find the threshold where it exceeds 50%\", \"code\": \"cat_df = cat_df.sort_values(by='Percentage', ascending=False)\
+cat_df['Rank'] = cat_df['Rank'].astype(int)\
+cat_df = cat_df.sort_values(by='Percentage', ascending=False)\
 cat_df['Percentage_cumsum'] = cat_df['Percentage'].cumsum()\
-print(cat_df[cat_df['Percentage_cumsum'] > 0.5]['Rank'].values[0])\"\}] \n \
+print(cat_df[cat_df['Percentage_cumsum'] > 0.5]['Rank'].values[0]) \n \
     Key functionalities: [\"Load the 2024_CSN_Report_Categories.csv file while skipping the first two header rows and using unicode-escape encoding\", \
     \"Drop any rows that contain missing values\",\
     \"Impute the missing values with mean\",\

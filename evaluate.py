@@ -1,4 +1,6 @@
 import argparse
+import json
+import numpy as np
 import os
 import pandas as pd
 
@@ -47,7 +49,7 @@ def main():
         verbose=verbose,
     )
 
-    print(f"Running benchmark on workload: {workload_name}")
+    print(f"Starting benchmark workflow on workload: {workload_name}")
     _, evaluation_results = benchmark.run_benchmark(
         dataset_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/input"),
         code_understanding_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/studies/understanding"),
@@ -64,12 +66,15 @@ def main():
         for metric, value in task_result.items():
             if metric == "task_id":
                 continue
+            parsed_value = value
+            if isinstance(value, list): # LLM code eval results, handle list
+                parsed_value = f"\"{json.dumps(value)}\""
             flat_measures.append({
                 "sut": system_name,
                 "workload": workload_name,
                 "task_id": task_id,
                 "metric": metric,
-                "value": value
+                "value": parsed_value
             })
 
     results_df = pd.DataFrame(flat_measures)
@@ -83,17 +88,36 @@ def main():
     workload_results = []
     for (workload, metric), group in results_df.groupby(["workload", "metric"]):
         group_dropped_na = group.dropna()
-        mean = group_dropped_na["value"].mean()
-        std = group_dropped_na["value"].std() if len(group_dropped_na) > 1 else 0
-        workload_results.append({
-            "sut": system_name,
-            "workload": workload,
-            "metric": metric,
-            "value_mean": mean,
-            "value_std": std,
-            "value_support": len(group_dropped_na),
-            "total_value_support": len(group)
-        })
+        if metric != "llm_code_eval":
+            mean = group_dropped_na["value"].mean()
+            std = group_dropped_na["value"].std() if len(group_dropped_na) > 1 else 0
+            workload_results.append({
+                "sut": system_name,
+                "workload": workload,
+                "metric": metric,
+                "value_mean": mean,
+                "value_std": std,
+                "value_support": len(group_dropped_na),
+                "total_value_support": len(group)
+            })
+        else: # Deal with LLM code evaluation
+            value_support = 0
+            values = []
+            for _, row in group_dropped_na.iterrows():
+                eval_list = json.loads(row['value'][1:-1])
+                eval_list_int = [1 if b else 0 for b in eval_list]
+                if len(eval_list) > 0:
+                    values.append(sum(eval_list_int) / len(eval_list))
+                    value_support += 1
+            workload_results.append({
+                "sut": system_name,
+                "workload": workload,
+                "metric": metric,
+                "value_mean": np.mean(values),
+                "value_std": np.std(values),
+                "value_support": value_support,
+                "total_value_support": len(group)
+            })
 
     aggregated_df = pd.DataFrame(workload_results)
 

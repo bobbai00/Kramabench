@@ -1,6 +1,7 @@
 import datetime
 import glob
 import json
+import logging
 import os
 import re
 from rouge_score import rouge_scorer
@@ -11,6 +12,8 @@ from typing import Any, Dict, List, Optional
 from benchmark.benchmark_api import System
 from benchmark.llm_tools import GPTInterface
 from benchmark.metrics import metric_factory
+
+logging.basicConfig(level=logging.WARNING)
 
 class Executor:
     def __init__(
@@ -43,17 +46,20 @@ class Executor:
         The output is formatted as follows
         {
             "task_id": str
-            "model_output": text or json - the content directly outputed by test System
+            "model_output": text or json - the content directly outputted by test System
             "subresponses": [ ... {"model_output": ..., "subresponses": ... } ... ]
         }
         """
         if self.verbose:
             print(f"task_id: {task['id']}")
             print(f"query: {task['query']}")
-        model_output = self.system.serve_query(query=task["query"], query_id=task["id"])
+        system_overall_response = self.system.serve_query(query=task["query"], query_id=task["id"])
+        model_output = system_overall_response["explanation"]
+        code_string = system_overall_response["pipeline_code"]
         response = {}
         response["task_id"] = task["id"]
         response["model_output"] = model_output
+        response["code"] = code_string
         if "subtasks" in task:
             response["subresponses"] = []
             for subtask in task["subtasks"]:
@@ -93,8 +99,7 @@ class Executor:
         Note that the cache content here are the raw response dicts, not
         evaluation results.
         """
-        if self.verbose:
-            print(f"------------- Running workload at {self.workload_path} ----------------")
+        
         
         workload_filename = os.path.basename(self.workload_path)
         basename, ext = os.path.splitext(workload_filename)
@@ -106,7 +111,10 @@ class Executor:
                 if self.verbose:
                     print(f"Using cached output {cache_path}...")
                 return results
-        
+            
+        if self.verbose:
+            print(f"------------- Running workload at {self.workload_path} ----------------")
+
         results = []
         while True:
             result = self.run_next_task()
@@ -159,7 +167,7 @@ class Evaluator:
                 self.answer_to_metric_dict[answer_type["name"]] = answer_type["metrics"]
         
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-        self.pipeline_score_engine = GPTInterface(model="gpt-4o-mini")
+        self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
     
     def _normalize_string(s: str) -> str:
         """Normalize a string by removing spaces, punctuation, and making it lowercase."""
@@ -179,10 +187,8 @@ class Evaluator:
         """
         try:
             system_answer = system_response["answer"]
-            # TODO: deal with code and subtask evaluation
         except Exception as e:
-            # TODO: Add verbose control flag to log the json marshalling failure and clean up trace logging
-            print(f"evaluate_response_with_metric: task_id {task_id} - failed to parse system response as JSON: {e}.")
+            logging.warning(f"evaluate_response_with_metric: task_id {task_id} - failed to parse system response as JSON: {e}.")
             return 0.0
 
         # Cast system answer and target answer to strings since all metrics in the
@@ -214,6 +220,20 @@ class Evaluator:
         for metric in target_metrics:
             score = self.evaluate_response_with_metric(task["id"], response["model_output"], task["answer"], metric)
             evaluation_result[metric] = score
+
+        understanding_filepath = os.path.join(self.code_understanding_directory, f"{task['id']}_key_functionalities.json")
+        code_eval_list = []
+        if os.path.exists(understanding_filepath): # code understanding asset only exists for main tasks
+            try:
+                code_eval_list = self.pipeline_evaluation_engine.evaluate_data_pipeline(
+                    understanding_filepath=understanding_filepath,
+                    sut_generated_pipeline=response["code"],
+                    task=task
+                )
+            except Exception as e:
+                logging.error(f"Evaluator._evaluate_result_for_task: {e} while calling LLM evaluator on code.")
+        evaluation_result["llm_code_eval"] = code_eval_list
+
         all_evaluation_results.append(evaluation_result)
         if "subtasks" in task:
             for i, subtask in enumerate(task["subtasks"]):
