@@ -9,7 +9,7 @@ df_combined = pd.read_csv('../../data/wildfire/input/Wildfire_Acres_by_State.csv
 
 augmented_df = aqi_df_state.merge(df_combined[['State', 'Total Acres Burned', 'Population']], on='State', how='left')
 # Ensure the columns are numeric
-augmented_df['bad days proportion'] = pd.to_numeric(augmented_df['good day proportion'], errors='coerce')
+augmented_df['bad days proportion'] = pd.to_numeric(augmented_df['bad days proportion'], errors='coerce')
 augmented_df['Total Acres Burned'] = pd.to_numeric(augmented_df['Total Acres Burned'], errors='coerce')
 
 # Calculate the correlation
