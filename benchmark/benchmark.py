@@ -22,6 +22,7 @@ class Executor:
             system_name: str,
             workload_path: str | os.PathLike,
             results_directory: str | os.PathLike,
+            skip_subtasks: bool=True,
             verbose=False
         ):
         """
@@ -38,6 +39,7 @@ class Executor:
         self.results_directory = results_directory
         self.workload_path = workload_path
         self.verbose = verbose
+        self.skip_subtasks = skip_subtasks
     
     def run_task(self, task: Dict[str, Any]) -> Dict[str, str | Dict | List]:
         """
@@ -60,7 +62,7 @@ class Executor:
         response["task_id"] = task["id"]
         response["model_output"] = model_output
         response["code"] = code_string
-        if "subtasks" in task:
+        if "subtasks" in task and not self.skip_subtasks:
             response["subresponses"] = []
             for subtask in task["subtasks"]:
                 subresponse = self.run_task(subtask)
@@ -142,7 +144,8 @@ class Evaluator:
             workload_path: str | os.PathLike,
             code_understanding_directory: str | os.PathLike,
             task_fixture_directory: str | os.PathLike,
-            results_directory: str | os.PathLike
+            results_directory: str | os.PathLike,
+            skip_subtasks: bool = True,
         ):
         """
         `task_fixtures_directory` contains the tasks fixtures for finding valid
@@ -168,6 +171,7 @@ class Evaluator:
         
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
         self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
+        self.skip_subtasks = skip_subtasks
     
     def _normalize_string(s: str) -> str:
         """Normalize a string by removing spaces, punctuation, and making it lowercase."""
@@ -235,7 +239,7 @@ class Evaluator:
         evaluation_result["llm_code_eval"] = code_eval_list
 
         all_evaluation_results.append(evaluation_result)
-        if "subtasks" in task:
+        if "subtasks" in task and not self.skip_subtasks:
             for i, subtask in enumerate(task["subtasks"]):
                 subtask_result = self._evaluate_result_for_task(response["subresponses"][i], subtask)
                 all_evaluation_results.extend(subtask_result)
