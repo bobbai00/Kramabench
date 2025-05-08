@@ -1,5 +1,6 @@
 import argparse
 import csv
+import datetime
 import json
 import numpy as np
 import os
@@ -107,7 +108,8 @@ def main():
 
     # Setup benchmark evaluation util directory
     task_fixture_dir = os.path.join(project_root_dir, args.task_fixtures)
-    measures_path = os.path.join(system_result_dir, f"{workload_name}_measures.csv")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    measures_path = os.path.join(system_result_dir, f"{workload_name.split('.')[0]}_measures_{timestamp}.csv")
     aggregated_results_path = os.path.join(result_root_dir, "aggregated_results.csv")
 
     if not args.use_evaluation_cache or not os.path.exists(measures_path):

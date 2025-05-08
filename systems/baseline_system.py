@@ -354,12 +354,10 @@ class BaselineLLMSystem(System):
 
         answer = None
         pipeline_code = None
-        if os.path.getsize(error_fp) > 0:
-            pipeline_code = ""
-        else:
-            # Read the pipeline code
-            with open(code_fp, 'r') as f:
-                pipeline_code = f.read()
+
+        # Read the pipeline code regardless of the execution result for semantic eval
+        with open(code_fp, 'r') as f:
+            pipeline_code = f.read()
         
         # Fill in JSON response with the execution result
         answer = self.process_response(json_fp, output_fp, error_fp)
