@@ -48,6 +48,8 @@ for root, dirs, files in os.walk(output_dir):
 
 # Create a new JSON file with the selected tasks
 random_tasks = {task_id: tasks[task_id] for task_id in selected_tasks}
+# sort the tasks by the number that appears at the end of the task_id
+random_tasks = dict(sorted(random_tasks.items(), key=lambda item: int(item[0].split("-")[-1])))
 with open(f"{output_dir}{domain}_random.json", 'w') as file:
     json.dump(random_tasks, file, indent=4)
 
