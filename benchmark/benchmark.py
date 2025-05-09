@@ -268,6 +268,7 @@ class Benchmark:
             use_system_cache: bool = True,
             cache_system_output: bool = True,
             verbose: bool = False,
+            skip_subtasks: bool = False,
     ):
         systems_module = __import__("systems")
         system_class_ = getattr(systems_module, system_name)
@@ -277,6 +278,7 @@ class Benchmark:
         self.cache_system_output = cache_system_output
         self.task_fixture_directory = task_fixture_directory
         self.verbose = verbose
+        self.skip_subtasks = skip_subtasks
     
     def run_benchmark(
             self,
@@ -293,7 +295,8 @@ class Benchmark:
             system=self.system,
             workload_path=workload_path,
             results_directory=results_directory,
-            verbose=verbose
+            verbose=verbose,
+            skip_subtasks=self.skip_subtasks
         )
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
         print("Evaluating results...")
@@ -301,7 +304,8 @@ class Benchmark:
             workload_path=workload_path,
             code_understanding_directory=code_understanding_directory,
             task_fixture_directory=self.task_fixture_directory,
-            results_directory=results_directory
+            results_directory=results_directory,
+            skip_subtasks=self.skip_subtasks
         )
         return results, evaluator.evaluate_results(results)
 

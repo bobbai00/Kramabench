@@ -1,50 +1,17 @@
 import sys
 sys.path.append('./')
+
+import json
+import pandas as pd
+import subprocess
 from typeguard import typechecked
+from typing import Dict, List
 
 from systems.generator_util import Generator, OllamaGenerator
 from benchmark.benchmark_api import System
-from utils.baseline_utils import * 
-
-QUESTION_PROMPT = """
-You are a helpful assistant that generates a plan to solve the given request, and you'll be given:Your task is to answer the following question based on the provided data sources.
-Question: {query}
-Data file names: {file_names}
-
-The following is a snippet of the data files:
-{data}
-
-Now think step-by-step carefully. 
-First, provide a step-by-step reasoning of how you would arrive at the correct answer.
-Do not assume the data files are clean or well-structured (e.g., missing values, inconsistent data type in a column).
-Do not assume the data type of the columns is what you see in the data snippet (e.g., 2012 in Year could be a string, instead of an int). So you need to convert it to the correct type if your subsequent code relies on the correct data type (e.g., cast two columns to the same type before joining the two tables).
-You have to consider the possible data issues observed in the data snippet and how to handle them.
-Output the steps in a JSON format with the following keys:
-- id: always "main-task" for the main task. For each subtask, use "subtask-1", "subtask-2", etc.
-- query: the question the step is trying to answer. Copy down the question from above for the main task.
-- data_sources: the data sources you need to check to answer the question. Include all the file names you need for the main task.
-- subtasks: a list of subtasks. Each subtask should have the same structure as the main task.
-For example, a JSON object for the task might look like this:
-{example_json}
-You can have multiple steps, and each step should be a JSON object.
-Your output for this task should be a JSON array of JSON objects.
-Mark the JSON array with ````json` and ````json` to indicate the start and end of the code block.
-
-Then, provide the corresponding Python code to extract the answer from the data sources. 
-The data sources you may need to answer the question are: {file_paths}.
-
-If possible, print the answer (in a JSON format) to each step you provided in the JSON array using the print() function.
-Use "id" as the key to print the answer.
-For example, if you have an answer to subtask-1, subtask-2, and main-task (i.e., the final answer), you should print it like this:
-print(json.dumps(
-{{"subtask-1": answer1, 
-"subtask-2": answer2, 
-"main-task": answer
-}}, indent=4))
-You can find a suitable indentation for the print statement. Always import json at the beginning of your code.
-
-Mark the code with ````python` and ````python` to indicate the start and end of the code block.
-"""
+from .baseline_prompts import QUESTION_PROMPT, QUESTION_PROMPT_NO_DATA
+from .baseline_utils import *
+from .generator_utils import Generator
 
 class BaselineLLMSystem(System):
     """
@@ -63,7 +30,12 @@ class BaselineLLMSystem(System):
         else: self.variance = "one_shot" # Default variance
         # variance has to be one_shot or few_shot
         assert self.variance in ["one_shot", "few_shot"], f"Invalid variance: {self.variance}. Must be one_shot or few_shot."
-        
+
+        if supply_data_snippet := kwargs.get('supply_data_snippet'):
+            self.supply_data_snippet = supply_data_snippet
+        else:
+            self.supply_data_snippet = False
+
         if verbose := kwargs.get('verbose'):
             self.verbose = verbose
         else: self.verbose = False # Default verbosity
@@ -134,7 +106,7 @@ class BaselineLLMSystem(System):
         """
         return prompt
     
-    def generate_prompt(self, query:str) -> str:
+    def generate_prompt(self, query: str) -> str:
         """
         Generate a prompt for the LLM based on the question.
         :param query: str
@@ -160,13 +132,21 @@ class BaselineLLMSystem(System):
                 "data_sources": ["water-body-testing-2022.csv"]
             }]
         }
-        prompt = QUESTION_PROMPT.format(
-            query=query,
-            file_names=str(file_names),
-            data=data,
-            example_json=json.dumps(example_json, indent=4),
-            file_paths= str(file_paths) #", ".join(file_paths)
-        )
+        if self.supply_data_snippet:
+            prompt = QUESTION_PROMPT.format(
+                query=query,
+                file_names=str(file_names),
+                data=data,
+                example_json=json.dumps(example_json, indent=4),
+                file_paths= str(file_paths) #", ".join(file_paths)
+            )
+        else:
+            prompt = QUESTION_PROMPT_NO_DATA.format(
+                query=query,
+                file_names=str(file_names),
+                example_json=json.dumps(example_json, indent=4),
+                file_paths= str(file_paths) #", ".join(file_paths)
+            )
 
         # Save the prompt to a txt file
         prompt_fp = os.path.join(self.question_output_dir, f"prompt.txt")
@@ -354,12 +334,10 @@ class BaselineLLMSystem(System):
 
         answer = None
         pipeline_code = None
-        if os.path.getsize(error_fp) > 0:
-            pipeline_code = ""
-        else:
-            # Read the pipeline code
-            with open(code_fp, 'r') as f:
-                pipeline_code = f.read()
+
+        # Read the pipeline code regardless of the execution result for semantic eval
+        with open(code_fp, 'r') as f:
+            pipeline_code = f.read()
         
         # Fill in JSON response with the execution result
         answer = self.process_response(json_fp, output_fp, error_fp)

@@ -2,23 +2,17 @@
 This module imports the necessary packages and functions for the BaselineLLMSystem module.
 """
 import os
-import sys
 import re
-import random
-import numpy as np
-import pandas as pd
-import json
 import time
 import math
-import subprocess
-from typing import Any, Dict, List
+
 
 from openai import OpenAI
 from dotenv import load_dotenv
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def call_gpt(messages, model="gpt-4o"):
+def call_gpt(messages, model):
     
     max_retries = 5
     retry_count = 0
