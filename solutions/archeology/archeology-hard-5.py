@@ -32,21 +32,19 @@ print("Number of human samples: ", len(homoSapiens))
 homoSapiens["year"] = 1950 - radioCarbonDF["date"]
 neolithic = homoSapiens[homoSapiens["Culture"] == "Neolithic"]
 
-
 print("Number of Neolithic samples: ", len(neolithic))
 
 
-mostNorthernNeolitic = neolithic[neolithic["Latitude"] == neolithic["Latitude"].max()]
+mostNorthernNeolithic = neolithic[neolithic["Latitude"] == neolithic["Latitude"].max()]
 
 
 
-print("Most Northern Neolithic Sample: ", mostNorthernNeolitic["Latitude"].values[0])
+print("Most Northern Neolithic Sample: ", mostNorthernNeolithic["Latitude"].values[0])
 
 
 
-mostNorthernNeolitic = mostNorthernNeolitic[mostNorthernNeolitic["year"] == mostNorthernNeolitic["year"].max()]
-mostNorthernYear = mostNorthernNeolitic["year"].values[0]
-
+mostNorthernNeolithic = mostNorthernNeolithic[mostNorthernNeolithic["year"] == mostNorthernNeolithic["year"].max()]
+mostNorthernYear = mostNorthernNeolithic["year"].values[0]
 
 
 print("Most northern Neolithic sample year: ", mostNorthernYear)
@@ -65,6 +63,7 @@ def find_closest(targetValue, possibleValues):
 
 closestYear = find_closest(mostNorthernYear, climateDF["year"])
 closestYearValues = climateDF[climateDF["year"] == closestYear]
+print(climateDF[climateDF["year"] == closestYear])
 print(len(closestYearValues))
 
 
