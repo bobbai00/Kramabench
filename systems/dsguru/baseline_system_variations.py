@@ -140,9 +140,9 @@ class BaselineLLMSystemDeepseekCoderNaive(BaselineLLMSystemOllama):
                          *args, **kwargs)
 
 
-class BaselineLLMSystemGemma3FewShot(BaselineLLMSystem):
+class BaselineLLMSystemGemma3FewShot(BaselineLLMSystemOllama):
     def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(model="google/gemma-3-27b-it", 
+        super().__init__(model="gemma3:27b", 
                          name="BaselineLLMSystemGemma3FewShot", 
                          variance="few_shot", 
                          supply_data_snippet=True, 
@@ -150,9 +150,9 @@ class BaselineLLMSystemGemma3FewShot(BaselineLLMSystem):
                          *args, 
                          **kwargs)
 
-class BaselineLLMSystemGemma3OneShot(BaselineLLMSystem):
+class BaselineLLMSystemGemma3OneShot(BaselineLLMSystemOllama):
     def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(model="google/gemma-3-27b-it", 
+        super().__init__(model="gemma3:27b", 
                          name="BaselineLLMSystemGemma3OneShot", 
                          variance="one_shot", 
                          verbose=verbose, 
@@ -160,9 +160,9 @@ class BaselineLLMSystemGemma3OneShot(BaselineLLMSystem):
                          *args, 
                          **kwargs)
 
-class BaselineLLMSystemGemma3Naive(BaselineLLMSystem):
+class BaselineLLMSystemGemma3Naive(BaselineLLMSystemOllama):
     def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(model="google/gemma-3-27b-it", 
+        super().__init__(model="gemma3:27b", 
                          name="BaselineLLMSystemGemma3Naive", 
                          variance="one_shot", 
                          verbose=verbose, 

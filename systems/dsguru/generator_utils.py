@@ -141,7 +141,6 @@ class OllamaGenerator(Generator):
                     format="json",
                     stream=False,
                 )
-                breakpoint()
                 if not response["done"]:
                     logging.warning("WARNING - Conversation kept going! Maybe output is truncated.")
                 break
