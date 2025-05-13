@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 import pandas as pd
-data_path = "../input"
+data_path = "./data/archeology/input/"
 
-roman_path = "{}/roman_cities.csv".format(data_path)
+roman_path = f"{data_path}/roman_cities.csv"
 roman_df = pd.read_csv(roman_path)
 
 filtered_df = roman_df[roman_df["Select Bibliography"].notna()]
