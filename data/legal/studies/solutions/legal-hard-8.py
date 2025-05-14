@@ -6,7 +6,7 @@ Are the report counts of for "frauds and other data" in 2024 consistent for the 
  -- hard: Not utf-8 decodable.
  -- (answer: True)
 """
-
+import json
 import re
 import pandas as pd
 import re
@@ -83,6 +83,8 @@ def read_clean_numeric_csv(path, encoding="utf-8"):
 df1 = read_clean_numeric_csv("../../input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv", encoding="ISO-8859-1")
 df2 = read_clean_numeric_csv("../../input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv", encoding="ISO-8859-1")
 
+print(json.dumps(list(df2.keys())))
+
 # Normalize function to match similar area names
 def normalize_area(name):
     return re.sub(r"[^\w]", "", name).lower()
@@ -95,7 +97,8 @@ target_area_2 = normalize_area("Miami-Fort Lauderdale-West Palm Beach FL Metropo
 row1 = df1[df1["Metropolitan Area"].apply(normalize_area) == target_area_1]
 # Get row from df2
 row2 = df2[df2["Metropolitan Area"].apply(normalize_area) == target_area_2]
-
+print(row1)
+print(row2)
 # Check and compare
 if row1.empty:
     print(False)

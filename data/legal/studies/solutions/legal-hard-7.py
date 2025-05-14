@@ -3,6 +3,7 @@ Which fraud category was growing the fastest between 2020 and 2024 in relative t
  -- CSN_Top_Three_Identity_Theft_Reports_by_Year.csv
  -- hard: column names switched
 """
+import json
 import pandas as pd
 import re
 from io import StringIO
@@ -76,7 +77,7 @@ def read_clean_numeric_csv(path, encoding="utf-8"):
 
 
 df = read_clean_numeric_csv("../../input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv")
-
+print(list(df["# of Reports"]))
 # Normalize category strings
 df["Year"] = df["Year"].str.strip().str.lower()
 
@@ -86,6 +87,7 @@ pivot = df[df["Theft Type"].isin([2020, 2024])].pivot_table(
     columns="Theft Type",
     values="# of Reports"
 )
+print(json.dumps(list(pivot.values.flatten())))
 
 # Drop categories not present in both years
 pivot = pivot.dropna()
@@ -96,5 +98,6 @@ pivot["growth_ratio"] = pivot[2024] / pivot[2020]
 # Find the max
 fastest_growing = pivot["growth_ratio"].idxmax()
 ratio = pivot["growth_ratio"].max()
+print(list(pivot["growth_ratio"]))
 
 print(fastest_growing.title())

@@ -63,11 +63,12 @@ class Table:
         return Table(table_name, csv_path, attributes)
 
 table = Table.parse_table("../../input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv")
-
 def solve_legal_easy_20(table: Table) -> float:
     sub_table = table.attributes['Number of Reports by Type']
+    print(sub_table.values)
     year_idx = [r[0] for r in sub_table.values].index('2024')
     total_reports = sum([int(v) for v in sub_table.values[year_idx][1:]])
+    print(total_reports)
     return int(sub_table.values[year_idx][1])/total_reports
 
 print(solve_legal_easy_20(table))
