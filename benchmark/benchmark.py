@@ -56,7 +56,7 @@ class Executor:
             print(f"task_id: {task['id']}")
             print(f"query: {task['query']}")
         if parent_task_query is not None:
-            query = f"Your end goal is to answer this overall question: {parent_task_query}, please answer the following question:\n {task["query"]} \n\n"
+            query = f"Your end goal is to answer this overall question: {parent_task_query}, please answer the following question:\n {task['query']} \n\n"
         else:
             query = task["query"]
         system_overall_response = self.system.serve_query(query=query, query_id=task["id"])
