@@ -9,11 +9,12 @@ import pathlib
 data_path = "./data/environment/input"
 
 
-# ### Does the exceedance rate of fresh water beaches follow the same trend as the rainfall, from 2020 to 2023? (e.g., they both increase and decrease together)
+#    "query": "Is it true (answer with True or False) that the exceedance rate of fresh water beaches follow the same trend as the rainfall, from 2020 to 2023 (inclusive)? (e.g., they both increase and decrease together) Impute missing values with median of the month in non-missing years",
+
 
 years = [2020, 2021, 2022, 2023]
 months = ['Jun','Jul','Aug']
-fresh_cities = ["boston", 'chatam', 'amherst', 'ashburnham']
+fresh_cities = ["boston", 'chatham', 'amherst', 'ashburnham']
 
 fresh_rains = []
 # calcuate rainfall first
@@ -55,7 +56,23 @@ for year in years:
     fresh_rates.append(fresh_rate)
 
 fresh_rates = np.array(fresh_rates) * 100
-fresh_rates
 
+def compute_trend(rates):
+    trend = []
+    for i in range(len(rates)-1):
+        if rates[i] > rates[i+1]:
+            trend.append(-1)
+        elif rates[i] < rates[i+1]:
+            trend.append(1)
+        else:
+            trend.append(0)
+    return trend
+
+fresh_trend = compute_trend(fresh_rates)
+rain_trend = compute_trend(fresh_rains)
+
+print("Exceedance Rates trend", fresh_trend)
+print("Rainfall trend", rain_trend)
+print("Do they follow the same trend?", bool(np.all(fresh_trend==rain_trend)))
 
 

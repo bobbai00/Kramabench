@@ -7,9 +7,9 @@ import pandas as pd
 import numpy as np
 import pathlib
 
-data_path = "./data/environment/input"
+data_path = "./data/environment/input/"
 
-
+# "query": "In 2015, what are the three most polluted beaches of the city that had the least rainfall in the summer (June, July, August)?",
 
 year = 2015
 months = ['Jun','Jul','Aug']
@@ -27,13 +27,15 @@ for city in fresh_cities:
         df[month] = df[month].astype(float)
     # sum per row
     df["Total"] = df[months].sum(axis=1)
+    rain_df = df
     rainfall = list(df["Total"].values)
     fresh_rains.append(rainfall[0])
 fresh_rains = np.array(fresh_rains)
 #fresh_rains = np.mean(fresh_rains, axis=0)
 print("Fresh Rainfall:", fresh_rains)
-max_index = np.argmax(fresh_rains, axis=0)
-print("City with max rainfall:", fresh_cities[max_index])
+min_index = np.argmin(fresh_rains, axis=0)
+min_city = fresh_cities[min_index].capitalize()
+print("City with min rainfall:", min_city)
 
 
 
@@ -41,7 +43,7 @@ print("City with max rainfall:", fresh_cities[max_index])
 csv_path = f'{data_path}water-body-testing-{year}.csv'
 df = pd.read_csv(csv_path)
 # Filter records to get Freshwater beaches
-df = df[df['Community'] == "Chatham"]
+df = df[df['Community'] == min_city]
 # Split ""Beach Name" with @ and remove the second part
 df['Beach Name'] = df['Beach Name'].str.split('@').str[0]
 
@@ -58,9 +60,8 @@ beaches = pd.merge(beaches, exceedance, on='Beach Name', how='left')
 beaches['Exceedance'] = beaches['Exceedance'].fillna(0)
 # sort the beaches by the exceedance rate
 beaches[f'Exceedance Rate {year}'] = beaches['Exceedance'] / beaches['Count']
-beaches = beaches.sort_values(by=f'Exceedance Rate {year}', ascending=False)
-beaches = beaches[["Beach Name", f'Exceedance Rate {year}']]
-beaches
+exceedances = beaches[["Beach Name", f'Exceedance Rate {year}']].sort_values(by=f'Exceedance Rate {year}', ascending=False)
+print(exceedances.head(3))
 
 
 

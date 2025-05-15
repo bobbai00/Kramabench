@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import pathlib
 
-data_path = "./data/environment/input"
+data_path = "./data/environment/input/"
 
 
 # ### Query: Which fresh water beach is the most polluted since 2020 (inclusive)? Most polluted is defined as highest average exceedance rate since 2020, and only consider the beaches that are measured in all the years from 2020 to 2023 (inclusive).
@@ -25,17 +25,18 @@ for year in range(start_year, end_year):
     df['Beach Name'] = df['Beach Name'].str.split('@').str[0]
     
     # Group by Beach Name to get the count of records and the count of violations
-    beaches = df.groupby(['Beach Name']).size().reset_index(name='Count')
+    samples = df.groupby(['Beach Name']).size().reset_index(name='Count')
     # Filter to get only the records with violations
     exceedance = df[df['Violation'].str.lower() == 'yes']
     exceedance = exceedance.groupby(['Beach Name']).size().reset_index(name='Exceedance')
     # Merge the two dataframes to get the count of records and violations
-    beaches = pd.merge(beaches, exceedance, on='Beach Name', how='left')
-    beaches['Exceedance'] = beaches['Exceedance'].fillna(0)
+    beaches = pd.merge(samples, exceedance, on='Beach Name', how='left')
+    beaches[f'Exceedances {year}'] = beaches['Exceedance'].fillna(0)
+    beaches[f'Samples {year}'] = samples['Count']
     # sort the beaches by the exceedance rate
     beaches[f'Exceedance Rate {year}'] = beaches['Exceedance'] / beaches['Count']
     beaches = beaches.sort_values(by=f'Exceedance Rate {year}', ascending=False)
-    beaches = beaches[["Beach Name", f'Exceedance Rate {year}']]
+    beaches = beaches[["Beach Name", f'Samples {year}', f'Exceedances {year}', f'Exceedance Rate {year}']]
     dfs.append(beaches)
 
 
@@ -46,7 +47,7 @@ df = dfs[0]
 for d in dfs[1:]:
     df = df.merge(d, on='Beach Name')
 
-
+df.fillna(0, inplace=True)
 
 # by row, get the average 
 cols = [f'Exceedance Rate {year}' for year in range(start_year, end_year)]

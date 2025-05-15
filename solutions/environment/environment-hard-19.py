@@ -8,6 +8,7 @@ import pathlib
 
 data_path = "./data/environment/input"
 
+# "query": "For marine beaches, is the year with the highest average exceedance rate difference (with the previous year) different or the same as the highest total rainfall difference (with the previous year)? Only count the rainfall in June, July, August in Boston and Chatham; impute missing values with median of the month in non-missing years. Answer with True or False.",
 
 beach_type = "Marine"
 start_year = 2002
@@ -24,16 +25,16 @@ for year in range(start_year, end_year):
 rates = np.array(rates)
 
 # Find the most difference between the years
-max_diff = np.max(np.abs(np.diff(rates)))
+rate_max_diff = np.max(np.abs(np.diff(rates)))
 # Find the year with the most difference
-max_diff_year = np.argmax(np.abs(np.diff(rates))) + start_year + 1
+rate_max_diff_year = np.argmax(np.abs(np.diff(rates))) + start_year + 1
 print(rates)
-print(max_diff)
-print(f"Year with the most difference: from {max_diff_year} to {max_diff_year + 1}")
+print(rate_max_diff)
+print(f"Year with the most difference: from {rate_max_diff_year} to {rate_max_diff_year + 1}")
 
 
 months = ['Jun','Jul','Aug']
-cities = ["boston", 'chatam']
+cities = ["boston", 'chatham']
 
 rains = []
 # calcuate rainfall first
@@ -64,10 +65,12 @@ print("Rainfall:", rains)
 
 
 # Find the most difference between the years
-max_diff = np.max(np.abs(np.diff(rains)))
+rain_max_diff = np.max(np.abs(np.diff(rains)))
 # Find the year with the most difference
-max_diff_year = np.argmax(np.abs(np.diff(rains))) + start_year + 1
+max_diff_year_rain = np.argmax(np.abs(np.diff(rains))) + start_year + 1
 print(rains)
-print(max_diff)
-print(f"Year with the most difference: from {max_diff_year} to {max_diff_year + 1}")
+print(rain_max_diff)
+print(f"Year with the most difference: from {max_diff_year_rain} to {max_diff_year_rain + 1}")
 
+# Compare the two years
+print(f"Year with the most difference: {max_diff_year_rain+1} and {rate_max_diff_year+1}. Is it the same? {max_diff_year_rain == rate_max_diff_year}")

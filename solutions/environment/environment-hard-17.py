@@ -6,8 +6,9 @@ import pandas as pd
 import numpy as np
 import pathlib
 
-data_path = "./data/environment/input"
+data_path = "./data/environment/input/"
 
+#     "query": "What is the seasonal exceedance rate (in percentage, to 2 decimal places) of Chatham's Bucks Creek Beach in the summer (June, July, August) with the most rainfall in its area? Impute missing values with median of the month in non-missing years.",
 
 
 city = 'chatham'
@@ -24,10 +25,10 @@ rainfall_df["Total"] = rainfall_df[months].sum(axis=1)
 # Get the year with the maximum rainfall
 rainfall_df.sort_values(by="Total", ascending=False, inplace=True)
 rainfall_df.reset_index(drop=True, inplace=True)
-rainfall_df.loc[0, "Year"]
+max_year = rainfall_df.loc[0, "Year"]
 
 
-csv_path = os.path.join(data_path, f"water-body-testing-{2006}.csv")
+csv_path = os.path.join(data_path, f"water-body-testing-{max_year}.csv")
 df = pd.read_csv(csv_path)
 # cal exceedance rate
 df = df[df['Beach Name'] == beach_name]
