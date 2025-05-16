@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
-
-
 import os
 import pandas as pd
 import numpy as np
-import pathlib
 
 data_path = "./data/environment/input/"
 
