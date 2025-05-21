@@ -103,6 +103,6 @@ if __name__ == "__main__":
                 result_dict[rep_str] = score * cnt
             else:
                 result_dict[rep_str] += score * cnt
-            #print(versionInFolder, modelInFolder, bestFile, os.path.join(fullPath, bestFile), (score, cnt))
+            print(versionInFolder, modelInFolder, bestFile, os.path.join(fullPath, bestFile), (score, cnt))
         for k, v in result_dict.items():
             print(k, 100 * v / 104)
