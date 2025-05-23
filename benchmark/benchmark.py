@@ -237,6 +237,7 @@ class Evaluator:
         target_metrics = self.answer_to_metric_dict[task['answer_type']]
         assert(task["id"] == response["task_id"])
         evaluation_result = {"task_id": task["id"]}
+        evaluation_result["runtime"] = response.get("combined_runtime",0)
         for metric in target_metrics:
             score = self.evaluate_response_with_metric(task["id"], response["model_output"], task["answer"], metric)
             evaluation_result[metric] = score
@@ -317,8 +318,8 @@ class Benchmark:
             workload_path=workload_path,
             results_directory=results_directory,
             verbose=verbose,
-            skip_subtasks=self.skip_subtasks
-            use_deepresearch_subset=self.use_deepresearch_subset=
+            skip_subtasks=self.skip_subtasks,
+            use_deepresearch_subset=self.use_deepresearch_subset
         )
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
         # Add processing time to each result
