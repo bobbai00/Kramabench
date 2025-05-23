@@ -127,6 +127,11 @@ class BaselineLLMSystem(System):
         :return: Prompt string
         """
         # Generate the RAG plan
+<<<<<<< HEAD
+=======
+        # TODO: use process_dataset() to get the data
+        # get the file names from the dataset directory
+>>>>>>> 711f481 (Added use_deepresearch_subset to invoke benchmark on subset of files. WIP for workload JSON update)
         if len(subset_files):
             file_names = subset_files
             for f in file_names:
@@ -529,8 +534,6 @@ def main():
         print(f"Processing question: {question['id']}")
         # For debugging purposes, also input question.id
         baseline_llm.serve_query(question["query"], question["id"])
-
-
 
 if __name__ == "__main__":
     main()
