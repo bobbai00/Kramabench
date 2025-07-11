@@ -206,7 +206,7 @@ class MeanRelativeAbsoluteError(Metric):
             return abs(predicted - target) / abs(target)
         except Exception as e:
             logging.error(f"MeanRelativeAbsoluteError Metric: {e}")
-            return 1.0
+            return 9999.0
 
 
 class BleuScore(Metric):

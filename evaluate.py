@@ -1,5 +1,4 @@
 import argparse
-import csv
 import datetime
 import json
 import numpy as np
@@ -79,7 +78,7 @@ def aggregate_results(system_name, results_df):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sut", type=str, default="BaselineLLMSystemGPT4oNaive", help="The system under test.")
+    parser.add_argument("--sut", type=str, default="BaselineLLMSystemGPTo3FewShot", help="The system under test.")
     parser.add_argument("--dataset_name", type=str, default="legal", help="Name of dataset.")
     parser.add_argument("--workload_filename", type=str, default="legal-tiny.json", help="Name of workload JSON file.")
     parser.add_argument("--result_directory", type=str, default="results", help="Directory to store benchmark results.")
@@ -88,8 +87,9 @@ def main():
     parser.add_argument("--use_system_cache", action="store_true", default=False, help="Use cached system outputs if available.")
     parser.add_argument("--use_evaluation_cache", action="store_true", default=False, help="Use cached per-task evaluations if available.")
     parser.add_argument("--cache_system_output", action="store_true", default=True, help="Cache system output.")
+    parser.add_argument("--use_deepresearch_subset", action="store_true", default=False, help="Whether to use the subset of files from deepresearch experiments.")
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose logging.")
-    parser.add_argument("--skip_subtasks", action="store_true", default=False, help="Skips subtasks.")
+    parser.add_argument("--skip_subtasks", action="store_true", default=True, help="Skips subtasks.")
     args = parser.parse_args()
 
     system_name = args.sut
@@ -99,6 +99,7 @@ def main():
     result_root_dir = os.path.join(project_root_dir, args.result_directory)
 
     # Setup output (cache maintained by benchmark) and scratch directories for system under test
+    dataset_name = args.dataset_name
     system_result_dir = os.path.join(result_root_dir, system_name)
     workload_filename = args.workload_filename
     workload_name = os.path.basename(workload_filename)
@@ -107,13 +108,15 @@ def main():
     os.makedirs(system_output_dir, exist_ok=True)
     os.makedirs(system_result_dir, exist_ok=True)
 
+    if dataset_name not in workload_name:
+        raise Exception(f"Dataset name {args.dataset_name} not found in workload {workload_name}.")
+
     # Setup benchmark evaluation util directory
     task_fixture_dir = os.path.join(project_root_dir, args.task_fixtures)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     measures_path = os.path.join(system_result_dir, f"{workload_name.split('.')[0]}_measures_{timestamp}.csv")
     aggregated_results_path = os.path.join(result_root_dir, "aggregated_results.csv")
-
-    if not args.use_evaluation_cache or not os.path.exists(measures_path):
+    if not args.use_evaluation_cache:
         benchmark = Benchmark(
             system_name=system_name,
             task_fixture_directory=task_fixture_dir,
@@ -122,14 +125,14 @@ def main():
             cache_system_output=args.cache_system_output,
             verbose=verbose,
             skip_subtasks=args.skip_subtasks,
+            use_deepresearch_subset = args.use_deepresearch_subset
         )
 
-        print(f"Starting benchmark workflow on workload: {workload_name}")
-        if args.dataset_name not in workload_name:
-            raise Exception(f"Dataset name {args.dataset_name} not found in workload {workload_name}.")
+        print(f"Starting benchmark workflow on dataset: {dataset_name}")
+        dataset_directory = os.path.join(project_root_dir, f"data/{args.dataset_name}/input")
+
         _, evaluation_results = benchmark.run_benchmark(
-            dataset_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/input"),
-            code_understanding_directory=os.path.join(project_root_dir, f"data/{args.dataset_name}/studies/understanding"),
+            dataset_directory=dataset_directory,
             results_directory=system_result_dir,
             workload_path=workload_path,
             verbose=verbose
@@ -160,7 +163,19 @@ def main():
         if verbose:
             print(results_df)
     else:
-        print(f"Using cached detailed evaluation results on workload {workload_name}")
+        # parse the most recent workload file based on the timestamps in the filename
+        timestamp = None
+        measures_path = ""
+        for filename in os.listdir(system_result_dir):
+            if filename.startswith(dataset_name) and filename.endswith(".csv"):
+                workload_timestamp = filename.split(".csv")[0].split("measures_")[1]
+                workload_timestamp = datetime.datetime.strptime(workload_timestamp, "%Y%m%d_%H%M%S")
+                if timestamp is None or workload_timestamp > timestamp:
+                    measures_path = os.path.join(system_result_dir, filename)
+
+        if not os.path.exists(measures_path):
+            raise FileNotFoundError(f"Cached evaluation results not found at {measures_path}. Please run the benchmark without --use_evaluation_cache to generate them first!")
+        print(f"Using cached detailed evaluation results on workload {workload_name} from time: {workload_timestamp}")
         results_df = pd.read_csv(measures_path)
         converted_df = pd.to_numeric(results_df['value'], errors='coerce')
         results_df['value'] = converted_df.combine_first(results_df['value'])
@@ -177,7 +192,7 @@ def main():
 
     aggregated_df.to_csv(aggregated_results_path, index=False)
 
-    print(f"Done. Aggregated results:")
+    print("Done. Aggregated results:")
     print(aggregated_df[aggregated_df["workload"] == workload_name])
 
 

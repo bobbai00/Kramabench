@@ -74,13 +74,12 @@ class GPTInterface(LLMInterface):
         return formatted_instruction_prompts
     
     @typechecked
-    def _format_pipeline_evaluation_messages(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: str, task: Dict) -> List[Dict]:
+    def _format_pipeline_evaluation_messages(self, subtasks: List[Dict], sut_generated_pipeline: str, task: Dict) -> List[Dict]:
         """
         Raises a FileNotFound error when `understanding_filepath` does not exist.
         """
-        with open(understanding_filepath, 'r') as file:
-            understanding_list = json.load(file)
-        assert len(understanding_list) > 0
+        assert len(subtasks) > 0
+        understanding_list = [s.get("step", "") for s in subtasks]
 
         formatted_instruction_prompts = []
         for step in PIPELINE_EVALUATION_PROMPT:
@@ -163,15 +162,14 @@ class GPTInterface(LLMInterface):
         return json_answer
     
     @typechecked
-    def evaluate_data_pipeline(self, understanding_filepath: str | os.PathLike, sut_generated_pipeline: str, task: Dict) -> List[bool]:
+    def evaluate_data_pipeline(self, sut_generated_pipeline: str, task: Dict) -> List[bool]:
         """
         On LLM induced error, return None. Caller takes care of error handling.
         """
+        subtasks = task.get("subtasks", [])
         if len(sut_generated_pipeline) == 0:
-            with open(understanding_filepath, 'r') as f:
-                l = len(json.load(f))
-            return [False for _ in range(l)]
-        messages = self._format_pipeline_evaluation_messages(understanding_filepath, sut_generated_pipeline, task)
+            return [False for _ in range(len(subtasks))]
+        messages = self._format_pipeline_evaluation_messages(subtasks, sut_generated_pipeline, task)
         json_answer = None
         try:
             response = self.client.chat.completions.create(

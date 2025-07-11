@@ -60,9 +60,9 @@ class BaselineLLMSystemGPTo3Naive(BaselineLLMSystem):
         super().__init__(
             model="o3-2025-04-16",
             name="BaselineLLMSystemGPTo3Naive",
-            variance="no_context",
+            variance="one_shot",
             verbose=verbose,
-            supply_data_snippet=True,
+            supply_data_snippet=False,
             *args, **kwargs
         )
 
@@ -93,9 +93,9 @@ class BaselineLLMSystemClaude35Naive(BaselineLLMSystem):
         super().__init__(
             model="claude-3-5-sonnet-latest",
             name="BaselineLLMSystemClaude35Naive",
-            variance="no_context",
+            variance="one_shot",
             verbose=verbose,
-            supply_data_snippet=True,
+            supply_data_snippet=False,
             *args, **kwargs
         )
 

@@ -113,7 +113,8 @@ def find_number_rows(table, token_limit = 900):
     m = re.split('||\s+', m)
     m=[x for x in m if x != '' and x != '|']
     n_row = int(token_limit/len(m))
-    if n_row < 1: return 1
+    if n_row < 1: 
+        return 1
     return n_row
 
 if __name__ == "__main__":

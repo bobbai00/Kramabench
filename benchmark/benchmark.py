@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from rouge_score import rouge_scorer
 from typeguard import typechecked
 from typing import Any, Dict, List, Optional
@@ -23,6 +24,7 @@ class Executor:
             workload_path: str | os.PathLike,
             results_directory: str | os.PathLike,
             skip_subtasks: bool=True,
+            use_deepresearch_subset: bool = False,
             verbose=False
         ):
         """
@@ -40,6 +42,7 @@ class Executor:
         self.workload_path = workload_path
         self.verbose = verbose
         self.skip_subtasks = skip_subtasks
+        self.use_deepresearch_subset = use_deepresearch_subset
     
     def run_task(self, task: Dict[str, Any], parent_task_query: Optional[str]=None) -> Dict[str, str | Dict | List]:
         """
@@ -59,7 +62,15 @@ class Executor:
             query = f"Your end goal is to answer this overall question: {parent_task_query}, please answer the following question:\n {task['query']} \n\n"
         else:
             query = task["query"]
-        system_overall_response = self.system.serve_query(query=query, query_id=task["id"])
+
+        if self.use_deepresearch_subset and parent_task_query is not None:
+            deepresearch_subset = task['deepresearch_subset']
+        else:
+            deepresearch_subset = []
+
+        start_time = time.time()
+        system_overall_response = self.system.serve_query(query=query, query_id=task["id"], subset_files = deepresearch_subset)
+        end_time = time.time()
         model_output = system_overall_response["explanation"]
         code_string = system_overall_response["pipeline_code"]
         response = {}
@@ -71,6 +82,7 @@ class Executor:
             for subtask in task["subtasks"]:
                 subresponse = self.run_task(task=subtask, parent_task_query=task["query"])
                 response["subresponses"].append(subresponse)
+        response["runtime"] = end_time - start_time
         return response
     
     def run_next_task(self):
@@ -146,7 +158,6 @@ class Evaluator:
     def __init__(
             self,
             workload_path: str | os.PathLike,
-            code_understanding_directory: str | os.PathLike,
             task_fixture_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
             skip_subtasks: bool = True,
@@ -156,7 +167,6 @@ class Evaluator:
         evaluation methods of each type of task and response.
         """
         self.workload_path = workload_path
-        self.code_understanding_directory = code_understanding_directory
         self.task_fixture_directory = task_fixture_directory
         self.results_directory = results_directory
         with open(workload_path) as f:
@@ -225,21 +235,19 @@ class Evaluator:
         target_metrics = self.answer_to_metric_dict[task['answer_type']]
         assert(task["id"] == response["task_id"])
         evaluation_result = {"task_id": task["id"]}
+        evaluation_result["runtime"] = response.get("combined_runtime",0)
         for metric in target_metrics:
             score = self.evaluate_response_with_metric(task["id"], response["model_output"], task["answer"], metric)
             evaluation_result[metric] = score
 
-        understanding_filepath = os.path.join(self.code_understanding_directory, f"{task['id']}_key_functionalities.json")
         code_eval_list = []
-        if os.path.exists(understanding_filepath): # code understanding asset only exists for main tasks
-            try:
-                code_eval_list = self.pipeline_evaluation_engine.evaluate_data_pipeline(
-                    understanding_filepath=understanding_filepath,
-                    sut_generated_pipeline=response["code"],
-                    task=task
-                )
-            except Exception as e:
-                logging.error(f"Evaluator._evaluate_result_for_task: {e} while calling LLM evaluator on code.")
+        try:
+            code_eval_list = self.pipeline_evaluation_engine.evaluate_data_pipeline(
+                sut_generated_pipeline=response["code"],
+                task=task
+            )
+        except Exception as e:
+            logging.error(f"Evaluator._evaluate_result_for_task: {e} while calling LLM evaluator on code.")
         evaluation_result["llm_code_eval"] = code_eval_list
 
         all_evaluation_results.append(evaluation_result)
@@ -273,6 +281,7 @@ class Benchmark:
             cache_system_output: bool = True,
             verbose: bool = False,
             skip_subtasks: bool = False,
+            use_deepresearch_subset = False
     ):
         systems_module = __import__("systems")
         system_class_ = getattr(systems_module, system_name)
@@ -283,30 +292,38 @@ class Benchmark:
         self.task_fixture_directory = task_fixture_directory
         self.verbose = verbose
         self.skip_subtasks = skip_subtasks
+        self.use_deepresearch_subset = use_deepresearch_subset
     
     def run_benchmark(
             self,
             dataset_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
-            code_understanding_directory: str | os.PathLike,
             workload_path: str | os.PathLike,
             verbose: bool = False
         ):
         # Returns raw results from the system and evaluation results
+        processing_time = time.time()
         self.system.process_dataset(dataset_directory)
+        processing_time = time.time() - processing_time
+        print(f"Processing time: {processing_time:.2f} seconds")
         executor = Executor(
             system_name=self.system_name,
             system=self.system,
             workload_path=workload_path,
             results_directory=results_directory,
             verbose=verbose,
-            skip_subtasks=self.skip_subtasks
+            skip_subtasks=self.skip_subtasks,
+            use_deepresearch_subset=self.use_deepresearch_subset
         )
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
+        # Add processing time to each result
+        for task_result in results:
+            task_result["processing_time"] = processing_time/len(results)
+            task_result["combined_runtime"] = task_result["runtime"] + task_result["processing_time"]
+
         print("Evaluating results...")
         evaluator = Evaluator(
             workload_path=workload_path,
-            code_understanding_directory=code_understanding_directory,
             task_fixture_directory=self.task_fixture_directory,
             results_directory=results_directory,
             skip_subtasks=self.skip_subtasks
