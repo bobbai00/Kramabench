@@ -198,6 +198,7 @@ class MeanRelativeAbsoluteError(Metric):
     name = "mean_relative_absolute_error"
 
     def __call__(self, predicted: str | int | float, target: str | int | float):
+        logging.warning("DEPRECATION WARNING: Use RAEScore class instead!")
         try:
             if isinstance(predicted, str):
                 predicted = str_to_float(predicted)
@@ -206,6 +207,22 @@ class MeanRelativeAbsoluteError(Metric):
             return abs(predicted - target) / abs(target)
         except Exception as e:
             logging.error(f"MeanRelativeAbsoluteError Metric: {e}")
+            return 9999.0
+
+class RAEScore(Metric):
+    # This method computes the squared error. The evaluation script is responsible for aggregating.
+    name = "rae_score"
+
+    def __call__(self, predicted: str | int | float, target: str | int | float):
+        try:
+            if isinstance(predicted, str):
+                predicted = str_to_float(predicted)
+            if isinstance(target, str):
+                target = str_to_float(target)
+            rae = abs(predicted - target) / abs(target)
+            return 1/(1+rae)
+        except Exception as e:
+            logging.error(f"RAEScore Metric: {e}")
             return 9999.0
 
 
@@ -272,6 +289,7 @@ def metric_factory(metric_name: str):
         "mean_squared_error": MeanSquaredError,
         "mean_absolute_error": MeanAbsoluteError,
         "mean_relative_absolute_error": MeanRelativeAbsoluteError,
+        "rae_score": RAEScore
     }
     if metric_name not in metrics:
         raise ValueError(f"Metric '{metric_name}' not found.")
