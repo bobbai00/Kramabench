@@ -89,7 +89,7 @@ def main():
     parser.add_argument("--cache_system_output", action="store_true", default=True, help="Cache system output.")
     parser.add_argument("--use_deepresearch_subset", action="store_true", default=False, help="Whether to use the subset of files from deepresearch experiments.")
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose logging.")
-    parser.add_argument("--skip_subtasks", action="store_true", default=True, help="Skips subtasks.")
+    parser.add_argument("--skip_subtasks", action="store_true", default=False, help="Skips subtasks.")
     args = parser.parse_args()
 
     system_name = args.sut
@@ -131,12 +131,16 @@ def main():
         print(f"Starting benchmark workflow on dataset: {dataset_name}")
         dataset_directory = os.path.join(project_root_dir, f"data/{args.dataset_name}/input")
 
-        _, evaluation_results = benchmark.run_benchmark(
+        _, evaluation_results_and_eval_cost = benchmark.run_benchmark(
             dataset_directory=dataset_directory,
             results_directory=system_result_dir,
             workload_path=workload_path,
             verbose=verbose
         )
+        (evaluation_results, token_usage_answers, token_usage_pipeline, token_usage_subtasks) = evaluation_results_and_eval_cost
+        print("********************************************************")
+        print(f"Evaluation cost for workload {workload_path}: token_usage_answers {token_usage_answers}, token_usage_pipeline {token_usage_pipeline}, token_usage_subtasks {token_usage_subtasks}")
+        print("********************************************************")
 
         # Pretty printing evaluation_results
         flat_measures = []
