@@ -170,8 +170,10 @@ class GPTInterface(LLMInterface):
         """
         subtasks = task.get("subtasks", [])
         if len(sut_generated_pipeline) == 0:
-            return [False for _ in range(len(subtasks))]
+            return ([False for _ in range(len(subtasks))], 0)
+        print("Here1")
         messages = self._format_pipeline_evaluation_messages(subtasks, sut_generated_pipeline, task)
+        print("Here2")
         json_answer = None
         token_usage = 0
         try:
