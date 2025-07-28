@@ -23,7 +23,7 @@ class Executor:
             system_name: str,
             workload_path: str | os.PathLike,
             results_directory: str | os.PathLike,
-            skip_subtasks: bool=True,
+            run_subtasks: bool=False,
             use_deepresearch_subset: bool = False,
             verbose=False
         ):
@@ -41,7 +41,7 @@ class Executor:
         self.results_directory = results_directory
         self.workload_path = workload_path
         self.verbose = verbose
-        self.skip_subtasks = skip_subtasks
+        self.run_subtasks = run_subtasks
         self.use_deepresearch_subset = use_deepresearch_subset
     
     def run_task(self, task: Dict[str, Any], parent_task_query: Optional[str]=None) -> Dict[str, str | Dict | List]:
@@ -77,7 +77,7 @@ class Executor:
         response["task_id"] = task["id"]
         response["model_output"] = model_output
         response["code"] = code_string
-        if "subtasks" in task and not self.skip_subtasks:
+        if "subtasks" in task and self.run_subtasks:
             response["subresponses"] = []
             for subtask in task["subtasks"]:
                 subresponse = self.run_task(task=subtask, parent_task_query=task["query"])
@@ -160,7 +160,7 @@ class Evaluator:
             workload_path: str | os.PathLike,
             task_fixture_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
-            skip_subtasks: bool = True,
+            run_subtasks: bool = False,
         ):
         """
         `task_fixtures_directory` contains the tasks fixtures for finding valid
@@ -185,7 +185,7 @@ class Evaluator:
         
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
         self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
-        self.skip_subtasks = skip_subtasks
+        self.run_subtasks = run_subtasks
     
     def _normalize_string(s: str) -> str:
         """Normalize a string by removing spaces, punctuation, and making it lowercase."""
@@ -251,8 +251,9 @@ class Evaluator:
         evaluation_result["llm_code_eval"] = code_eval_list
 
         all_evaluation_results.append(evaluation_result)
-        if "subtasks" in task and not self.skip_subtasks:
+        if "subtasks" in task and self.run_subtasks:
             for i, subtask in enumerate(task["subtasks"]):
+                breakpoint()
                 subtask_result = self._evaluate_result_for_task(response["subresponses"][i], subtask)
                 all_evaluation_results.extend(subtask_result)
         return all_evaluation_results
@@ -280,7 +281,7 @@ class Benchmark:
             use_system_cache: bool = True,
             cache_system_output: bool = True,
             verbose: bool = False,
-            skip_subtasks: bool = False,
+            run_subtasks: bool = False,
             use_deepresearch_subset = False
     ):
         systems_module = __import__("systems")
@@ -291,7 +292,7 @@ class Benchmark:
         self.cache_system_output = cache_system_output
         self.task_fixture_directory = task_fixture_directory
         self.verbose = verbose
-        self.skip_subtasks = skip_subtasks
+        self.run_subtasks = run_subtasks
         self.use_deepresearch_subset = use_deepresearch_subset
     
     def run_benchmark(
@@ -312,7 +313,7 @@ class Benchmark:
             workload_path=workload_path,
             results_directory=results_directory,
             verbose=verbose,
-            skip_subtasks=self.skip_subtasks,
+            run_subtasks=self.run_subtasks,
             use_deepresearch_subset=self.use_deepresearch_subset
         )
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
@@ -326,7 +327,7 @@ class Benchmark:
             workload_path=workload_path,
             task_fixture_directory=self.task_fixture_directory,
             results_directory=results_directory,
-            skip_subtasks=self.skip_subtasks
+            run_subtasks=self.run_subtasks
         )
         return results, evaluator.evaluate_results(results)
 
