@@ -39,7 +39,7 @@ class BaselineLLMSystem(System):
         self.verbose = kwargs.get("verbose", False)
        
         self.debug = False
-        self.output_dir = kwargs.get("output_dir", os.path.join(os.getcwd(), "testresults")
+        self.output_dir = kwargs.get("output_dir", os.path.join(os.getcwd(), "testresults"))
 
         # Ablation studies: add additional parameters
         self.number_sampled_rows = kwargs.get("number_sampled_rows", 100)
