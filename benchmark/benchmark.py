@@ -7,7 +7,7 @@ import re
 import time
 from rouge_score import rouge_scorer
 from typeguard import typechecked
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Tuple, Optional
 
 
 from benchmark.benchmark_api import System
@@ -23,7 +23,7 @@ class Executor:
             system_name: str,
             workload_path: str | os.PathLike,
             results_directory: str | os.PathLike,
-            skip_subtasks: bool=True,
+            run_subtasks: bool=False,
             use_deepresearch_subset: bool = False,
             verbose=False
         ):
@@ -41,7 +41,7 @@ class Executor:
         self.results_directory = results_directory
         self.workload_path = workload_path
         self.verbose = verbose
-        self.skip_subtasks = skip_subtasks
+        self.run_subtasks = run_subtasks
         self.use_deepresearch_subset = use_deepresearch_subset
     
     def run_task(self, task: Dict[str, Any], parent_task_query: Optional[str]=None) -> Dict[str, str | Dict | List]:
@@ -77,7 +77,7 @@ class Executor:
         response["task_id"] = task["id"]
         response["model_output"] = model_output
         response["code"] = code_string
-        if "subtasks" in task and not self.skip_subtasks:
+        if "subtasks" in task and self.run_subtasks:
             response["subresponses"] = []
             for subtask in task["subtasks"]:
                 subresponse = self.run_task(task=subtask, parent_task_query=task["query"])
@@ -160,7 +160,7 @@ class Evaluator:
             workload_path: str | os.PathLike,
             task_fixture_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
-            skip_subtasks: bool = True,
+            run_subtasks: bool = False,
         ):
         """
         `task_fixtures_directory` contains the tasks fixtures for finding valid
@@ -185,7 +185,7 @@ class Evaluator:
         
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
         self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
-        self.skip_subtasks = skip_subtasks
+        self.run_subtasks = run_subtasks
     
     def _normalize_string(s: str) -> str:
         """Normalize a string by removing spaces, punctuation, and making it lowercase."""
@@ -207,7 +207,7 @@ class Evaluator:
             system_answer = system_response["answer"]
         except Exception as e:
             logging.warning(f"evaluate_response_with_metric: task_id {task_id} - failed to parse system response as JSON: {e}.")
-            return 0.0
+            return (0.0, 0)
 
         # Cast system answer and target answer to strings since all metrics in the
         # metric factory use this signature
@@ -216,16 +216,16 @@ class Evaluator:
 
         try:
             metric = metric_factory(metric_name)
-            score = metric(predicted=system_answer, target=target_answer)
+            score, token_usage = metric(predicted=system_answer, target=target_answer)
         except Exception as e:
             print(f"evaluate_response_with_metric: task_id {task_id} - failed to compute metric {metric_name}: {e}.")
             print(system_answer)
             score = 0.0
 
-        return score
+        return (score, token_usage)
 
     @typechecked
-    def _evaluate_result_for_task(self, response: Dict[str, Any], task: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _evaluate_result_for_task(self, response: Dict[str, Any], task: Dict[str, Any], evaluate_pipeline=True) -> Tuple[List[Dict[str, Any]], int, int, int]:
         """
         Evaluate results on all applicable metrics as specified in the task fixture for a 
         task in the workload.
@@ -236,26 +236,30 @@ class Evaluator:
         assert(task["id"] == response["task_id"])
         evaluation_result = {"task_id": task["id"]}
         evaluation_result["runtime"] = response.get("combined_runtime",0)
+        total_token_usage_answers = 0
         for metric in target_metrics:
-            score = self.evaluate_response_with_metric(task["id"], response["model_output"], task["answer"], metric)
+            score, token_usage = self.evaluate_response_with_metric(task["id"], 
+                                                                    response["model_output"], 
+                                                                    task["answer"], 
+                                                                    metric)
             evaluation_result[metric] = score
+            total_token_usage_answers += token_usage
 
-        code_eval_list = []
-        try:
-            code_eval_list = self.pipeline_evaluation_engine.evaluate_data_pipeline(
-                sut_generated_pipeline=response["code"],
-                task=task
-            )
-        except Exception as e:
-            logging.error(f"Evaluator._evaluate_result_for_task: {e} while calling LLM evaluator on code.")
-        evaluation_result["llm_code_eval"] = code_eval_list
+        total_token_usage_pipeline = 0
+        if evaluate_pipeline:
+            code_eval_list = []
+            code_eval_list, total_token_usage_pipeline = self.pipeline_evaluation_engine.evaluate_data_pipeline(sut_generated_pipeline=response["code"],task=task)
+            evaluation_result["llm_code_eval"] = code_eval_list
 
         all_evaluation_results.append(evaluation_result)
-        if "subtasks" in task and not self.skip_subtasks:
+        total_token_usage_subtasks = 0
+        if "subtasks" in task and self.run_subtasks:
+            assert "subresponses" in response, "Subresponses should be present if subtasks are run! Please run the evaluation with run_subtasks=True."
             for i, subtask in enumerate(task["subtasks"]):
-                subtask_result = self._evaluate_result_for_task(response["subresponses"][i], subtask)
+                subtask_result, token_usage, pipeline_usage, total_subtask_usage = self._evaluate_result_for_task(response["subresponses"][i], subtask, evaluate_pipeline=False)
                 all_evaluation_results.extend(subtask_result)
-        return all_evaluation_results
+                total_token_usage_subtasks += token_usage + pipeline_usage + total_subtask_usage
+        return (all_evaluation_results, total_token_usage_answers, total_token_usage_pipeline, total_token_usage_subtasks)
 
     def evaluate_results(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -263,13 +267,19 @@ class Evaluator:
         The caller should format the responses in the same structure as the workload.
         """
         all_evaluation_results = []
+        total_token_usage_answers = 0
+        total_token_usage_pipeline = 0
+        total_token_usage_subtasks = 0
         for task_idx, task in enumerate(self.workload):
-            evaluation_results = self._evaluate_result_for_task(responses[task_idx], task)
+            evaluation_results, token_usage_answers, token_usage_pipeline, token_usage_subtasks = self._evaluate_result_for_task(responses[task_idx], task)
             all_evaluation_results.extend(evaluation_results)
+            total_token_usage_answers += token_usage_answers
+            total_token_usage_pipeline += token_usage_pipeline
+            total_token_usage_subtasks += token_usage_subtasks
 
         # TODO: Implement workload-wise code understanding evaluation.
 
-        return all_evaluation_results
+        return all_evaluation_results, total_token_usage_answers, total_token_usage_pipeline, total_token_usage_subtasks
 
 class Benchmark:
     def __init__ (
@@ -280,7 +290,7 @@ class Benchmark:
             use_system_cache: bool = True,
             cache_system_output: bool = True,
             verbose: bool = False,
-            skip_subtasks: bool = False,
+            run_subtasks: bool = False,
             use_deepresearch_subset = False
     ):
         systems_module = __import__("systems")
@@ -291,7 +301,7 @@ class Benchmark:
         self.cache_system_output = cache_system_output
         self.task_fixture_directory = task_fixture_directory
         self.verbose = verbose
-        self.skip_subtasks = skip_subtasks
+        self.run_subtasks = run_subtasks
         self.use_deepresearch_subset = use_deepresearch_subset
     
     def run_benchmark(
@@ -312,7 +322,7 @@ class Benchmark:
             workload_path=workload_path,
             results_directory=results_directory,
             verbose=verbose,
-            skip_subtasks=self.skip_subtasks,
+            run_subtasks=self.run_subtasks,
             use_deepresearch_subset=self.use_deepresearch_subset
         )
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
@@ -322,11 +332,15 @@ class Benchmark:
             task_result["combined_runtime"] = task_result["runtime"] + task_result["processing_time"]
 
         print("Evaluating results...")
+        eval_start_time = time.time()
         evaluator = Evaluator(
             workload_path=workload_path,
             task_fixture_directory=self.task_fixture_directory,
             results_directory=results_directory,
-            skip_subtasks=self.skip_subtasks
+            run_subtasks=self.run_subtasks
         )
-        return results, evaluator.evaluate_results(results)
+        eval_results = evaluator.evaluate_results(results)
+        eval_end_time = time.time()
+        print(f"Evaluation took time {eval_end_time - eval_start_time}")
+        return results, eval_results
 

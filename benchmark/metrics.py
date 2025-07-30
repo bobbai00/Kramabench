@@ -31,7 +31,7 @@ class Precision(Metric):
         if isinstance(predicted, str) and isinstance(target, str):
             rouge = rouge_scorer.RougeScorer(['rouge1'])
             results = rouge.score(target=target, prediction=predicted)
-            return results['rouge1'].precision
+            return (results['rouge1'].precision, 0)
         if isinstance(predicted, list) and isinstance(target, str):
             target = json.loads(target)
         if isinstance(predicted, list) and isinstance(target, list):
@@ -39,12 +39,12 @@ class Precision(Metric):
             pred_set = set(map(normalize, predicted))
             target_set = set(map(normalize, target))
             if not pred_set:
-                return 0.0
+                return (0.0, 0)
             true_positives = pred_set & target_set
             precision = len(true_positives) / len(pred_set)
-            return precision
+            return (precision, 0)
         logging.error("TypeError: Precision Metric: unsupported argument types")
-        return 0.0
+        return (0.0, 0)
 
 
 class Recall(Metric):
@@ -54,7 +54,7 @@ class Recall(Metric):
         if isinstance(predicted, str) and isinstance(target, str):
             rouge = rouge_scorer.RougeScorer(['rouge1'])
             results = rouge.score(target=target, prediction=predicted)
-            return results['rouge1'].recall
+            return (results['rouge1'].recall, 0)
         if isinstance(predicted, list) and isinstance(target, str):
             target = json.loads(target)
         if isinstance(predicted, list) and isinstance(target, list):
@@ -62,12 +62,12 @@ class Recall(Metric):
             pred_set = set(map(normalize, predicted))
             target_set = set(map(normalize, target))
             if not target_set:
-                return 0.0
+                return (0.0, 0)
             true_positives = pred_set & target_set
             precision = len(true_positives) / len(target_set)
-            return precision
+            return (precision, 0)
         logging.error("TypeError: Precision Metric: unsupported argument types")
-        return 0.0
+        return (0.0, 0)
 
 
 class F1(Metric):
@@ -106,12 +106,12 @@ class F1(Metric):
             # Calculate the precision
             precision = len(matched_predicted) / len(predicted) if len(predicted) > 0 else 0
             if precision + recall == 0:
-                return 0.0
+                return (0.0, 0)
             f1 = 2 * precision * recall / (precision + recall)
-            return f1
+            return (f1, 0)
         except Exception as e:
             logging.error(f"F1 Metric: {e}")
-            return 0.0
+            return (0.0, 0)
 
 class F1Approximate(Metric):
     name = "f1_approximate"
@@ -122,12 +122,13 @@ class F1Approximate(Metric):
                 target = json.loads(target)
             
             if len(target) == 0:
-                return float(len(predicted) == 0)
+                return (float(len(predicted) == 0), 0)
             
             matched_predicted = set() # Avoids extra LLM calls
             llm_interface = GPTInterface(model="gpt-4o-mini")
             # Calculate the recall
             recall_cnt = 0
+            total_token_usage = 0
             if isinstance(target, str):
                 target = json.loads(target)
             if isinstance(predicted, str):
@@ -141,7 +142,9 @@ class F1Approximate(Metric):
                 found = False
                 for j, p in enumerate(predicted):
                     if isinstance(t, str):
-                        if llm_interface.evaluate_paraphrase(str(p), t):
+                        is_paraphrase, token_usage = llm_interface.evaluate_paraphrase(str(p), t)
+                        total_token_usage += token_usage
+                        if is_paraphrase:
                                 found = True
                                 matched_predicted.add(j)
                                 break
@@ -156,12 +159,12 @@ class F1Approximate(Metric):
             # Calculate the precision
             precision = len(matched_predicted) / len(predicted) if len(predicted) > 0 else 0
             if precision + recall == 0:
-                return 0.0
+                return (0.0, total_token_usage)
             f1 = 2 * precision * recall / (precision + recall)
-            return f1
+            return (f1, total_token_usage)
         except Exception as e:
             logging.error(f"F1Approximate Metric: {e}")
-            return 0.0
+            return (0.0, total_token_usage)
 
 class MeanSquaredError(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
@@ -173,10 +176,10 @@ class MeanSquaredError(Metric):
                 predicted = str_to_float(predicted)
             if isinstance(target, str):
                 target = str_to_float(target)
-            return (predicted - target) * (predicted - target)
+            return ((predicted - target) * (predicted - target), 0)
         except Exception as e:
             logging.error(f"MeanSquared Error Metric: {e}")
-            return None
+            return (None, 0)
     
 class MeanAbsoluteError(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
@@ -188,10 +191,10 @@ class MeanAbsoluteError(Metric):
                 predicted = str_to_float(predicted)
             if isinstance(target, str):
                 target = str_to_float(target)
-            return abs(predicted - target)
+            return (abs(predicted - target), 0)
         except Exception as e:
             logging.error(f"MeanAbsoluteError Metric: {e}")
-            return None
+            return (None, 0)
 
 class MeanRelativeAbsoluteError(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
@@ -204,10 +207,10 @@ class MeanRelativeAbsoluteError(Metric):
                 predicted = str_to_float(predicted)
             if isinstance(target, str):
                 target = str_to_float(target)
-            return abs(predicted - target) / abs(target)
+            return (abs(predicted - target) / abs(target), 0)
         except Exception as e:
             logging.error(f"MeanRelativeAbsoluteError Metric: {e}")
-            return 9999.0
+            return (9999.0, 0)
 
 class RAEScore(Metric):
     # This method computes the squared error. The evaluation script is responsible for aggregating.
@@ -220,10 +223,10 @@ class RAEScore(Metric):
             if isinstance(target, str):
                 target = str_to_float(target)
             rae = abs(predicted - target) / abs(target)
-            return 1/(1+rae)
+            return (1/(1+rae), 0)
         except Exception as e:
             logging.error(f"RAEScore Metric: {e}")
-            return 9999.0
+            return (9999.0, 0)
 
 
 class BleuScore(Metric):
@@ -231,7 +234,7 @@ class BleuScore(Metric):
 
     def __call__(self, predicted: str, target: str):
         BLEUscore = nltk.translate.bleu_score.sentence_bleu([target], predicted)
-        return BLEUscore
+        return (BLEUscore, 0)
 
 
 class RougeScore(Metric):
@@ -242,7 +245,7 @@ class RougeScore(Metric):
         rouge = rouge_scorer.RougeScorer(['rouge1'])
         results = rouge.score(target=target, prediction=predicted)
         f1 = results['rouge1'].fmeasure
-        return f1
+        return (f1, 0)
 
 class LLMParaphrase(Metric):
     name = "llm_paraphrase"
@@ -252,10 +255,10 @@ class LLMParaphrase(Metric):
         REQUIRES: llm_interface is already initialized.
         """
         llm_interface = GPTInterface(model="gpt-4o-mini")
-        is_paraphrase = llm_interface.evaluate_paraphrase(predicted, target)
+        is_paraphrase, token_usage = llm_interface.evaluate_paraphrase(predicted, target)
         if is_paraphrase is not None:
-            return int(is_paraphrase)
-        return None
+            return (int(is_paraphrase), token_usage)
+        return (None, token_usage)
 
 
 class Success(Metric):
@@ -269,12 +272,12 @@ class Success(Metric):
                 rea = abs(predicted - target) / abs(target)
                 return rea < 0.000001
             elif isinstance(target, str):
-                return int(predicted.strip().lower() == target.strip().lower())
+                return (int(predicted.strip().lower() == target.strip().lower()), 0)
             else:
-                return int(predicted == target)
+                return (int(predicted == target), 0)
         except Exception as e:
             logging.error(f"Success Metric: {e}")
-        return 0
+        return (0, 0)
 
 def metric_factory(metric_name: str):
     metrics = {

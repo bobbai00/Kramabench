@@ -1,5 +1,6 @@
 import argparse
 import datetime
+from email import parser
 import json
 import numpy as np
 import os
@@ -78,18 +79,18 @@ def aggregate_results(system_name, results_df):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sut", type=str, default="BaselineLLMSystemGPTo3FewShot_10Tries", help="The system under test.")
-    parser.add_argument("--dataset_name", type=str, default="legal", help="Name of dataset.")
-    parser.add_argument("--workload_filename", type=str, default="legal-tiny.json", help="Name of workload JSON file.")
-    parser.add_argument("--result_directory", type=str, default="results", help="Directory to store benchmark results.")
-    parser.add_argument("--task_fixtures", type=str, default="benchmark/fixtures", help="Directory containing task fixture files.")
-    parser.add_argument("--project_root", type=str, default=os.getcwd(), help="Project root.")
-    parser.add_argument("--use_system_cache", action="store_true", default=False, help="Use cached system outputs if available.")
-    parser.add_argument("--use_evaluation_cache", action="store_true", default=False, help="Use cached per-task evaluations if available.")
-    parser.add_argument("--cache_system_output", action="store_true", default=True, help="Cache system output.")
-    parser.add_argument("--use_deepresearch_subset", action="store_true", default=False, help="Whether to use the subset of files from deepresearch experiments.")
-    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose logging.")
-    parser.add_argument("--skip_subtasks", action="store_true", default=True, help="Skips subtasks.")
+    parser.add_argument("--sut", type=str, default="BaselineLLMSystemGPTo3FewShot", help="The system under test.")
+    parser.add_argument("--dataset_name", type=str, default="legal", help="Name of dataset. Default: legal")
+    parser.add_argument("--workload_filename", type=str, default="legal-tiny.json", help="Name of workload JSON file. Default: legal-tiny.json")
+    parser.add_argument("--result_directory", type=str, default="results", help="Directory to store benchmark results. Default: results")
+    parser.add_argument("--task_fixtures", type=str, default="benchmark/fixtures", help="Directory containing task fixture files. Default: benchmark/fixtures")
+    parser.add_argument("--project_root", type=str, default=os.getcwd(), help="Project root. Default: current working directory")
+    parser.add_argument("--use_system_cache", action="store_true", default=False, help="Use cached system outputs if available. Default: False")
+    parser.add_argument("--use_evaluation_cache", action="store_true", default=False, help="Use cached per-task evaluations if available. Default: False")
+    parser.add_argument("--cache_system_output", action="store_true", default=True, help="Cache system output. Default: True")
+    parser.add_argument("--use_deepresearch_subset", action="store_true", default=False, help="Whether to use the subset of files from deepresearch experiments. Default: False")
+    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose logging. Default: False")
+    parser.add_argument("--run_subtasks", action="store_true", help="Run subtasks if set. Default: False")
     args = parser.parse_args()
 
     system_name = args.sut
@@ -124,7 +125,7 @@ def main():
             use_system_cache=args.use_system_cache,
             cache_system_output=args.cache_system_output,
             verbose=verbose,
-            skip_subtasks=args.skip_subtasks,
+            run_subtasks=args.run_subtasks,
             use_deepresearch_subset = args.use_deepresearch_subset
         )
 
