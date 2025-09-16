@@ -258,7 +258,7 @@ class Evaluator:
             for i, subtask in enumerate(task["subtasks"]):
                 subtask_result, token_usage, pipeline_usage, total_subtask_usage = self._evaluate_result_for_task(response["subresponses"][i], subtask, evaluate_pipeline=False)
                 all_evaluation_results.extend(subtask_result)
-                total_token_usage_subtasks += token_usage + pipeline_usage + total_subtask_usage
+                total_token_usage_subtasks += token_usage
         return (all_evaluation_results, total_token_usage_answers, total_token_usage_pipeline, total_token_usage_subtasks)
 
     def evaluate_results(self, responses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -328,8 +328,12 @@ class Benchmark:
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
         # Add processing time to each result
         for task_result in results:
-            task_result["processing_time"] = processing_time/len(results)
-            task_result["combined_runtime"] = task_result["runtime"] + task_result["processing_time"]
+            try:
+                task_result["processing_time"] = processing_time/len(results)
+                task_result["combined_runtime"] = task_result["runtime"] + task_result["processing_time"]
+            except KeyError:
+                task_result["processing_time"] = -1
+                task_result["combined_runtime"] = -1
 
         print("Evaluating results...")
         eval_start_time = time.time()

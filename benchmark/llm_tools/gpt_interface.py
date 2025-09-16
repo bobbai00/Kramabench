@@ -201,4 +201,9 @@ class GPTInterface(LLMInterface):
                 ans = v
                 break
             json_answer = ans
-        return (["yes" in ans_item.lower() for ans_item in json_answer], token_usage)
+        try:
+            result = (["yes" in ans_item.lower() for ans_item in json_answer], token_usage)
+        except Exception as e:
+            print(json_answer)
+            raise e
+        return result
