@@ -161,6 +161,7 @@ class Evaluator:
             task_fixture_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
             run_subtasks: bool = False,
+            evaluate_pipeline: bool = False
         ):
         """
         `task_fixtures_directory` contains the tasks fixtures for finding valid
@@ -186,12 +187,13 @@ class Evaluator:
         self.rouge_score_engine = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
         self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
         self.run_subtasks = run_subtasks
+        self.evaluate_pipeline = evaluate_pipeline
     
     def _normalize_string(s: str) -> str:
         """Normalize a string by removing spaces, punctuation, and making it lowercase."""
         return re.sub(r'[^a-z0-9]', '', s.lower())
 
-    def evaluate_response_with_metric(self, task_id: str, system_response: Dict, target_answer: str | int | float, metric_name: str) -> float:
+    def evaluate_response_with_metric(self, task_id: str, system_response: Dict, target_answer: str | int | float, metric_name: str) -> Tuple[float, int]:
         """
         Evaluate a single system response against a target answer using the specified metric.
 
@@ -271,7 +273,7 @@ class Evaluator:
         total_token_usage_pipeline = 0
         total_token_usage_subtasks = 0
         for task_idx, task in enumerate(self.workload):
-            evaluation_results, token_usage_answers, token_usage_pipeline, token_usage_subtasks = self._evaluate_result_for_task(responses[task_idx], task)
+            evaluation_results, token_usage_answers, token_usage_pipeline, token_usage_subtasks = self._evaluate_result_for_task(responses[task_idx], task, evaluate_pipeline=self.evaluate_pipeline)
             all_evaluation_results.extend(evaluation_results)
             total_token_usage_answers += token_usage_answers
             total_token_usage_pipeline += token_usage_pipeline
@@ -291,7 +293,8 @@ class Benchmark:
             cache_system_output: bool = True,
             verbose: bool = False,
             run_subtasks: bool = False,
-            use_deepresearch_subset = False
+            use_deepresearch_subset = False,
+            evaluate_pipeline = False
     ):
         systems_module = __import__("systems")
         system_class_ = getattr(systems_module, system_name)
@@ -303,6 +306,7 @@ class Benchmark:
         self.verbose = verbose
         self.run_subtasks = run_subtasks
         self.use_deepresearch_subset = use_deepresearch_subset
+        self.evaluate_pipeline = evaluate_pipeline
     
     def run_benchmark(
             self,
@@ -341,7 +345,8 @@ class Benchmark:
             workload_path=workload_path,
             task_fixture_directory=self.task_fixture_directory,
             results_directory=results_directory,
-            run_subtasks=self.run_subtasks
+            run_subtasks=self.run_subtasks,
+            evaluate_pipeline=self.evaluate_pipeline
         )
         eval_results = evaluator.evaluate_results(results)
         eval_end_time = time.time()

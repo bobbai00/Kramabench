@@ -29,7 +29,7 @@ def aggregate_results(system_name, results_df):
         elif len(group[group["metric"] == "mean_relative_absolute_error"]) > 0:
             rae = group[group["metric"] == "mean_relative_absolute_error"]["value"].values[0]
             sut = group[group["metric"] == "mean_relative_absolute_error"]["sut"].values[0]
-            results_df_additional.loc[len(results_df_additional)] = [sut, workload, task_id, "rae_score", 1 / (1+rae)]
+            # results_df_additional.loc[len(results_df_additional)] = [sut, workload, task_id, "rae_score", 1 / (1+rae)]
     
     results_concat_df = pd.concat([results_df, results_df_additional], ignore_index=True)
 
@@ -91,6 +91,7 @@ def main():
     parser.add_argument("--use_deepresearch_subset", action="store_true", default=False, help="Whether to use the subset of files from deepresearch experiments. Default: False")
     parser.add_argument("--verbose", action="store_true", default=False, help="Verbose logging. Default: False")
     parser.add_argument("--run_subtasks", action="store_true", help="Run subtasks if set. Default: False")
+    parser.add_argument("--no_pipeline_eval", action="store_false", help="Skip pipeline design and implementation evaluation (which uses API calls). Default: False")
     args = parser.parse_args()
 
     system_name = args.sut
@@ -117,6 +118,7 @@ def main():
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     measures_path = os.path.join(system_result_dir, f"{workload_name.split('.')[0]}_measures_{timestamp}.csv")
     aggregated_results_path = os.path.join(result_root_dir, "aggregated_results.csv")
+    evaluate_pipeline = not args.no_pipeline_eval
     if not args.use_evaluation_cache:
         benchmark = Benchmark(
             system_name=system_name,
@@ -126,18 +128,21 @@ def main():
             cache_system_output=args.cache_system_output,
             verbose=verbose,
             run_subtasks=args.run_subtasks,
-            use_deepresearch_subset = args.use_deepresearch_subset
+            use_deepresearch_subset=args.use_deepresearch_subset,
+            evaluate_pipeline=evaluate_pipeline
         )
 
         print(f"Starting benchmark workflow on dataset: {dataset_name}")
         dataset_directory = os.path.join(project_root_dir, f"data/{args.dataset_name}/input")
 
-        _, evaluation_results = benchmark.run_benchmark(
+        _, evaluation_results_and_eval_cost = benchmark.run_benchmark(
             dataset_directory=dataset_directory,
             results_directory=system_result_dir,
             workload_path=workload_path,
             verbose=verbose
         )
+
+        (evaluation_results, token_usage_answers, token_usage_pipeline, token_usage_subtasks) = evaluation_results_and_eval_cost
 
         # Pretty printing evaluation_results
         flat_measures = []

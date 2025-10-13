@@ -110,7 +110,7 @@ class F1(Metric):
             f1 = 2 * precision * recall / (precision + recall)
             return (f1, 0)
         except Exception as e:
-            logging.error(f"F1 Metric: {e}")
+            logging.warning(f"F1Approximate Metric defaults to 0 because of following exception: {e}")
             return (0.0, 0)
 
 class F1Approximate(Metric):
@@ -163,7 +163,7 @@ class F1Approximate(Metric):
             f1 = 2 * precision * recall / (precision + recall)
             return (f1, total_token_usage)
         except Exception as e:
-            logging.error(f"F1Approximate Metric: {e}")
+            logging.warning(f"F1Approximate Metric defaults to 0 because of following exception: {e}")
             return (0.0, total_token_usage)
 
 class MeanSquaredError(Metric):
@@ -178,7 +178,7 @@ class MeanSquaredError(Metric):
                 target = str_to_float(target)
             return ((predicted - target) * (predicted - target), 0)
         except Exception as e:
-            logging.error(f"MeanSquared Error Metric: {e}")
+            logging.warning(f"MeanSquaredError Metric defaults to None because of following exception: {e}")
             return (None, 0)
     
 class MeanAbsoluteError(Metric):
@@ -193,7 +193,7 @@ class MeanAbsoluteError(Metric):
                 target = str_to_float(target)
             return (abs(predicted - target), 0)
         except Exception as e:
-            logging.error(f"MeanAbsoluteError Metric: {e}")
+            logging.warning(f"MeanAbsoluteError Metric defaults to None because of following exception: {e}")
             return (None, 0)
 
 class MeanRelativeAbsoluteError(Metric):
@@ -209,7 +209,7 @@ class MeanRelativeAbsoluteError(Metric):
                 target = str_to_float(target)
             return (abs(predicted - target) / abs(target), 0)
         except Exception as e:
-            logging.error(f"MeanRelativeAbsoluteError Metric: {e}")
+            logging.warning(f"MeanRelativeAbsoluteError Metric defaults to 9999.0 because of following exception: {e}")
             return (9999.0, 0)
 
 class RAEScore(Metric):
@@ -225,15 +225,16 @@ class RAEScore(Metric):
             rae = abs(predicted - target) / abs(target)
             return (1/(1+rae), 0)
         except Exception as e:
-            logging.error(f"RAEScore Metric: {e}")
-            return (9999.0, 0)
+            logging.warning(f"RAEScore Metric defaults to 0 because of following exception: {e}")
+            return (0.0, 0)
 
 
 class BleuScore(Metric):
     name = "bleu"
 
     def __call__(self, predicted: str, target: str):
-        BLEUscore = nltk.translate.bleu_score.sentence_bleu([target], predicted)
+        cc = nltk.translate.bleu_score.SmoothingFunction()
+        BLEUscore = nltk.translate.bleu_score.sentence_bleu([target], predicted, smoothing_function=cc.method1)
         return (BLEUscore, 0)
 
 
@@ -276,7 +277,7 @@ class Success(Metric):
             else:
                 return (int(predicted == target), 0)
         except Exception as e:
-            logging.error(f"Success Metric: {e}")
+            logging.warning(f"Success Metric defaults to 0 because of following exception: {e}")
         return (0, 0)
 
 def metric_factory(metric_name: str):
