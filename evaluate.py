@@ -11,29 +11,9 @@ from benchmark import Benchmark
 def aggregate_results(system_name, results_df):
     # Aggregate metrics
     print("Aggregating results...")
-    results_df_additional = pd.DataFrame(columns=results_df.columns)
     workload_results = []
-    for (workload, task_id), group in results_df.groupby(["workload", "task_id"]):
-        group_dropped_na = group.dropna()
-        if len(group[group["metric"] == "bleu"]) > 0:
-            bleu = group[group["metric"] == "bleu"]["value"].values[0]
-            rouge = group[group["metric"] == "rouge"]["value"].values[0]
-            sut = group[group["metric"] == "rouge"]["sut"].values[0]
-            llm_paraphrase = group[group["metric"] == "llm_paraphrase"]["value"].values[0]
-            score = 0
-            if int(llm_paraphrase) > 0:
-                score = 1
-            elif bleu > 0.2:
-                score = rouge
-            results_df_additional.loc[len(results_df_additional)] = [sut, workload, task_id, "string_bootstrap", score]
-        elif len(group[group["metric"] == "mean_relative_absolute_error"]) > 0:
-            rae = group[group["metric"] == "mean_relative_absolute_error"]["value"].values[0]
-            sut = group[group["metric"] == "mean_relative_absolute_error"]["sut"].values[0]
-            # results_df_additional.loc[len(results_df_additional)] = [sut, workload, task_id, "rae_score", 1 / (1+rae)]
-    
-    results_concat_df = pd.concat([results_df, results_df_additional], ignore_index=True)
 
-    for (workload, metric), group in results_concat_df.groupby(["workload", "metric"]):
+    for (workload, metric), group in results_df.groupby(["workload", "metric"]):
         group_dropped_na = group.dropna()
         if metric != "llm_code_eval":
             mean = group_dropped_na["value"].mean()
@@ -70,10 +50,10 @@ def aggregate_results(system_name, results_df):
     total_support = 0
     total_score = 0
     for _, row in workload_results_df.iterrows():
-        if row["metric"] in ["f1", "string_bootstrap", "rae_score", "success"]:
+        if row["metric"] in ["f1", "string_bootstrap", "rae_score", "f1_approximate", "success"]:
             total_support += row["total_value_support"]
             total_score += row["value_support"] * row["value_mean"]
-    print(f"Total score is: {total_score/total_support}")
+    print(f"Total score is: {total_score/total_support*100}")
     return workload_results_df
 
 
@@ -178,16 +158,20 @@ def main():
                 workload_timestamp = datetime.datetime.strptime(workload_timestamp, "%Y%m%d_%H%M%S")
                 if timestamp is None or workload_timestamp > timestamp:
                     measures_path = os.path.join(system_result_dir, filename)
+                    timestamp = workload_timestamp
 
         if not os.path.exists(measures_path):
             raise FileNotFoundError(f"Cached evaluation results not found at {measures_path}. Please run the benchmark without --use_evaluation_cache to generate them first!")
-        print(f"Using cached detailed evaluation results on workload {workload_name} from time: {workload_timestamp}")
+        print(f"Using cached detailed evaluation results on workload {workload_name} from time: {timestamp}")
         results_df = pd.read_csv(measures_path)
         converted_df = pd.to_numeric(results_df['value'], errors='coerce')
         results_df['value'] = converted_df.combine_first(results_df['value'])
 
-    aggregated_df = aggregate_results(system_name, results_df)
+        if not args.run_subtasks:
+            results_df = results_df[results_df['task_id'].apply(lambda x: x.count('-') < 3)]
+            results_df = results_df[results_df['metric'] != 'llm_code_eval']
 
+    aggregated_df = aggregate_results(system_name, results_df)
     # Update aggregated results file
     if os.path.exists(aggregated_results_path):
         old_aggregated_df = pd.read_csv(aggregated_results_path)

@@ -261,6 +261,23 @@ class LLMParaphrase(Metric):
             return (int(is_paraphrase), token_usage)
         return (None, token_usage)
 
+class StringBootstrap(Metric):
+    name = "string_bootstrap"
+
+    def __call__(self, predicted: str, target: str):
+        """ arguments:
+            predicted: predicted string
+            target: target string
+        """
+        llm_paraphrase, token_usage = LLMParaphrase()(predicted, target)
+        if int(llm_paraphrase) > 0:
+            return (1.0, token_usage)
+        bleu, _ = BleuScore()(predicted, target)
+        if bleu > 0.2:
+            rouge, _ = RougeScore()(predicted, target)
+            return (rouge, token_usage)
+        return (0.0, token_usage)
+
 
 class Success(Metric):
     name = "success"
@@ -288,6 +305,7 @@ def metric_factory(metric_name: str):
         "f1_approximate": F1Approximate,
         "bleu": BleuScore,
         "rouge": RougeScore,
+        "string_bootstrap": StringBootstrap,
         "llm_paraphrase": LLMParaphrase,
         "success": Success,
         "mean_squared_error": MeanSquaredError,
