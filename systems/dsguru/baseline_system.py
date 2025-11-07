@@ -1,6 +1,8 @@
+# type: ignore
 import os
 import sys
 import re
+from benchmark.benchmark_utils import print_error, print_warning
 
 sys.path.append("./")
 
@@ -73,7 +75,7 @@ class BaselineLLMSystem(System):
         for file_name in filenames:
             data = self.dataset[file_name]
             if self.verbose:
-                print(f"{self.name}: Reading {file_name}...")
+                print_warning(f"{self.name}: Reading {file_name}...")
             data_string += f"\nFile name: {file_name}\n"
             data_string += f"Column data types: {data.dtypes}\n"
             data_string += "Table:\n"
@@ -188,7 +190,7 @@ class BaselineLLMSystem(System):
         with open(prompt_fp, "w") as f:
             f.write(prompt)
         if self.verbose:
-            print(f"{self.name}: Prompt saved to {prompt_fp}")
+            print_warning(f"{self.name}: Prompt saved to {prompt_fp}")
         return prompt
 
     def extract_response(self, response, try_number: int):
@@ -204,12 +206,12 @@ class BaselineLLMSystem(System):
         with open(response_fp, "w") as f:
             f.write(response)
         if self.verbose:
-            print(f"{self.name}: Response saved to {response_fp}")
+            print_warning(f"{self.name}: Response saved to {response_fp}")
 
         # Parse token count and clean the response
         response, token_count = self.parse_token_used(response)
         if self.verbose:
-            print(f"{self.name}: Response token count: {token_count}")
+            print_warning(f"{self.name}: Response token count: {token_count}")
         # Save the token count to a file
         token_fp = os.path.join(self.question_output_dir, "_intermediate", f"token_count-{try_number}.txt")
         with open(token_fp, "w") as f:
@@ -317,7 +319,7 @@ class BaselineLLMSystem(System):
         # Check if the error file is empty
         if error_fp is not None:
             if os.path.getsize(error_fp) > 0:
-                print(
+                print_error(
                     f"ERROR: {self.name}: ** ERRORS ** found in {error_fp}. Skipping JSON update."
                 )
                 return self._format_answer_on_fail(
@@ -329,7 +331,7 @@ class BaselineLLMSystem(System):
             with open(output_fp, "r") as f:
                 output = json.load(f)
         except json.JSONDecodeError as e:
-            print(f"ERROR: {self.name}: ** ERRORS ** decoding output JSON: {e}")
+            print_error(f"ERROR: {self.name}: ** ERRORS ** decoding output JSON: {e}")
             return self._format_answer_on_fail(
                 answer, f"** ERRORS ** decoding output in {output_fp}"
             )
@@ -365,7 +367,7 @@ class BaselineLLMSystem(System):
             overall_answer = clean_nan(overall_answer)
             json.dump(overall_answer, f, indent=4)
         if self.verbose:
-            print(f"{self.name}: Updated JSON answer saved to {json_fp}")
+            print_warning(f"{self.name}: Updated JSON answer saved to {json_fp}")
         return overall_answer
 
     @typechecked
@@ -387,7 +389,7 @@ class BaselineLLMSystem(System):
         ]
         response = self.llm(messages)
         if self.debug:
-            print(f"{self.name}: Response:", response)
+            print_warning(f"{self.name}: Response:", response)
 
         # Process the response
         json_fp, code_fp = self.extract_response(response, try_number=0)
