@@ -14,6 +14,8 @@ def aggregate_results(system_name, results_df):
     workload_results = []
 
     for (workload, metric), group in results_df.groupby(["workload", "metric"]):
+        if metric in ['code', 'model_output']:
+            continue
         group_dropped_na = group.dropna()
         if metric != "llm_code_eval":
             mean = group_dropped_na["value"].mean()
@@ -118,14 +120,12 @@ def main():
         print(f"Starting benchmark workflow on dataset: {dataset_name}")
         dataset_directory = os.path.join(project_root_dir, f"data/{dataset_name}/input")
 
-        _, evaluation_results_and_eval_cost = benchmark.run_benchmark(
+        evaluation_results = benchmark.run_benchmark(
             dataset_directory=dataset_directory,
             results_directory=system_result_dir,
             workload_path=workload_path,
             verbose=verbose
         )
-
-        (evaluation_results, token_usage_answers, token_usage_pipeline, token_usage_subtasks) = evaluation_results_and_eval_cost
 
         # Pretty printing evaluation_results
         flat_measures = []
@@ -133,7 +133,7 @@ def main():
             # TODO: Implement system planned subtask result evaluation
             task_id = task_result["task_id"]
             for metric, value in task_result.items():
-                if metric == "task_id":
+                if metric in ["task_id", "code", "model_output", "subresponses"]:
                     continue
                 parsed_value = value
                 if isinstance(value, list): # LLM code eval results, handle list
