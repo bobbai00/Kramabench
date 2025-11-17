@@ -63,6 +63,6 @@ for beach_name in boston_beach_names:
     n_ex += len(ex_df)
     ex_df = ex_df[ex_df['1-Day Rain'] > 0]
     n_samples += len(ex_df)
-    print(f"Beach: {beach_name}, Samples: {len(df)}, Exceedances: {len(ex_df)}")
+    # print(f"Beach: {beach_name}, Samples: {len(df)}, Exceedances: {len(ex_df)}")
 print(f"Total samples: {n_samples}, Total exceedances: {n_ex}")
 print(f"Exceedance rate: { n_samples / n_ex * 100:.2f}%")

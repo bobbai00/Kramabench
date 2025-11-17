@@ -130,7 +130,7 @@ def get_fraud_number_across_states():
     state_dir = f"{data_path}/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/"
     for f in os.listdir(state_dir):
         f = os.path.join(state_dir, f)
-        state_dfs.append(read_clean_numeric_csv(f).head())
+        state_dfs.append(read_clean_numeric_csv(f))
     return pd.concat(state_dfs, ignore_index=True)
 
 df_reports = get_fraud_number_across_states()
@@ -146,6 +146,9 @@ def normalize_name(name):
 # Step 1: Normalize the metropolitan area names.
 df_reports['msa_key'] = df_reports['Metropolitan Area'].apply(normalize_name)
 df_population['msa_key'] = df_population['Metropolitan statistical area'].apply(normalize_name)
+
+df_reports.drop_duplicates(inplace=True)
+df_population.drop_duplicates(inplace=True)
 
 # Step 2: Merge on cleaned msa_key
 df_merged = pd.merge(df_reports, df_population, on='msa_key', how='inner')

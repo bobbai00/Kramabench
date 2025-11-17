@@ -78,8 +78,9 @@ print("Fresh Rainfall:", fresh_rains)
 # calculate correlation
 marine_rain_corr = np.corrcoef(marine_rates, marine_rains)[0][1]
 fresh_rain_corr = np.corrcoef(fresh_rates, fresh_rains)[0][1]
-print("Marine Rainfall Correlation:", marine_rain_corr)
-print("Fresh Rainfall Correlation:", fresh_rain_corr)
-
+if abs(marine_rain_corr) > abs(fresh_rain_corr):
+    print("Marine")
+else:
+    print("Freshwater")
 
 

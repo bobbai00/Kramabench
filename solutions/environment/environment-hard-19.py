@@ -28,9 +28,9 @@ rates = np.array(rates)
 rate_max_diff = np.max(np.abs(np.diff(rates)))
 # Find the year with the most difference
 rate_max_diff_year = np.argmax(np.abs(np.diff(rates))) + start_year + 1
-print(rates)
-print(rate_max_diff)
-print(f"Year with the most difference: from {rate_max_diff_year} to {rate_max_diff_year + 1}")
+# print(rates)
+# print(rate_max_diff)
+# print(f"Year with the most difference: from {rate_max_diff_year} to {rate_max_diff_year + 1}")
 
 
 months = ['Jun','Jul','Aug']
@@ -50,8 +50,8 @@ for city in cities:
         df[month] = df[month].astype(float)
         median = df[month].median()
         df[month] = df[month].fillna(median)
-    print(f"City: {city}")
-    print(df)
+    # print(f"City: {city}")
+    # print(df)
     # cast Jun, Jul, Aug to float
     for month in months:
         df[month] = df[month].astype(float)
@@ -61,16 +61,16 @@ for city in cities:
     rains.append(rainfall)
 rains = np.array(rains)
 rains = np.sum(rains, axis=0)
-print("Rainfall:", rains)
+# print("Rainfall:", rains)
 
 
 # Find the most difference between the years
 rain_max_diff = np.max(np.abs(np.diff(rains)))
 # Find the year with the most difference
 max_diff_year_rain = np.argmax(np.abs(np.diff(rains))) + start_year + 1
-print(rains)
-print(rain_max_diff)
-print(f"Year with the most difference: from {max_diff_year_rain} to {max_diff_year_rain + 1}")
+# print(rains)
+# print(rain_max_diff)
+# print(f"Year with the most difference: from {max_diff_year_rain} to {max_diff_year_rain + 1}")
 
 # Compare the two years
 print(f"Year with the most difference: {max_diff_year_rain+1} and {rate_max_diff_year+1}. Is it the same? {max_diff_year_rain == rate_max_diff_year}")

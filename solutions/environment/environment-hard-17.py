@@ -35,7 +35,7 @@ df = df[df['Beach Name'] == beach_name]
 ex = df[df['Violation'].str.lower() == 'yes']
 rate_2006 = len(ex) / len(df)
 
-print(f"2006 exceedance rate: {rate_2006}")
+print(f"2006 exceedance rate: {rate_2006*100}")
 
 for year in range(2002, 2021):
     if year == 2006:
@@ -47,7 +47,7 @@ for year in range(2002, 2021):
     ex = df[df['Violation'].str.lower() == 'yes']
     if len(df) == 0: continue
     rate = len(ex) / len(df)
-    print(rate) 
-    if rate > rate_2006:
-        print(f"{year} has a higher exceedance rate than 2006")
+    # print(rate) 
+    # if rate > rate_2006:
+        # print(f"{year} has a higher exceedance rate than 2006")
 

@@ -1,7 +1,6 @@
 import re
 import typing as t
 import numpy as np
-data_path = "./data/legal/input/"
 
 class TableCsv:
     def __init__(self,
@@ -65,15 +64,13 @@ class Table:
         return Table(table_name, csv_path, attributes)
 
 
-table1 = Table.parse_table(f"{data_path}/csn-data-book-2024-csv/CSVs/2024_CSN_State_Identity_Theft_Reports.csv")
+data_path = "./data/legal/input/"
+table1 = Table.parse_table(f"{data_path}/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv")
+table2 = Table.parse_table(f"{data_path}/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv")
 
 
-def solve_legal_hard_22() -> float:
-    sub_table1 = table1.attributes['State: Identity Theft Reports']
-    total_alamaba = 0
-    for row in sub_table1.values:
-        if row[0] == 'Alabama':
-            total_alamaba += int(row[2])
-    return total_alamaba
-print(solve_legal_hard_22())
-
+sub_table1 = table1.attributes['Report Type']
+sub_table2 = table2.attributes['Identity Theft Reports by Type']
+total = int(sub_table1.values[0][1])
+correct = int(sub_table2.values[1][2])
+print(correct/total)

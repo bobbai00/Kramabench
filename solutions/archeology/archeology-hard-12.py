@@ -40,7 +40,7 @@ for index, row in conflict_data.iterrows():
     actor_a = get_matching_word(actor_a, countries)
     actor_b = get_matching_word(actor_b, countries)
 
-    if actor_a is None or actor_b is None:
+    if actor_a is None or actor_b is None or start_year < 800 or end_year > 1400:
         continue
 
     actor_a, actor_b = sorted([actor_a, actor_b])

@@ -12,19 +12,22 @@ filename_2012 = "water-body-testing-2012.csv"
 df_2013 = pd.read_csv(os.path.join(data_path, filename_2013))
 df_2013['Beach Name'] = df_2013['Beach Name'].str.lower()
 
+# create a unique beach-id by combining beach name and water body name
+df_2013['beach_id'] = df_2013['Community Code'].astype(str) + df_2013['County Code'].astype(str) + df_2013['Beach Name']
+
 # Read the 2012 file
 filename_2012 = "water-body-testing-2012.csv"
 df_2012 = pd.read_csv(os.path.join(data_path, filename_2012))
 df_2012['Beach Name'] = df_2012['Beach Name'].str.lower()
-
+df_2012['beach_id'] = df_2012['Community Code'].astype(str) + df_2012['County Code'].astype(str) + df_2012['Beach Name']
 # Compute the number of samples, number of violations, and the exceedance rate (its ratio) for 2013 for each beach
 
 # Group by beach name and compute samples and violations for 2013
-beach_agg_2013 = df_2013.groupby('Beach Name').agg({
-    'Beach Name': 'count',  # Total samples
+beach_agg_2013 = df_2013.groupby('beach_id').agg({
+    'beach_id': 'count',  # Total samples
     'Violation': lambda x: (x.str.lower() == 'yes').sum()  # Count of violations
 }).rename(columns={
-    'Beach Name': 'total_samples',
+    'beach_id': 'total_samples',
     'Violation': 'num_violations'
 })
 
@@ -34,11 +37,11 @@ beach_agg_2013['exceedance_rate'] = (beach_agg_2013['num_violations'] / beach_ag
 # Compute the number of samples, number of violations, and the exceedance rate (its ratio) for 2012 for each beach
 
 # Group by beach name and compute samples and violations for 2012
-beach_agg_2012 = df_2012.groupby('Beach Name').agg({
-    'Beach Name': 'count',  # Total samples
+beach_agg_2012 = df_2012.groupby('beach_id').agg({
+    'beach_id': 'count',  # Total samples
     'Violation': lambda x: (x.str.lower() == 'yes').sum()  # Count of violations
 }).rename(columns={
-    'Beach Name': 'total_samples',
+    'beach_id': 'total_samples',
     'Violation': 'num_violations'
 })
 

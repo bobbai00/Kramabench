@@ -16,7 +16,6 @@ max_region = None
 max_rainfall = -1
 for region in regions:
     csv_path = os.path.join(data_path, f"monthly_precipitations_{region}.csv")
-    print(csv_path)
     df = pd.read_csv(csv_path)
     df = df[["Year", "Jun", "Jul", "Aug"]]
     # get year data

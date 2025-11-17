@@ -29,10 +29,10 @@ for city in fresh_cities:
     fresh_rains.append(rainfall[0])
 fresh_rains = np.array(fresh_rains)
 #fresh_rains = np.mean(fresh_rains, axis=0)
-print("Fresh Rainfall:", fresh_rains)
+# print("Fresh Rainfall:", fresh_rains)
 min_index = np.argmin(fresh_rains, axis=0)
 min_city = fresh_cities[min_index].capitalize()
-print("City with min rainfall:", min_city)
+# print("City with min rainfall:", min_city)
 
 
 
@@ -44,8 +44,8 @@ df = df[df['Community'] == min_city]
 # Split ""Beach Name" with @ and remove the second part
 df['Beach Name'] = df['Beach Name'].str.split('@').str[0]
 
-print("Freshwater Beaches:", df['Beach Name'].unique())
-print("Freshwater Beaches Count:", len(df['Beach Name'].unique()))
+# print("Freshwater Beaches:", df['Beach Name'].unique())
+# print("Freshwater Beaches Count:", len(df['Beach Name'].unique()))
 
 # Group by Beach Name to get the count of records and the count of violations
 beaches = df.groupby(['Beach Name']).size().reset_index(name='Count')
@@ -58,7 +58,7 @@ beaches['Exceedance'] = beaches['Exceedance'].fillna(0)
 # sort the beaches by the exceedance rate
 beaches[f'Exceedance Rate {year}'] = beaches['Exceedance'] / beaches['Count']
 exceedances = beaches[["Beach Name", f'Exceedance Rate {year}']].sort_values(by=f'Exceedance Rate {year}', ascending=False)
-print(exceedances.head(3))
+print(exceedances.head(3)['Beach Name'].tolist())
 
 
 

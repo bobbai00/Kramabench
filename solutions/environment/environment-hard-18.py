@@ -30,8 +30,8 @@ for city in fresh_cities:
         median = df[month].median()
         df[month] = df[month].fillna(median)
     df = df[df['Year'].isin(["2020", "2021", "2022", "2023"])]
-    print(f"City: {city}")
-    print(df)
+    # print(f"City: {city}")
+    # print(df)
     # cast Jun, Jul, Aug to float
     for month in months:
         df[month] = df[month].astype(float)
@@ -41,7 +41,7 @@ for city in fresh_cities:
     fresh_rains.append(rainfall)
 fresh_rains = np.array(fresh_rains)
 fresh_rains = np.sum(fresh_rains, axis=0)
-print("Fresh Rainfall:", fresh_rains)
+# print("Fresh Rainfall:", fresh_rains)
 
 
 

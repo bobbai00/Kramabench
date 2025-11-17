@@ -12,7 +12,12 @@ roman_sources = filtered_df["Select Bibliography"]
 sources = set()
 index = 0
 for values in roman_sources:
-    values = values.replace(".", "").split(";")
-    sources |= set([x.strip() for x in values if x.strip() != ""])
+    references = values.split(";")
+    for ref in references:
+        ref = ref.strip()
+        ref = ref.replace("?", "").replace(".", "")
+        ref = ref.split(":")[0]
+        if ref != "":
+            sources.add(ref)
 
 print(len(sources))

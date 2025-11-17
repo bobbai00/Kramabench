@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import pathlib
 
-data_path = "../../data/environment/"
+data_path = "./data/environment/input/"
 
 
 # ### Query: What is the percentage of time in 2019-2023 that the water quality at Quincy's Wollaston Beach has met swimming standards? 
@@ -25,9 +25,7 @@ for year in years:
     exceedance = df[df['Violation'].str.lower() == 'yes']
     exceedance_rate = len(exceedance) / len(df) if len(df) > 0 else 0
     rates += [exceedance_rate]
-    print(f"Loaded {len(df)} records from {csv_path}")
 
-print(rates)
 avg_rate = 1 - np.mean(rates)
 print(f"The percentage of time in 2019-2023 that the beach was open is {avg_rate:.1%}")
 

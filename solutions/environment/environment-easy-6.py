@@ -25,8 +25,8 @@ print(f"Average rate of exceedance from 2002 to 2023: {average_rate:.2%}")
 
 
 # print rate for each year
-for year, rate in zip(range(2002, 2024), rates):
-    print(f"Rate of exceedance for {year}: {rate:.2%}")
+# for year, rate in zip(range(2002, 2024), rates):
+    # print(f"Rate of exceedance for {year}: {rate:.2%}")
 
 
 

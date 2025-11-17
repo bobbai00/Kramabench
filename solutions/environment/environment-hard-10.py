@@ -48,7 +48,7 @@ def prepare_beach_datasheet(fp:str) -> pd.DataFrame:
 ej_df = pd.read_csv(os.path.join(data_path, 'environmental-justice-populations.csv'))
 more_than_90 = ej_df[ej_df['Percent of population in EJ BGs'] > 90]
 more_than_90_cities = more_than_90['Municipality'].unique()
-print(f"Cities with more than 90% of the population in EJ BGs: {len(more_than_90_cities)}")
+# print(f"Cities with more than 90% of the population in EJ BGs: {len(more_than_90_cities)}")
 
 df = pd.read_csv(os.path.join(data_path, 'water-body-testing-2023.csv'))
 beach_type = "Marine"
@@ -65,5 +65,5 @@ df = prepare_beach_datasheet(os.path.join(data_path, beach_name))
 df['Total Rain'] = df['1-Day Rain'] + df['2-Day Rain'] + df['3-Day Rain']
 ### NOTE: not sure if 3-Day Rain is the rain on Day 3 or the total rain over 3 days
 # Compute the correlation between 'Total Rain' and 'Enterococcus'
-correlation = df['3-Day Rain'].corr(df['Enterococcus'])
-print(f"Correlation between Total Rain and Enterococcus: {correlation:.2f}")
+correlation = df['3-Day Rain'].corr(df['Enterococcus'], method='pearson')
+print(f"Correlation between Total Rain and Enterococcus: {correlation:.3f}")
