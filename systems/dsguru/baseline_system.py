@@ -372,12 +372,22 @@ class BaselineLLMSystem(System):
         output_fp, error_fp = self.execute_code(code_fp, try_number=0)
 
         token_count = self.llm.total_tokens
+        token_count_input = self.llm.input_tokens
+        token_count_output = self.llm.output_tokens
         if self.verbose:
             print_warning(f"{self.name}: Response token count: {token_count}")
+            print_warning(f"{self.name}: Input token count: {token_count_input}")
+            print_warning(f"{self.name}: Output token count: {token_count_output}")
+
         # Save the token count to a file
         token_fp = os.path.join(self.question_output_dir, "_intermediate", f"token_count-0.txt")
         with open(token_fp, "w") as f:
-            f.write(str(token_count))
+            token_data = {
+                    "token_usage": token_count,
+                    "token_usage_input": token_count_input,
+                    "token_usage_output": token_count_output,
+                }
+            json.dump(token_data, f, ensure_ascii=False, indent=4)
 
         answer = None
         pipeline_code = None
@@ -388,7 +398,7 @@ class BaselineLLMSystem(System):
 
         # Fill in JSON response with the execution result
         answer = self.process_response(json_fp, output_fp, error_fp)
-        output_dict = {"explanation": answer, "pipeline_code": pipeline_code, "token_usage": token_count}
+        output_dict = {"explanation": answer, "pipeline_code": pipeline_code, "token_usage": token_count, "token_usage_input": token_count_input, "token_usage_output": token_count_output}
 
         return output_dict
 
@@ -412,6 +422,8 @@ class BaselineLLMSystem(System):
         pipeline_code = None
 
         total_token_usage = 0
+        total_token_usage_input = 0
+        total_token_usage_output = 0
         for try_number in range(self.max_tries):
             messages.append({"role": "user", "content": prompt})
             # Get the model's response
@@ -428,13 +440,24 @@ class BaselineLLMSystem(System):
 
             # Parse token count and clean the response
             token_count = self.llm.total_tokens
+            token_count_input = self.llm.input_tokens
+            token_count_output = self.llm.output_tokens
             total_token_usage += token_count
+            total_token_usage_input += token_count_input
+            total_token_usage_output += token_count_output
             if self.verbose:
                 print_warning(f"{self.name}: Response token count: {token_count}")
+                print_warning(f"{self.name}: Input token count: {token_count_input}")
+                print_warning(f"{self.name}: Output token count: {token_count_output}")
             # Save the token count to a file
-            token_fp = os.path.join(self.question_output_dir, "_intermediate", f"token_count-{try_number}.txt")
+            token_fp = os.path.join(self.question_output_dir, "_intermediate", f"token_count-{try_number}.json")
             with open(token_fp, "w") as f:
-                f.write(str(token_count))
+                token_data = {
+                    "token_usage": token_count,
+                    "token_usage_input": token_count_input,
+                    "token_usage_output": token_count_output,
+                }
+                json.dump(token_data, f, ensure_ascii=False, indent=4)
 
             # Execute the code (if necessary)
             output_fp, error_fp = self.execute_code(code_fp, try_number)
@@ -460,6 +483,8 @@ class BaselineLLMSystem(System):
             }
             output_dict = {"explanation": answer, "pipeline_code": ""}
         output_dict["token_usage"] = total_token_usage
+        output_dict["token_usage_input"] = total_token_usage_input
+        output_dict["token_usage_output"] = total_token_usage_output
         return output_dict
 
     def process_dataset(self, dataset_directory: str | os.PathLike) -> None:

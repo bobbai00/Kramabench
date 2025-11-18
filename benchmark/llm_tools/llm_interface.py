@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import os
 
 
@@ -17,7 +17,7 @@ class LLMInterface:
         self.file_limit = int(file_limit)
     
     @abstractmethod
-    def evaluate_paraphrase(self, system_answer: str, reference: str) -> Optional[bool]:
+    def evaluate_paraphrase(self, system_answer: str, reference: str) -> Tuple[Optional[bool], int, int, int]:
         raise NotImplementedError("LLMInterface: This method should be implemented by the subclass!")
     
     @abstractmethod

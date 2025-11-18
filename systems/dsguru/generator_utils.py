@@ -48,6 +48,8 @@ class Generator:
     # GV: This function is the call_gpt function from the baseline_utils.py file. But for Ollama we substitute it
     def __call__(self, messages):
         self.total_tokens = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
         max_retries = 5
         retry_count = 0
         fatal = False
@@ -65,12 +67,16 @@ class Generator:
                     input_tokens = result.usage.input_tokens
                     output_tokens = result.usage.output_tokens
                     self.total_tokens += input_tokens + output_tokens
+                    self.input_tokens += input_tokens
+                    self.output_tokens += output_tokens
                 else:
                     result = self.client.chat.completions.create(
                         model=self.model,
                         messages=messages,
                     )
                     self.total_tokens += result.usage.total_tokens
+                    self.input_tokens += result.usage.prompt_tokens
+                    self.output_tokens += result.usage.completion_tokens
                 break # break out of while loop if no error
             
             except Exception as e:
