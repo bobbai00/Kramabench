@@ -239,10 +239,6 @@ class Evaluator:
             logging.warning(f"evaluate_response_with_metric: task_id {task_id} - failed to parse system response as JSON: {e}.")
             return (0.0, 0, 0, 0)
 
-        # Cast system answer and target answer to strings since all metrics in the
-        # metric factory use this signature
-        system_answer = str(system_answer).strip()
-        target_answer = str(target_answer).strip()
 
         try:
             metric = metric_factory(metric_name)

@@ -38,12 +38,28 @@ class Precision(Metric):
             target = json.loads(target)
         if isinstance(predicted, list) and isinstance(target, list):
             normalize = lambda s: s.strip().lower()
-            pred_set = set(map(normalize, predicted))
-            target_set = set(map(normalize, target))
-            if not pred_set:
-                return (0.0, 0, 0, 0)
-            true_positives = pred_set & target_set
-            precision = len(true_positives) / len(pred_set)
+            true_positives = set()
+            target_set = set(target)
+            for p in predicted:
+                if isinstance(p, str):
+                    p = normalize(p)
+                    for t in target_set:
+                        if isinstance(t, str):
+                            tn = normalize(t)
+                            if p == tn:
+                                true_positives.add(p)
+                                break
+                elif isinstance(p, float) or isinstance(p, int):
+                    for t in target_set:
+                        if isinstance(t, float) or isinstance(t, int):
+                            if abs(p - t) / abs(t) < 0.000001:
+                                true_positives.add(p)
+                                break
+                else:
+                    continue
+            if not predicted:
+                return (0.0, 0)
+            precision = len(true_positives) / len(predicted)
             return (precision, 0, 0, 0)
         logging.error("TypeError: Precision Metric: unsupported argument types")
         return (0.0, 0, 0, 0)
@@ -61,11 +77,27 @@ class Recall(Metric):
             target = json.loads(target)
         if isinstance(predicted, list) and isinstance(target, list):
             normalize = lambda s: s.strip().lower()
-            pred_set = set(map(normalize, predicted))
-            target_set = set(map(normalize, target))
-            if not target_set:
-                return (0.0, 0, 0, 0)
-            true_positives = pred_set & target_set
+            true_positives = set()
+            target_set = set(target)
+            for p in predicted:
+                if isinstance(p, str):
+                    p = normalize(p)
+                    for t in target_set:
+                        if isinstance(t, str):
+                            tn = normalize(t)
+                            if p == tn:
+                                true_positives.add(p)
+                                break
+                elif isinstance(p, float) or isinstance(p, int):
+                    for t in target_set:
+                        if isinstance(t, float) or isinstance(t, int):
+                            if abs(p - t) / abs(t) < 0.000001:
+                                true_positives.add(p)
+                                break
+                else:
+                    continue
+            if not predicted:
+                return (0.0, 0)
             precision = len(true_positives) / len(target_set)
             return (precision, 0, 0, 0)
         logging.error("TypeError: Precision Metric: unsupported argument types")
@@ -248,7 +280,7 @@ class RougeScore(Metric):
     def __call__(self, predicted: str, target: str):
         # Using Rouge-1, the overlap of words
         rouge = rouge_scorer.RougeScorer(['rouge1'])
-        results = rouge.score(target=target, prediction=predicted)
+        results = rouge.score(target=str(target).strip().lower(), prediction=str(predicted).strip().lower())
         f1 = results['rouge1'].fmeasure
         return (f1, 0, 0, 0)
 
@@ -259,6 +291,8 @@ class LLMParaphrase(Metric):
         """
         REQUIRES: llm_interface is already initialized.
         """
+        predicted = str(predicted)
+        target = str(target)
         llm_interface = GPTInterface(model="gpt-4o-mini")
         is_paraphrase, token_usage, token_usage_input, token_usage_output = llm_interface.evaluate_paraphrase(predicted, target)
         if is_paraphrase is not None:
