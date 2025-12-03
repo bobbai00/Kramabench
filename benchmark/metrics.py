@@ -120,10 +120,10 @@ class F1(Metric):
                 except json.JSONDecodeError:
                     predicted = eval(predicted)
             if isinstance(predicted, str) and isinstance(target, str):
-                # text F1 via ROUGE, if you want that behavior
-                rouge = rouge_scorer.RougeScorer(['rouge1'])
-                results = rouge.score(target=target, prediction=predicted)
-                return (results['rouge1'].fmeasure, 0, 0, 0)
+                if predicted.strip().lower() == target.strip().lower():
+                    return (1.0, 0, 0, 0)
+                else:
+                    return (0.0, 0, 0, 0)
             # At this point we expect lists
             if len(target) == 0:
                 return (float(len(predicted) == 0), 0, 0, 0)
