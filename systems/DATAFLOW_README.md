@@ -98,9 +98,38 @@ system_scratch/
         └── messages.json    # Full conversation history
 ```
 
-## Configuration
+## Configuration via Environment Variables
 
-To modify DataflowAgent settings, edit `systems/dataflow_system.py` or create a new variant:
+You can configure the DataflowAgent using environment variables:
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `DATAFLOW_MODEL_TYPE` | `claude-sonnet-4-5` | LLM model (`claude-haiku-4.5`, `claude-sonnet-4-5`, `gpt-5-mini`, `llama-local`) |
+| `DATAFLOW_MAX_STEPS` | `100` | Maximum agent steps per query |
+| `DATAFLOW_MAX_RESULT_CHARS` | `20000` | Max characters for operator results |
+| `DATAFLOW_MAX_CELL_CHARS` | `4000` | Max characters per cell in results |
+| `DATAFLOW_SERIALIZATION_MODE` | `table` | Result format (`json`, `table`, or `toon`) |
+| `DATAFLOW_TOOL_TIMEOUT` | `240` | Tool execution timeout in seconds |
+| `DATAFLOW_EXEC_TIMEOUT` | `4` | Workflow execution timeout in minutes |
+| `DATAFLOW_AGENT_MODE` | `code` | Agent mode (`code` or `general`) |
+
+### Example: Run with custom settings
+
+```bash
+# Use Haiku model with more steps
+DATAFLOW_MODEL_TYPE=claude-haiku-4.5 \
+DATAFLOW_MAX_STEPS=150 \
+python evaluate.py --sut DataflowSystem --workload legal-tiny --no_pipeline_eval --verbose
+
+# Use longer timeouts for complex queries
+DATAFLOW_TOOL_TIMEOUT=480 \
+DATAFLOW_EXEC_TIMEOUT=10 \
+python evaluate.py --sut DataflowSystem --workload legal --no_pipeline_eval
+```
+
+## Configuration via Code
+
+To create a custom variant, edit `systems/dataflow_system.py` or create a new class:
 
 ```python
 from systems.dataflow_system import DataflowSystem

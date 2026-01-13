@@ -24,8 +24,14 @@ class DataflowSystem(System):
 
     def __init__(
         self,
-        model_type: str = "claude-sonnet-4-5",
-        max_steps: int = 100,  # Increased from 50 to allow complex queries to complete
+        model_type: str = None,
+        max_steps: int = None,
+        max_operator_result_char_limit: int = None,
+        max_operator_result_cell_char_limit: int = None,
+        operator_result_serialization_mode: str = None,
+        tool_timeout_seconds: int = None,
+        execution_timeout_minutes: int = None,
+        agent_mode: str = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -34,17 +40,37 @@ class DataflowSystem(System):
         """
         Initialize the DataflowSystem.
 
+        Parameters can be set via:
+        1. Constructor arguments
+        2. Environment variables (DATAFLOW_MODEL_TYPE, DATAFLOW_MAX_STEPS, etc.)
+        3. Defaults
+
         Args:
-            model_type: LLM model type for the Texera agent
-            max_steps: Maximum steps per agent query
+            model_type: LLM model type (env: DATAFLOW_MODEL_TYPE, default: claude-sonnet-4-5)
+            max_steps: Maximum steps per query (env: DATAFLOW_MAX_STEPS, default: 100)
+            max_operator_result_char_limit: Max chars for operator results (env: DATAFLOW_MAX_RESULT_CHARS, default: 20000)
+            max_operator_result_cell_char_limit: Max chars per cell (env: DATAFLOW_MAX_CELL_CHARS, default: 4000)
+            operator_result_serialization_mode: Result format (env: DATAFLOW_SERIALIZATION_MODE, default: table)
+            tool_timeout_seconds: Tool timeout (env: DATAFLOW_TOOL_TIMEOUT, default: 240)
+            execution_timeout_minutes: Execution timeout (env: DATAFLOW_EXEC_TIMEOUT, default: 4)
+            agent_mode: Agent mode (env: DATAFLOW_AGENT_MODE, default: code)
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
         super().__init__(name, verbose=verbose, *args, **kwargs)
-        self.model_type = model_type
-        self.max_steps = max_steps
+
+        # Read from env vars with fallback to defaults
+        self.model_type = model_type or os.environ.get("DATAFLOW_MODEL_TYPE", "claude-sonnet-4-5")
+        self.max_steps = max_steps or int(os.environ.get("DATAFLOW_MAX_STEPS", "100"))
+        self.max_operator_result_char_limit = max_operator_result_char_limit or int(os.environ.get("DATAFLOW_MAX_RESULT_CHARS", "20000"))
+        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or int(os.environ.get("DATAFLOW_MAX_CELL_CHARS", "4000"))
+        self.operator_result_serialization_mode = operator_result_serialization_mode or os.environ.get("DATAFLOW_SERIALIZATION_MODE", "table")
+        self.tool_timeout_seconds = tool_timeout_seconds or int(os.environ.get("DATAFLOW_TOOL_TIMEOUT", "240"))
+        self.execution_timeout_minutes = execution_timeout_minutes or int(os.environ.get("DATAFLOW_EXEC_TIMEOUT", "4"))
+        self.agent_mode = agent_mode or os.environ.get("DATAFLOW_AGENT_MODE", "code")
+
         self.agent: Optional[DataflowAgent] = None
-        self.output_dir = kwargs.get("output_dir", "./system_scratch/DataflowSystem")
+        self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
         self.workload_data: Dict[str, dict] = {}  # Map task_id -> task dict (for ground truth)
 
         # Ensure output directory exists
@@ -110,10 +136,17 @@ class DataflowSystem(System):
         """Initialize and setup the DataflowAgent."""
         if self.verbose:
             print(f"[DataflowSystem] Setting up agent with model: {self.model_type}")
+            print(f"[DataflowSystem] Agent settings: max_steps={self.max_steps}, mode={self.agent_mode}")
 
         self.agent = DataflowAgent(
             model_type=self.model_type,
             max_steps=self.max_steps,
+            max_operator_result_char_limit=self.max_operator_result_char_limit,
+            max_operator_result_cell_char_limit=self.max_operator_result_cell_char_limit,
+            operator_result_serialization_mode=self.operator_result_serialization_mode,
+            tool_timeout_seconds=self.tool_timeout_seconds,
+            execution_timeout_minutes=self.execution_timeout_minutes,
+            agent_mode=self.agent_mode,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -136,7 +169,26 @@ Data files available (use these absolute paths to read the data):
 
 Question: {query}
 
-Instructions: To answer the question, you MUST read the relevant data files using the provided paths and analyze the data to answer the question. You MUST follow the Question to format your answer and your last message MUST be the EXACT answer format."""
+Instructions:
+1. Read the relevant data files using the provided paths and analyze the data.
+2. Compute the answer step by step.
+3. IMPORTANT - Your final answer format:
+   - Your LAST message must state the final answer clearly
+   - State ONLY the answer value itself, not a full sentence
+   - For numeric questions: output just the number (e.g., "274" not "The answer is 274 cities")
+   - For list questions: output a comma-separated list or JSON array (e.g., "Tokyo, London, Paris" or ["Tokyo", "London", "Paris"])
+   - For string questions: output just the string value
+
+Example correct final answers:
+- Numeric: "274"
+- List: ["Tokyo", "London", "Paris"]
+- String: "California"
+
+Example INCORRECT final answers (do NOT do this):
+- "Based on my analysis, the answer is 274 cities."
+- "The result shows that there are 274 modern cities."
+
+Your last line MUST BE: **Final Answer: <value>**"""
 
         return prompt
 
@@ -190,19 +242,18 @@ Instructions: To answer the question, you MUST read the relevant data files usin
         config = {
             "system_name": self.name,
             "model_type": self.model_type,
-            "max_steps": self.max_steps,
             "query_id": query_id,
             "dataset_directory": str(self.dataset_directory),
             "num_files": len(file_paths),
             "subset_files": subset_files,
             "agent_settings": {
-                "max_steps": self.agent.settings.max_steps if self.agent else self.max_steps,
-                "max_operator_result_char_limit": self.agent.settings.max_operator_result_char_limit if self.agent else 20000,
-                "max_operator_result_cell_char_limit": self.agent.settings.max_operator_result_cell_char_limit if self.agent else 4000,
-                "operator_result_serialization_mode": self.agent.settings.operator_result_serialization_mode if self.agent else "table",
-                "tool_timeout_seconds": self.agent.settings.tool_timeout_seconds if self.agent else 240,
-                "execution_timeout_minutes": self.agent.settings.execution_timeout_minutes if self.agent else 4,
-                "agent_mode": self.agent.settings.agent_mode if self.agent else "code",
+                "max_steps": self.max_steps,
+                "max_operator_result_char_limit": self.max_operator_result_char_limit,
+                "max_operator_result_cell_char_limit": self.max_operator_result_cell_char_limit,
+                "operator_result_serialization_mode": self.operator_result_serialization_mode,
+                "tool_timeout_seconds": self.tool_timeout_seconds,
+                "execution_timeout_minutes": self.execution_timeout_minutes,
+                "agent_mode": self.agent_mode,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -324,6 +375,24 @@ Instructions: To answer the question, you MUST read the relevant data files usin
 
         # If we have a response, parse it
         if response:
+            # First, look for explicit "Final Answer:" pattern (preferred)
+            final_answer_match = re.search(
+                r'\*?\*?Final Answer:?\*?\*?\s*(.+?)(?:\n|$)',
+                response,
+                re.IGNORECASE
+            )
+            if final_answer_match:
+                answer = final_answer_match.group(1).strip()
+                # Clean markdown formatting
+                answer = re.sub(r'^\*\*|\*\*$', '', answer).strip()
+                answer = re.sub(r'^`|`$', '', answer).strip()
+                # If it looks like a JSON array, return as-is
+                if answer.startswith('[') and answer.endswith(']'):
+                    return answer
+                # Remove trailing punctuation
+                answer = answer.rstrip('.')
+                return answer
+
             response_lower = response.lower()
 
             # Look for "final answer" section and extract the value after it
@@ -334,13 +403,24 @@ Instructions: To answer the question, you MUST read the relevant data files usin
                     # Get text after the marker
                     after_marker = response[idx + len(marker):]
 
+                    # Check for JSON array first (for list answers)
+                    json_array_match = re.search(r'(\[.*?\])', after_marker, re.DOTALL)
+                    if json_array_match:
+                        try:
+                            # Validate it's proper JSON
+                            json.loads(json_array_match.group(1))
+                            return json_array_match.group(1)
+                        except json.JSONDecodeError:
+                            pass
+
                     # Look for a number (possibly with markdown formatting)
                     # Pattern matches: **12964.8727**, 12964.8727, `12964.8727`, etc.
-                    number_pattern = r'[*_`]*\s*(-?[\d,]+\.?\d*)\s*[*_`]*'
+                    number_pattern = r'[*_`:\s]*(-?[\d,]+\.?\d*)[*_`]*'
                     match = re.search(number_pattern, after_marker)
-                    if match:
+                    if match and match.group(1):
                         answer = match.group(1).replace(',', '')
-                        return answer
+                        if answer:  # Make sure it's not empty
+                            return answer
 
                     # If no number, take first non-empty content line
                     lines = [l.strip() for l in after_marker.split('\n') if l.strip()]
@@ -447,6 +527,45 @@ class DataflowSystemGPT(DataflowSystem):
         super().__init__(
             model_type="gpt-5-mini",
             name="DataflowSystemGPT",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemSonnet37(DataflowSystem):
+    """DataflowSystem using Claude Sonnet 3.7 model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-sonnet-3.7",
+            name="DataflowSystemSonnet37",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemSonnet35(DataflowSystem):
+    """DataflowSystem using Claude Sonnet 3.5 model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-sonnet-3.5",
+            name="DataflowSystemSonnet35",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGptO3(DataflowSystem):
+    """DataflowSystem using GPT o3 model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="o3",
+            name="DataflowSystemGptO3",
             verbose=verbose,
             *args,
             **kwargs
