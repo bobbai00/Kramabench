@@ -54,7 +54,7 @@ def aggregate_results(system_name, results_df):
     total_support = 0
     total_score = 0
     for _, row in workload_results_df.iterrows():
-        if row["metric"] in ["success", "string_bootstrap", "rae_score", "f1", "f1_approximate"]:
+        if row["metric"] in ["success", "llm_paraphrase", "rae_score", "f1", "f1_approximate"]:
             total_support += row["total_value_support"]
             total_score += row["value_support"] * row["value_mean"]
     print(f"Total score is: {total_score/total_support*100}")
