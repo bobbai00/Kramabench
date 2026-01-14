@@ -173,20 +173,16 @@ Instructions:
 1. Read the relevant data files using the provided paths and analyze the data.
 2. Compute the answer step by step.
 3. IMPORTANT - Your final answer format:
-   - Your LAST message must state the final answer clearly
-   - State ONLY the answer value itself, not a full sentence
-   - For numeric questions: output just the number (e.g., "274" not "The answer is 274 cities")
-   - For list questions: output a comma-separated list or JSON array (e.g., "Tokyo, London, Paris" or ["Tokyo", "London", "Paris"])
-   - For string questions: output just the string value
+   - For numeric questions: output just the number (e.g., "274")
+   - For list questions: output a JSON array (e.g., ["Tokyo", "London", "Paris"])
+   - For descriptive/analytical questions: output a complete sentence summarizing your findings (e.g., "The average period is 11 years, with maxima in 1968, 1979, 1989, 2000, and 2014.")
+   - For simple string questions: output just the value (e.g., "California")
 
-Example correct final answers:
+Example final answers:
 - Numeric: "274"
 - List: ["Tokyo", "London", "Paris"]
+- Descriptive: "The correlation coefficient is 0.85, indicating a strong positive relationship between temperature and sales."
 - String: "California"
-
-Example INCORRECT final answers (do NOT do this):
-- "Based on my analysis, the answer is 274 cities."
-- "The result shows that there are 274 modern cities."
 
 Your last line MUST BE: **Final Answer: <value>**"""
 

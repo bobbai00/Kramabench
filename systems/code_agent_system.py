@@ -86,7 +86,11 @@ Question: {query}
 Instructions:
 1. Read the relevant data files using open() or pandas.read_csv() etc.
 2. Compute the answer step by step.
-3. Your final answer should be just the value (number, string, or list).
+3. IMPORTANT - Your final answer format:
+   - For numeric questions: output just the number (e.g., "274")
+   - For list questions: output a JSON array (e.g., ["Tokyo", "London", "Paris"])
+   - For descriptive/analytical questions: output a complete sentence summarizing your findings (e.g., "The average period is 11 years, with maxima in 1968, 1979, 1989, 2000, and 2014.")
+   - For simple string questions: output just the value (e.g., "California")
 """
 
         # Save outputs
