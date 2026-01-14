@@ -358,20 +358,55 @@ class StringBootstrap(Metric):
         return (0.0, token_usage, token_usage_input, token_usage_output)
 
 
+def _get_decimal_places(target: float) -> int:
+    """Get the number of decimal places to use for rounding based on target's representation."""
+    target_str = str(target)
+    if 'e' in target_str.lower():
+        # Scientific notation: count decimal places in mantissa and adjust by exponent
+        mantissa, exp = target_str.lower().split('e')
+        exp_val = int(exp)
+        if '.' in mantissa:
+            mantissa_decimals = len(mantissa.split('.')[1])
+        else:
+            mantissa_decimals = 0
+        # Total decimal places = mantissa decimals - exponent
+        # e.g., 7.95e-13 has 2 mantissa decimals, exp=-13, so 2 - (-13) = 15 decimal places
+        return mantissa_decimals - exp_val
+    elif '.' in target_str:
+        return len(target_str.split('.')[1])
+    return 0
+
+
+def _round_to_target_precision(predicted: float, target: float) -> float:
+    """Round predicted to match target's displayed precision."""
+    decimal_places = _get_decimal_places(target)
+    return round(predicted, decimal_places)
+
+
 class Success(Metric):
     name = "success"
 
     def __call__(self, predicted: str | int | float, target: str | int | float):
-        try: 
-            if isinstance(target, float): # Handles approximate float comparison
+        try:
+            # Handle numeric targets (int or float)
+            if isinstance(target, (int, float)):
+                # Convert string prediction to number
                 if isinstance(predicted, str):
                     predicted = str_to_float(predicted)
-                rea = abs(predicted - target) / abs(target)
-                rea_percent = abs(predicted * 100 - target) / abs(target)
-                return (rea < 0.000001 or rea_percent < 0.000001, 0, 0, 0)
+
+                if isinstance(target, int):
+                    # For integer targets, round predicted and compare
+                    return (int(round(predicted) == target), 0, 0, 0)
+                else:
+                    # For float targets, round predicted to target's precision
+                    rounded_predicted = _round_to_target_precision(predicted, target)
+                    rounded_target = round(target, _get_decimal_places(target))
+                    return (int(rounded_predicted == rounded_target), 0, 0, 0)
+
+            # Handle string targets
             elif isinstance(target, str) and isinstance(predicted, str):
                 return (int(predicted.strip().lower() == target.strip().lower()), 0, 0, 0)
-            elif isinstance(target, str) and (isinstance(predicted, float) or isinstance(predicted, int)):
+            elif isinstance(target, str) and isinstance(predicted, (float, int)):
                 raise ValueError("TypeError: Success Metric: unsupported argument types!")
             else:
                 return (int(predicted == target), 0, 0, 0)
