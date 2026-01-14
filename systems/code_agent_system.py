@@ -14,13 +14,17 @@ from benchmark.benchmark_api import System
 from code_agent import CodeAgentWrapper, CodeAgentResult
 
 
+# Default max steps (can be overridden by CODE_AGENT_MAX_STEPS env var)
+DEFAULT_MAX_STEPS = int(os.environ.get("CODE_AGENT_MAX_STEPS", 50))
+
+
 class CodeAgentSystem(System):
     """KramaBench System using smolagents CodeAgent."""
 
     def __init__(
         self,
         model_type: str = "claude-haiku-4.5",
-        max_steps: int = 50,
+        max_steps: int = DEFAULT_MAX_STEPS,
         api_base: str = "http://localhost:9096/api",
         api_key: str = "dummy",
         verbose: bool = False,
@@ -244,3 +248,8 @@ class CodeAgentSystemGPT(CodeAgentSystem):
 class CodeAgentSystemGptO3(CodeAgentSystem):
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(model_type="o3", name="CodeAgentSystemGptO3", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemSonnet4(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="claude-sonnet-4", name="CodeAgentSystemSonnet4", verbose=verbose, *args, **kwargs)

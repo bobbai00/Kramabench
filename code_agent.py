@@ -3,6 +3,7 @@
 Code Agent - Wrapper for smolagents CodeAgent for KramaBench benchmarking.
 """
 
+import os
 import time
 from typing import Optional, Any
 from dataclasses import dataclass
@@ -10,25 +11,40 @@ from dataclasses import dataclass
 from smolagents import CodeAgent
 from smolagents.models import OpenAIServerModel
 
-# Default settings
+# Default settings (CODE_AGENT_MAX_STEPS env var overrides default)
 DEFAULT_MODEL_TYPE = "claude-haiku-4.5"
-DEFAULT_MAX_STEPS = 50
+DEFAULT_MAX_STEPS = int(os.environ.get("CODE_AGENT_MAX_STEPS", 50))
 DEFAULT_API_BASE = "http://localhost:9096/api"
 DEFAULT_API_KEY = "dummy"
 
 # Imports the agent is allowed to use
 AUTHORIZED_IMPORTS = [
-    "numpy", "pandas", "json", "csv", "os", "glob",
-    "math", "statistics", "random", "re", "collections",
+    # Data science essentials (with submodules)
+    "numpy.*",      # numpy.linalg, numpy.random, numpy.fft, etc.
+    "pandas.*",     # pandas.api, pandas.io, etc.
+    "scipy.*",      # scipy.stats, scipy.optimize, scipy.interpolate, etc.
+    "sklearn.*",    # sklearn.model_selection, sklearn.preprocessing, sklearn.metrics, etc.
+    "matplotlib.*", # matplotlib.pyplot, matplotlib.figure, etc.
+
+    # Standard library - common
+    "json", "csv", "os", "glob", "math", "statistics", "random", "re",
     "datetime", "itertools", "time", "unicodedata", "queue", "stat",
     "textwrap", "string", "io", "pathlib", "functools", "operator",
+
+    # Standard library - with submodules
+    "collections.*",  # collections.abc
+    "xml.*",          # xml.etree, xml.dom, xml.sax
+    "urllib.*",       # urllib.parse, urllib.request
+    "html.*",         # html.parser
+
+    # Path handling (used internally by os.path, pandas, etc.)
+    "posixpath", "ntpath", "genericpath",
+
+    # Additional useful libraries
+    "typing", "copy", "decimal", "fractions", "struct",
+    "hashlib", "base64", "logging", "warnings", "bisect", "heapq",
 ]
 
-# Instructions for the agent about file access
-FILE_INSTRUCTIONS = """You have access to Python's built-in open() function to read files.
-Use open(filepath, 'r') to read text files and open(filepath, 'rb') for binary files.
-You can also use pandas.read_csv(), pandas.read_json(), pandas.read_html() etc. for structured data.
-Always use the absolute file paths provided in the task."""
 
 
 @dataclass
@@ -114,7 +130,6 @@ class CodeAgentWrapper:
             additional_authorized_imports=self.authorized_imports,
             max_steps=self.max_steps,
             verbosity_level=self.verbosity_level,
-            instructions=FILE_INSTRUCTIONS,
             executor_kwargs={"additional_functions": {"open": open}},
         )
         return self
@@ -153,7 +168,6 @@ class CodeAgentWrapper:
                 additional_authorized_imports=self.authorized_imports,
                 max_steps=self.max_steps,
                 verbosity_level=self.verbosity_level,
-                instructions=FILE_INSTRUCTIONS,
                 executor_kwargs={"additional_functions": {"open": open}},
             )
 

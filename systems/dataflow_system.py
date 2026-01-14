@@ -633,3 +633,16 @@ class DataflowSystemGptO3(DataflowSystem):
             *args,
             **kwargs
         )
+
+
+class DataflowSystemSonnet4(DataflowSystem):
+    """DataflowSystem using Claude Sonnet 4 model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-sonnet-4",
+            name="DataflowSystemSonnet4",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
