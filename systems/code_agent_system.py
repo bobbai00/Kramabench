@@ -6,6 +6,8 @@ CodeAgentSystem - KramaBench System wrapper for smolagents CodeAgent.
 import os
 import json
 import re
+import shutil
+import time
 from typing import Dict, List, Optional
 
 from benchmark.benchmark_api import System
@@ -32,6 +34,8 @@ class CodeAgentSystem(System):
         self.api_key = api_key
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
+        self.symlink_path: Optional[str] = None  # Shortened path via symlink
+        self.symlink_base: Optional[str] = None  # Base directory for symlink cleanup
         os.makedirs(self.output_dir, exist_ok=True)
 
     def process_dataset(self, dataset_directory: str | os.PathLike) -> None:
@@ -46,6 +50,9 @@ class CodeAgentSystem(System):
         if self.verbose:
             print(f"[{self.name}] Found {len(self.dataset)} files")
 
+        # Create symlink for shorter paths in prompts
+        self._create_symlink(dataset_directory)
+
         # Setup agent
         self.agent = CodeAgentWrapper(
             model_type=self.model_type,
@@ -55,6 +62,51 @@ class CodeAgentSystem(System):
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
+
+    def _create_symlink(self, dataset_directory: str) -> None:
+        """
+        Create a symlink in /tmp for shorter file paths in prompts.
+
+        This reduces token usage by replacing long absolute paths like:
+        /Users/.../KramaBench/data/astronomy/input/file.csv
+        with shorter paths like:
+        /tmp/krama_bench/{timestamp}/astronomy/file.csv
+
+        Each run gets a unique timestamp to avoid conflicts with concurrent runs.
+        """
+        try:
+            # Extract domain name from path (e.g., "astronomy" from ".../data/astronomy/input")
+            abs_path = os.path.abspath(dataset_directory)
+            parts = abs_path.rstrip('/').split('/')
+
+            # Find domain: look for "data" folder and get next part
+            domain = "data"
+            if 'data' in parts:
+                data_idx = parts.index('data')
+                if data_idx + 1 < len(parts):
+                    domain = parts[data_idx + 1]
+
+            # Create unique symlink directory with timestamp (milliseconds since epoch)
+            timestamp = int(time.time() * 1000)
+            symlink_base = f"/tmp/krama_bench/{timestamp}"
+            os.makedirs(symlink_base, exist_ok=True)
+
+            symlink_path = os.path.join(symlink_base, domain)
+
+            # Create symlink (no need to check for existing since timestamp is unique)
+            os.symlink(abs_path, symlink_path)
+            self.symlink_path = symlink_path
+            self.symlink_base = symlink_base  # Store base for cleanup
+
+            if self.verbose:
+                print(f"[{self.name}] Created symlink: {symlink_path} -> {abs_path}")
+
+        except Exception as e:
+            # Fall back to original paths if symlink creation fails
+            if self.verbose:
+                print(f"[{self.name}] Could not create symlink, using original paths: {e}")
+            self.symlink_path = None
+            self.symlink_base = None
 
     def serve_query(
         self,
@@ -66,14 +118,17 @@ class CodeAgentSystem(System):
         if not self.agent:
             raise RuntimeError("Call process_dataset() first.")
 
+        # Use symlink path for shorter prompts if available
+        base_path = self.symlink_path if self.symlink_path else self.dataset_directory
+
         # Build file paths
         if subset_files:
-            file_paths = [os.path.join(self.dataset_directory, f) for f in subset_files]
+            file_paths = [os.path.join(base_path, f) for f in subset_files]
         else:
-            file_paths = [os.path.join(self.dataset_directory, f) for f in self.dataset.keys()]
+            file_paths = [os.path.join(base_path, f) for f in self.dataset.keys()]
 
         if self.verbose:
-            print(f"[{self.name}] Query: {query_id}, Files: {len(file_paths)}")
+            print(f"[{self.name}] Query: {query_id}, Files: {len(file_paths)} (base: {base_path})")
 
         # Build prompt
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
@@ -152,10 +207,22 @@ Instructions:
         return lines[-1] if lines else response
 
     def cleanup(self) -> None:
-        """Cleanup resources."""
+        """Cleanup resources and symlinks."""
         if self.agent:
             self.agent.cleanup()
             self.agent = None
+
+        # Remove symlink directory (entire timestamp-based directory)
+        if self.symlink_base and os.path.exists(self.symlink_base):
+            try:
+                shutil.rmtree(self.symlink_base)
+                if self.verbose:
+                    print(f"[{self.name}] Removed symlink directory: {self.symlink_base}")
+            except Exception as e:
+                if self.verbose:
+                    print(f"[{self.name}] Could not remove symlink directory: {e}")
+            self.symlink_path = None
+            self.symlink_base = None
 
 
 # Pre-configured variants

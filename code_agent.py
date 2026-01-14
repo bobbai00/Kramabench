@@ -17,7 +17,12 @@ DEFAULT_API_BASE = "http://localhost:9096/api"
 DEFAULT_API_KEY = "dummy"
 
 # Imports the agent is allowed to use
-AUTHORIZED_IMPORTS = ["numpy", "pandas", "json", "csv", "os", "glob"]
+AUTHORIZED_IMPORTS = [
+    "numpy", "pandas", "json", "csv", "os", "glob",
+    "math", "statistics", "random", "re", "collections",
+    "datetime", "itertools", "time", "unicodedata", "queue", "stat",
+    "textwrap", "string", "io", "pathlib", "functools", "operator",
+]
 
 # Instructions for the agent about file access
 FILE_INSTRUCTIONS = """You have access to Python's built-in open() function to read files.

@@ -8,6 +8,8 @@ to solve benchmark tasks via dataflow-based agents.
 
 import os
 import json
+import shutil
+import time
 from typing import Dict, List, Optional
 
 from benchmark.benchmark_api import System
@@ -72,6 +74,8 @@ class DataflowSystem(System):
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
         self.workload_data: Dict[str, dict] = {}  # Map task_id -> task dict (for ground truth)
+        self.symlink_path: Optional[str] = None  # Shortened path via symlink
+        self.symlink_base: Optional[str] = None  # Base directory for symlink cleanup
 
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
@@ -100,11 +104,59 @@ class DataflowSystem(System):
         if self.verbose:
             print(f"[DataflowSystem] Found {len(self.dataset)} files in {dataset_directory}")
 
+        # Create symlink for shorter paths in prompts
+        self._create_symlink(dataset_directory)
+
         # Try to load workload for ground truth lookup
         self._load_workload(dataset_directory)
 
         # Initialize the agent
         self._setup_agent()
+
+    def _create_symlink(self, dataset_directory: str) -> None:
+        """
+        Create a symlink in /tmp for shorter file paths in prompts.
+
+        This reduces token usage by replacing long absolute paths like:
+        /Users/.../KramaBench/data/astronomy/input/file.csv
+        with shorter paths like:
+        /tmp/krama_bench/{timestamp}/astronomy/file.csv
+
+        Each run gets a unique timestamp to avoid conflicts with concurrent runs.
+        """
+        try:
+            # Extract domain name from path (e.g., "astronomy" from ".../data/astronomy/input")
+            abs_path = os.path.abspath(dataset_directory)
+            parts = abs_path.rstrip('/').split('/')
+
+            # Find domain: look for "data" folder and get next part
+            domain = "data"
+            if 'data' in parts:
+                data_idx = parts.index('data')
+                if data_idx + 1 < len(parts):
+                    domain = parts[data_idx + 1]
+
+            # Create unique symlink directory with timestamp (milliseconds since epoch)
+            timestamp = int(time.time() * 1000)
+            symlink_base = f"/tmp/krama_bench/{timestamp}"
+            os.makedirs(symlink_base, exist_ok=True)
+
+            symlink_path = os.path.join(symlink_base, domain)
+
+            # Create symlink (no need to check for existing since timestamp is unique)
+            os.symlink(abs_path, symlink_path)
+            self.symlink_path = symlink_path
+            self.symlink_base = symlink_base  # Store base for cleanup
+
+            if self.verbose:
+                print(f"[DataflowSystem] Created symlink: {symlink_path} -> {abs_path}")
+
+        except Exception as e:
+            # Fall back to original paths if symlink creation fails
+            if self.verbose:
+                print(f"[DataflowSystem] Could not create symlink, using original paths: {e}")
+            self.symlink_path = None
+            self.symlink_base = None
 
     def _load_workload(self, dataset_directory: str) -> None:
         """Load workload files to enable ground truth saving."""
@@ -208,21 +260,24 @@ Your last line MUST BE: **Final Answer: <value>**"""
         if self.agent is None:
             raise RuntimeError("Agent not initialized. Call process_dataset() first.")
 
+        # Use symlink path for shorter prompts if available
+        base_path = self.symlink_path if self.symlink_path else self.dataset_directory
+
         # Build file paths list
         if subset_files:
             file_paths = [
-                os.path.join(self.dataset_directory, f)
+                os.path.join(base_path, f)
                 for f in subset_files
             ]
         else:
             file_paths = [
-                os.path.join(self.dataset_directory, f)
+                os.path.join(base_path, f)
                 for f in self.dataset.keys()
             ]
 
         if self.verbose:
             print(f"[DataflowSystem] Processing query: {query_id}")
-            print(f"[DataflowSystem] Using {len(file_paths)} files")
+            print(f"[DataflowSystem] Using {len(file_paths)} files (base: {base_path})")
 
         # Build prompt with file paths
         prompt = self._build_prompt(query, file_paths)
@@ -475,7 +530,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
         return "No response from agent"
 
     def cleanup(self) -> None:
-        """Cleanup agent resources."""
+        """Cleanup agent resources and symlinks."""
         if self.agent:
             try:
                 self.agent.cleanup()
@@ -483,6 +538,18 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 if self.verbose:
                     print(f"[DataflowSystem] Cleanup warning: {e}")
             self.agent = None
+
+        # Remove symlink directory (entire timestamp-based directory)
+        if self.symlink_base and os.path.exists(self.symlink_base):
+            try:
+                shutil.rmtree(self.symlink_base)
+                if self.verbose:
+                    print(f"[DataflowSystem] Removed symlink directory: {self.symlink_base}")
+            except Exception as e:
+                if self.verbose:
+                    print(f"[DataflowSystem] Could not remove symlink directory: {e}")
+            self.symlink_path = None
+            self.symlink_base = None
 
     def __del__(self):
         """Destructor to ensure cleanup."""
