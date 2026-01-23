@@ -71,7 +71,17 @@ class CodeAgentSystem(System):
 
         # Build file paths as relative paths from current working directory
         if subset_files:
-            file_paths = [os.path.relpath(os.path.join(self.dataset_directory, f)) for f in subset_files]
+            # Map subset_files (which may be just filenames) to actual paths in self.dataset
+            file_paths = []
+            for f in subset_files:
+                # Look for matching file in self.dataset (which has correct relative paths)
+                matching = [k for k in self.dataset.keys() if k.endswith(f) or os.path.basename(k) == os.path.basename(f)]
+                if matching:
+                    # Use the first match (should typically be unique)
+                    file_paths.append(os.path.relpath(os.path.join(self.dataset_directory, matching[0])))
+                else:
+                    # Fallback to original behavior if no match found
+                    file_paths.append(os.path.relpath(os.path.join(self.dataset_directory, f)))
         else:
             file_paths = [os.path.relpath(os.path.join(self.dataset_directory, f)) for f in self.dataset.keys()]
 
@@ -81,19 +91,25 @@ class CodeAgentSystem(System):
         # Build prompt
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
 
-Data files available (use these paths):
+Data files available (use these paths to read the data):
 {json.dumps(file_paths, indent=2)}
 
 Question: {query}
 
 Instructions:
-1. Read the relevant data files using open() or pandas.read_csv() etc.
+1. Read the relevant data files using the provided paths and analyze the data.
 2. Compute the answer step by step.
 3. IMPORTANT - Your final answer format:
    - For numeric questions: output just the number (e.g., "274")
    - For list questions: output a JSON array (e.g., ["Tokyo", "London", "Paris"])
    - For descriptive/analytical questions: output a complete sentence summarizing your findings (e.g., "The average period is 11 years, with maxima in 1968, 1979, 1989, 2000, and 2014.")
    - For simple string questions: output just the value (e.g., "California")
+
+Example final answers:
+- Numeric: "274"
+- List: ["Tokyo", "London", "Paris"]
+- Descriptive: "The correlation coefficient is 0.85, indicating a strong positive relationship between temperature and sales."
+- String: "California"
 """
 
         # Save outputs
@@ -185,3 +201,20 @@ class CodeAgentSystemGptO3(CodeAgentSystem):
 class CodeAgentSystemSonnet4(CodeAgentSystem):
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(model_type="claude-sonnet-4", name="CodeAgentSystemSonnet4", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemHaiku45(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="claude-haiku-4.5", name="CodeAgentSystemHaiku45", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemO4Mini(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="o4-mini", name="CodeAgentSystemO4Mini", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGemini25Pro(CodeAgentSystem):
+    """CodeAgentSystem using Google Gemini 2.5 Pro model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="gemini-2.5-pro", name="CodeAgentSystemGemini25Pro", verbose=verbose, *args, **kwargs)

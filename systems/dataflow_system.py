@@ -210,10 +210,17 @@ Your last line MUST BE: **Final Answer: <value>**"""
 
         # Build file paths as relative paths from current working directory
         if subset_files:
-            file_paths = [
-                os.path.relpath(os.path.join(self.dataset_directory, f))
-                for f in subset_files
-            ]
+            # Map subset_files (which may be just filenames) to actual paths in self.dataset
+            file_paths = []
+            for f in subset_files:
+                # Look for matching file in self.dataset (which has correct relative paths)
+                matching = [k for k in self.dataset.keys() if k.endswith(f) or os.path.basename(k) == os.path.basename(f)]
+                if matching:
+                    # Use the first match (should typically be unique)
+                    file_paths.append(os.path.relpath(os.path.join(self.dataset_directory, matching[0])))
+                else:
+                    # Fallback to original behavior if no match found
+                    file_paths.append(os.path.relpath(os.path.join(self.dataset_directory, f)))
         else:
             file_paths = [
                 os.path.relpath(os.path.join(self.dataset_directory, f))
@@ -256,12 +263,23 @@ Your last line MUST BE: **Final Answer: <value>**"""
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
 
-        # Reset agent state for fresh query
+        # WORKAROUND: Create a fresh agent for each query to avoid workflow state pollution
+        # The reset() API doesn't properly clear workflow operators, causing stale operators
+        # to accumulate and be reused incorrectly across tasks.
         try:
-            self.agent.reset()
+            if self.verbose:
+                print(f"[DataflowSystem] Creating fresh agent for clean workflow state...")
+            self.agent.cleanup()  # Delete old agent and workflow
+            self._setup_agent()   # Create new agent with fresh workflow
         except Exception as e:
             if self.verbose:
-                print(f"[DataflowSystem] Reset warning: {e}")
+                print(f"[DataflowSystem] Fresh agent creation warning: {e}")
+            # Fallback to reset if cleanup/setup fails
+            try:
+                self.agent.reset()
+            except Exception as e2:
+                if self.verbose:
+                    print(f"[DataflowSystem] Reset fallback warning: {e2}")
 
         # Run the agent
         try:
@@ -575,6 +593,45 @@ class DataflowSystemSonnet4(DataflowSystem):
         super().__init__(
             model_type="claude-sonnet-4",
             name="DataflowSystemSonnet4",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemHaiku45(DataflowSystem):
+    """DataflowSystem using Claude Haiku 4.5 model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            name="DataflowSystemHaiku45",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemO4Mini(DataflowSystem):
+    """DataflowSystem using OpenAI o4-mini model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="o4-mini",
+            name="DataflowSystemO4Mini",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGemini25Pro(DataflowSystem):
+    """DataflowSystem using Google Gemini 2.5 Pro model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gemini-2.5-pro",
+            name="DataflowSystemGemini25Pro",
             verbose=verbose,
             *args,
             **kwargs

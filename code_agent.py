@@ -25,6 +25,20 @@ AUTHORIZED_IMPORTS = [
     "scipy.*",      # scipy.stats, scipy.optimize, scipy.interpolate, etc.
     "sklearn.*",    # sklearn.model_selection, sklearn.preprocessing, sklearn.metrics, etc.
     "matplotlib.*", # matplotlib.pyplot, matplotlib.figure, etc.
+    "openpyxl.*",   # for reading .xlsx Excel files via pandas
+
+    # HTML parsing (for pd.read_html)
+    "lxml.*",       # lxml.html, lxml.etree - fast HTML/XML parser
+    "bs4.*",        # BeautifulSoup for HTML parsing
+
+    # Geospatial data (for .gpkg GeoPackage files)
+    "geopandas.*",  # extends pandas for geospatial data
+    "fiona.*",      # reads/writes geospatial data formats
+    "shapely.*",    # geometric operations
+    "pyproj.*",     # coordinate transformations
+
+    # Scientific data formats
+    "cdflib.*",     # NASA Common Data Format (.cdf files)
 
     # Standard library - common
     "json", "csv", "os", "glob", "math", "statistics", "random", "re",
@@ -124,7 +138,7 @@ class CodeAgentWrapper:
             api_base=self.api_base,
             api_key=self.api_key,
         )
-        self._agent = CodeAgent(
+        self._agent = CodeAgent(\
             tools=[],
             model=self._model,
             additional_authorized_imports=self.authorized_imports,
