@@ -1,0 +1,136 @@
+# O4Mini Comparison Analysis: CodeAgentSystem vs DataflowSystem
+
+## Summary Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total Tasks | 104 |
+| Both Succeed | 46 (44%) |
+| Dataflow Only | 10 (10%) |
+| Code Only | 5 (5%) |
+| Both Failed | 43 (41%) |
+| Code Mean Score | 0.5071 |
+| Dataflow Mean Score | 0.5614 |
+
+**Overall Winner: DataflowSystem (5.4% higher mean score)**
+
+---
+
+## Key Failure Patterns
+
+### Pattern 1: Case Sensitivity in Data Cleaning
+**Example:** environment-easy-6 (Dataflow succeeds, Code fails)
+
+- **Task:** Calculate average exceedance rate for marine beaches
+- **Code Agent:** Used `(marine["Violation"] == "Yes")` - case sensitive
+- **Dataflow Agent:** Used `.str.lower().eq('yes')` - case insensitive
+- **Result:** Code got 0.56% (wrong), Dataflow got 5.14% (correct)
+
+**Root Cause:** Data had lowercase "yes"/"no" but code assumed uppercase "Yes".
+
+---
+
+### Pattern 2: Error Recovery in Complex Multi-File Tasks
+**Example:** astronomy-hard-9 (Dataflow succeeds, Code fails)
+
+- **Task:** Find best lag for r^2 correlation between TLE satellite data and OMNI AP index
+- **Code Agent:** Hit ZeroDivisionError, FileNotFoundError, parsing errors. Gave up and guessed "15".
+- **Dataflow Agent:** Also hit errors but iteratively modified operators, tested each step, and completed full analysis. Got correct answer "24".
+
+**Key Advantage:** Dataflow's modular operator approach enables incremental debugging and error recovery. Each operator can be tested independently without losing progress.
+
+---
+
+### Pattern 3: Over-Engineering / Misinterpretation
+**Example:** environment-easy-1 (Code succeeds, Dataflow fails)
+
+- **Task:** Percentage of water samples exceeding bacterial standards in 2013
+- **Code Agent:** Used ALL data in the 2013 CSV file → 4.796 (correct)
+- **Dataflow Agent:** Added a "bathing season" filter (May 1 - Sep 30) → 4.798 (incorrect)
+
+**Root Cause:** Dataflow over-interpreted the question by adding unnecessary filtering logic.
+
+---
+
+### Pattern 4: Answer Format Mismatch
+**Example:** wildfire-hard-4 (Both fail despite correct computation)
+
+- **Task:** Find year with highest suppression cost per acre of human-caused fire
+- **Correct Answer:** 2065.1 (just the number)
+- **Both Systems:** Computed 2065.1 correctly, but returned:
+  "The year with the highest suppression cost per acre of human-caused fire was 2023, with a cost of $2065.10 per acre."
+
+**Root Cause:** Both systems returned descriptive sentences instead of just the numeric value as expected.
+
+---
+
+### Pattern 5: Complex File Parsing
+**Example:** Multiple wildfire tasks (Both fail or struggle)
+
+Both systems struggle with:
+- Tab-separated files named as .csv
+- Files with inconsistent row lengths
+- Mixed data formats (currencies with $, commas)
+- NULL/N/A value handling
+
+**Common Errors:**
+- ParserError: Expected X fields, saw Y
+- KeyError when accessing columns that weren't parsed correctly
+
+---
+
+## System Comparison
+
+### CodeAgentSystem Strengths:
+1. Faster for simple tasks (no overhead of operator creation)
+2. Less prone to over-engineering
+3. Direct Python execution without abstraction layer
+
+### CodeAgentSystem Weaknesses:
+1. Less error recovery capability (sequential execution)
+2. When one step fails, harder to isolate and fix
+3. Context can be lost between retries
+
+### DataflowSystem Strengths:
+1. Modular operator design enables better debugging
+2. Can modify individual operators without re-running entire pipeline
+3. Better at handling complex multi-step transformations
+4. Intermediate results visible for inspection
+
+### DataflowSystem Weaknesses:
+1. Can over-engineer solutions (adding unnecessary operators)
+2. More verbose execution traces
+3. Overhead of operator management
+
+---
+
+## Recommendations for Improvement
+
+1. **Standardize Case Handling:** Both systems should default to case-insensitive string matching for categorical data.
+
+2. **Improve Answer Format Detection:** Systems need better logic to determine expected output format (numeric vs descriptive).
+
+3. **Robust File Parsing:** Add automatic delimiter detection and handle malformed CSV/TSV files gracefully.
+
+4. **Error Recovery for Code Agent:** Implement checkpoint mechanism similar to dataflow's operator isolation.
+
+5. **Simplicity Preference for Dataflow:** Add heuristic to avoid over-filtering when the question doesn't explicitly require it.
+
+---
+
+## Domain Performance
+
+| Domain | Both OK | DF Only | Code Only | Both Fail | Code Mean | DF Mean |
+|--------|---------|---------|-----------|-----------|-----------|---------|
+| archeology | 4 | 1 | 0 | 7 | 0.333 | 0.417 |
+| astronomy | 2 | 2 | 0 | 8 | 0.208 | 0.417 |
+| biomedical | 4 | 2 | 1 | 2 | 0.556 | 0.667 |
+| environment | 7 | 3 | 3 | 7 | 0.520 | 0.544 |
+| legal | 21 | 1 | 0 | 8 | 0.700 | 0.733 |
+| wildfire | 8 | 1 | 1 | 11 | 0.468 | 0.452 |
+
+**Observations:**
+- Legal domain: Both systems perform well (70%+ mean scores)
+- Astronomy: Highest failure rate, likely due to specialized data formats (TLE, OMNI)
+- Environment: Most balanced, with Code winning some and Dataflow winning others
+- Wildfire: Only domain where Code slightly outperforms Dataflow (due to file parsing issues)
