@@ -11,11 +11,16 @@ from dataclasses import dataclass
 from smolagents import CodeAgent
 from smolagents.models import OpenAIServerModel
 
+from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS
+
 # Default settings (CODE_AGENT_MAX_STEPS env var overrides default)
 DEFAULT_MODEL_TYPE = "claude-haiku-4.5"
 DEFAULT_MAX_STEPS = int(os.environ.get("CODE_AGENT_MAX_STEPS", 50))
 DEFAULT_API_BASE = "http://localhost:9096/api"
 DEFAULT_API_KEY = "dummy"
+
+# Customized prompt setting (set to "true" to enable)
+CUSTOMIZED_PROMPT_ENABLED = os.environ.get("CUSTOMIZED_PROMPT_ENABLED", "false").lower() == "true"
 
 # Imports the agent is allowed to use
 AUTHORIZED_IMPORTS = [
@@ -138,14 +143,22 @@ class CodeAgentWrapper:
             api_base=self.api_base,
             api_key=self.api_key,
         )
-        self._agent = CodeAgent(\
-            tools=[],
-            model=self._model,
-            additional_authorized_imports=self.authorized_imports,
-            max_steps=self.max_steps,
-            verbosity_level=self.verbosity_level,
-            executor_kwargs={"additional_functions": {"open": open}},
-        )
+
+        # Build agent kwargs
+        agent_kwargs = {
+            "tools": [],
+            "model": self._model,
+            "additional_authorized_imports": self.authorized_imports,
+            "max_steps": self.max_steps,
+            "verbosity_level": self.verbosity_level,
+            "executor_kwargs": {"additional_functions": {"open": open}},
+        }
+
+        # Add custom instructions if enabled
+        if CUSTOMIZED_PROMPT_ENABLED:
+            agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
+
+        self._agent = CodeAgent(**agent_kwargs)
         return self
 
     def run(self, prompt: str) -> CodeAgentResult:
@@ -176,14 +189,21 @@ class CodeAgentWrapper:
     def reset(self):
         """Reset the agent state."""
         if self._agent and self._model:
-            self._agent = CodeAgent(
-                tools=[],
-                model=self._model,
-                additional_authorized_imports=self.authorized_imports,
-                max_steps=self.max_steps,
-                verbosity_level=self.verbosity_level,
-                executor_kwargs={"additional_functions": {"open": open}},
-            )
+            # Build agent kwargs
+            agent_kwargs = {
+                "tools": [],
+                "model": self._model,
+                "additional_authorized_imports": self.authorized_imports,
+                "max_steps": self.max_steps,
+                "verbosity_level": self.verbosity_level,
+                "executor_kwargs": {"additional_functions": {"open": open}},
+            }
+
+            # Add custom instructions if enabled
+            if CUSTOMIZED_PROMPT_ENABLED:
+                agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
+
+            self._agent = CodeAgent(**agent_kwargs)
 
     def cleanup(self):
         """Cleanup resources."""

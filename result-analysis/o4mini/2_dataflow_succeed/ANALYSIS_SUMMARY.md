@@ -30,7 +30,7 @@ Dataflow's operator-based design forces modular execution:
 | environment-easy-4 | Filter → Count → Compare → Calculate | Compare step: `== 'NO'` instead of lowercase `'no'` |
 | environment-easy-6 | Load 21 files → Concat → Filter → Count → Calculate | Compare step: `== "Yes"` case mismatch |
 | biomedical-hard-5 | Load → Filter → Transform → Median | Transform step: `2 ** log2_value` wrong approach |
-| legal-hard-23 | Load → Clean → Merge → Calculate → Max | Merge step: inner join dropped DC |
+| legal-hard-23 | Load → Clean → Merge → Calculate → Max | Numeric parsing: `pd.to_numeric("2,509")` → NaN |
 | wildfire-hard-21 | Load → Filter → Mean → Diff → Sort | Data source selection: used ZHVI instead of NOAA |
 
 ### Example: environment-easy-4
@@ -55,6 +55,67 @@ def process(df): return df[df['Beach Name'].str.contains('Wollaston')]
 def process(filtered):
     return (filtered['Violation'].str.lower() == 'no').sum()  # Correct!
 ```
+
+---
+
+### Example: legal-hard-23 (Comma-Formatted Number Parsing)
+
+**Task:** Find state with highest report density (identity theft + fraud reports per 100K)
+
+| Aspect | Code Agent | Dataflow Agent |
+|--------|------------|----------------|
+| Answer | Arkansas (1180) | District of Columbia (2989) |
+| Correct? | ❌ Wrong | ✅ Correct |
+
+**The Raw Data Problem:**
+
+The fraud density column has comma-formatted numbers:
+```
+State                  Reports per 100K Population
+Florida                2,163       ← has comma
+Georgia                2,108       ← has comma
+District of Columbia   2,509       ← has comma!
+Arkansas               971         ← no comma (smaller number)
+```
+
+**Code Agent's Monolithic Block:**
+```python
+# All in one block - no intermediate verification!
+df_fraud2['Density_FR'] = pd.to_numeric(df_fraud2['Density_FR'], errors='coerce')
+# pd.to_numeric("2,509") → NaN (can't parse comma!)
+
+df = pd.merge(df_id2, df_fraud2, on='State', how='inner')
+df['Total_Density'] = df['Density_ID'] + df['Density_FR']
+# DC's total = 480 + NaN = NaN!
+
+best_state = df.loc[df['Total_Density'].idxmax(), 'State']
+# idxmax() ignores NaN → DC never considered!
+# Arkansas (971, no comma) becomes "winner"
+```
+
+**Dataflow's Modular Approach:**
+
+Step 1: Execute `load_fraud` operator → **Inspect output**
+```
+State                  Reports per 100K Population
+Florida                NULL        ← Suspicious!
+District of Columbia   NULL        ← Problem spotted!
+Arkansas               971         ← Why does this work but not others?
+```
+
+Step 2: Agent notices NULL values for high-density states, investigates raw file
+
+Step 3: Fix the parsing with comma stripping:
+```python
+# Fixed operator
+df[col] = df[col].astype(str).str.replace('[\",]','', regex=True)  # Strip commas first!
+df[col] = pd.to_numeric(df[col], errors='coerce')
+# "2,509" → "2509" → 2509 ✓
+```
+
+Step 4: Re-execute → DC now shows 2509, total = 2989 (highest!)
+
+**Key Insight:** The dataflow agent could **inspect intermediate output** and notice that most fraud densities were NULL. This visibility enabled debugging. The code agent had no such checkpoint - it just ran the full pipeline and got the wrong answer without knowing DC's density was NaN.
 
 ---
 
@@ -278,28 +339,36 @@ median_variants = serous_df["Variants_per_Mbp"].median()
 ---
 
 ### Case 5: legal-hard-23
-**Patterns: Monolithic Block + Data Loss in Merge**
+**Patterns: Monolithic Block + Comma-Formatted Number Parsing Failure**
 
 | Aspect | Value |
 |--------|-------|
 | Question | State with highest report density (all report types) |
-| Correct Answer | District of Columbia |
-| Code Agent Answer | Arkansas |
+| Correct Answer | District of Columbia (2989) |
+| Code Agent Answer | Arkansas (1180) |
 
 **The Monolithic Block (Step 4):**
 ```python
-df_id2 = df_id2.dropna(subset=['State'])  # May drop rows
-df_fraud2 = df_fraud2.dropna(subset=['State'])  # May drop rows
+# Parsing comma-formatted numbers fails silently!
+df_fraud2['Density_FR'] = pd.to_numeric(df_fraud2['Density_FR'], errors='coerce')
+# "2,509" (DC's fraud density) → NaN because of comma!
+# "971" (Arkansas) → 971 (works, no comma)
+
 df = pd.merge(df_id2[['State','Density_ID']],
               df_fraud2[['State','Density_FR']],
-              on='State', how='inner')  # INNER JOIN - drops non-matching!
+              on='State', how='inner')
 df['Total_Density'] = df['Density_ID'] + df['Density_FR']
+# DC: 480 + NaN = NaN (silently broken!)
+# Arkansas: 209 + 971 = 1180 (works)
+
 best_state = df.loc[df['Total_Density'].idxmax(), 'State']
+# idxmax() ignores NaN → DC never considered!
 ```
 
 **What Should Have Been Checked:**
-- `print(len(df))` after merge - did we lose states?
-- `print(df[df['State'].str.contains('Columbia')])` - is DC present?
+- `print(df_fraud2['Density_FR'].isna().sum())` - how many NaN after parsing?
+- `print(df[df['State'] == 'District of Columbia'])` - what's DC's density?
+- Strip commas before parsing: `str.replace(',', '')`
 
 ---
 
