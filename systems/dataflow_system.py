@@ -491,13 +491,14 @@ Your last line MUST BE: **Final Answer: <value>**"""
         # If we have a response, parse it
         if response:
             # First, look for explicit "Final Answer:" pattern (preferred)
-            final_answer_match = re.search(
-                r'\*?\*?Final Answer:?\*?\*?\s*(.+?)(?:\n|$)',
-                response,
-                re.IGNORECASE
-            )
-            if final_answer_match:
-                answer = final_answer_match.group(1).strip()
+            # NOTE: The colon is REQUIRED to avoid matching phrases like
+            # "provide the final answer." which would incorrectly capture "."
+            # Use findall to get ALL matches, then take the LAST one (most likely the actual answer)
+            final_answer_pattern = r'\*?\*?Final Answer:\*?\*?\s*(.+?)(?:\n|$)'
+            final_answer_matches = re.findall(final_answer_pattern, response, re.IGNORECASE)
+            if final_answer_matches:
+                # Take the last match (the final "Final Answer:" in the response)
+                answer = final_answer_matches[-1].strip()
                 # Clean markdown formatting
                 answer = re.sub(r'^\*\*|\*\*$', '', answer).strip()
                 answer = re.sub(r'^`|`$', '', answer).strip()
