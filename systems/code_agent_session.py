@@ -90,8 +90,11 @@ class CodeAgentSessionRunner(SessionRunner):
         """
         Expand wildcard patterns in data_sources to actual file paths.
 
-        Handles patterns like "State MSA Identity Theft Data/*" by searching
-        recursively in the dataset directory.
+        Handles:
+        - Wildcards like "State MSA Identity Theft Data/*" or "file-*.csv"
+        - Empty string or "./" meaning all files
+        - Directory paths ending with "/"
+        - Fuzzy names like "Constitution Beach" matching "constitution_beach_datasheet.csv"
 
         Args:
             data_sources: List of file patterns (may contain wildcards)
@@ -99,7 +102,7 @@ class CodeAgentSessionRunner(SessionRunner):
         Returns:
             List of actual file paths (relative to current working directory)
         """
-        if not self.dataset_directory or not data_sources:
+        if not self.dataset_directory:
             return []
 
         # Get all files in dataset directory recursively
@@ -110,21 +113,43 @@ class CodeAgentSessionRunner(SessionRunner):
                 rel_path = os.path.relpath(full_path, self.dataset_directory)
                 all_files.append(rel_path)
 
+        # Handle empty data_sources or special "all files" patterns
+        if not data_sources:
+            return []
+
         expanded_paths = []
+
         for pattern in data_sources:
+            # Handle empty string or "./" as "all files"
+            if pattern == "" or pattern == "./" or pattern == ".":
+                expanded_paths.extend(all_files)
+                continue
+
+            # Handle directory paths ending with "/" - get all files in that directory
+            if pattern.endswith('/'):
+                dir_pattern = pattern.rstrip('/')
+                for f in all_files:
+                    if f.startswith(dir_pattern + '/') or dir_pattern in f:
+                        expanded_paths.append(f)
+                continue
+
             # Check if pattern contains wildcards
             if '*' in pattern or '?' in pattern:
-                # Try to match against all files using fnmatch
+                # Try to match against all files using fnmatch (case-insensitive)
                 matched = []
+                pattern_lower = pattern.lower()
+                pattern_dir_lower = os.path.dirname(pattern).lower()
+                pattern_base_lower = os.path.basename(pattern).lower()
+
                 for f in all_files:
-                    # Match against full relative path or just the pattern as a suffix
-                    if fnmatch.fnmatch(f, pattern) or fnmatch.fnmatch(f, f"**/{pattern}"):
+                    f_lower = f.lower()
+                    # Match against full relative path (case-insensitive)
+                    if fnmatch.fnmatch(f_lower, pattern_lower) or fnmatch.fnmatch(f_lower, f"**/{pattern_lower}"):
                         matched.append(f)
-                    # Also try matching basename against pattern's basename
-                    elif fnmatch.fnmatch(os.path.basename(f), os.path.basename(pattern)):
-                        # Check if parent directory matches too
-                        pattern_dir = os.path.dirname(pattern)
-                        if not pattern_dir or pattern_dir in f:
+                    # Also try matching basename against pattern's basename (case-insensitive)
+                    elif fnmatch.fnmatch(os.path.basename(f_lower), pattern_base_lower):
+                        # Check if parent directory matches too (case-insensitive)
+                        if not pattern_dir_lower or pattern_dir_lower in f_lower:
                             matched.append(f)
 
                 if matched:
@@ -139,18 +164,32 @@ class CodeAgentSessionRunner(SessionRunner):
                     if not glob_matches:
                         print(f"WARNING: No files matched pattern '{pattern}'")
             else:
-                # No wildcards - treat as exact path
+                # No wildcards - treat as exact path or fuzzy match
                 exact_path = os.path.join(self.dataset_directory, pattern)
                 if os.path.exists(exact_path):
-                    expanded_paths.append(pattern)
+                    # Check if it's a directory
+                    if os.path.isdir(exact_path):
+                        for f in all_files:
+                            if f.startswith(pattern + '/') or f.startswith(pattern + os.sep):
+                                expanded_paths.append(f)
+                    else:
+                        expanded_paths.append(pattern)
                 else:
-                    # Search for file anywhere in dataset
+                    # Search for file anywhere in dataset with fuzzy matching
                     found = False
+                    # Normalize pattern for fuzzy matching (e.g., "Constitution Beach" -> "constitution_beach")
+                    pattern_normalized = pattern.lower().replace(' ', '_').replace('-', '_')
+
                     for f in all_files:
-                        if f.endswith(pattern) or os.path.basename(f) == os.path.basename(pattern):
+                        # Exact suffix match
+                        if f.endswith(pattern) or os.path.basename(f) == pattern:
                             expanded_paths.append(f)
                             found = True
-                            break
+                        # Fuzzy match: check if normalized pattern is in the file path
+                        elif pattern_normalized in f.lower().replace(' ', '_').replace('-', '_'):
+                            expanded_paths.append(f)
+                            found = True
+
                     if not found:
                         print(f"WARNING: File not found '{pattern}'")
 
