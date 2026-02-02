@@ -2,14 +2,13 @@
 """
 Utility functions for expanding data source patterns to actual file paths.
 
-This module provides shared logic for matching file patterns (with wildcards,
-fuzzy matching, etc.) against files in a dataset directory.
+This module provides shared logic for matching file patterns against files
+in a dataset directory. Wildcards are passed through as-is for the agent
+to interpret.
 """
 
-import fnmatch
-import glob
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 def expand_data_sources(
@@ -19,14 +18,13 @@ def expand_data_sources(
     verbose: bool = False
 ) -> List[str]:
     """
-    Expand wildcard patterns in data_sources to actual file paths.
+    Process data_sources to actual file paths or pass through wildcards.
 
     Handles:
-    - Wildcards like "State MSA Identity Theft Data/*" or "file-*.csv"
+    - Exact file names - search and locate in dataset, return full relative path
+    - Wildcards like "folder/*" - search for folder, return full path with wildcard
     - Empty string or "./" meaning all files
-    - Directory paths ending with "/"
     - Fuzzy names like "Constitution Beach" matching "constitution_beach_datasheet.csv"
-    - Case-insensitive matching
 
     Args:
         data_sources: List of file patterns (may contain wildcards)
@@ -35,103 +33,123 @@ def expand_data_sources(
         verbose: Whether to print warnings for unmatched patterns
 
     Returns:
-        List of actual file paths (relative to current working directory)
+        List of file paths (relative to current working directory)
     """
     if not dataset_directory:
         return []
 
-    # Handle empty data_sources or special "all files" patterns
     if not data_sources:
         return []
 
-    expanded_paths = []
+    # All paths in this list are relative to dataset_directory
+    paths_relative_to_dataset = []
 
     for pattern in data_sources:
         # Handle empty string or "./" as "all files"
         if pattern == "" or pattern == "./" or pattern == ".":
-            expanded_paths.extend(all_files)
+            paths_relative_to_dataset.extend(all_files)
             continue
 
-        # Handle directory paths ending with "/" - get all files in that directory
-        if pattern.endswith('/'):
-            dir_pattern = pattern.rstrip('/')
-            for f in all_files:
-                if f.startswith(dir_pattern + '/') or dir_pattern in f:
-                    expanded_paths.append(f)
-            continue
-
-        # Check if pattern contains wildcards
+        # Handle wildcards - search for the directory part, keep wildcard
         if '*' in pattern or '?' in pattern:
-            matched = _match_wildcard_pattern(pattern, all_files, dataset_directory)
-            if matched:
-                expanded_paths.extend(matched)
-            elif verbose:
-                print(f"WARNING: No files matched pattern '{pattern}'")
-        else:
-            # No wildcards - treat as exact path or fuzzy match
-            matched = _match_exact_or_fuzzy(pattern, all_files, dataset_directory)
-            if matched:
-                expanded_paths.extend(matched)
-            elif verbose:
-                print(f"WARNING: File not found '{pattern}'")
+            resolved = _resolve_wildcard_path(pattern, all_files, dataset_directory, verbose)
+            paths_relative_to_dataset.append(resolved)
+            continue
 
-    # Convert to paths relative to cwd for agent use
+        # Handle directory paths ending with "/" - convert to wildcard
+        if pattern.endswith('/'):
+            resolved = _resolve_wildcard_path(pattern + "*", all_files, dataset_directory, verbose)
+            paths_relative_to_dataset.append(resolved)
+            continue
+
+        # No wildcards - search for exact file or fuzzy match
+        matched = _search_and_match(pattern, all_files, dataset_directory)
+        if matched:
+            paths_relative_to_dataset.extend(matched)
+        else:
+            # Fallback: just use the pattern as-is
+            if verbose:
+                print(f"WARNING: File not found '{pattern}', using as-is")
+            paths_relative_to_dataset.append(pattern)
+
+    # Convert all paths to be relative to cwd by prepending dataset_directory
     result = []
-    for p in expanded_paths:
+    for p in paths_relative_to_dataset:
         full_path = os.path.join(dataset_directory, p)
         result.append(os.path.relpath(full_path))
 
     return list(set(result))  # Remove duplicates
 
 
-def _match_wildcard_pattern(
+def _resolve_wildcard_path(
     pattern: str,
     all_files: List[str],
-    dataset_directory: str
-) -> List[str]:
+    dataset_directory: str,
+    verbose: bool = False
+) -> str:
     """
-    Match a wildcard pattern against all files.
+    Resolve a wildcard pattern by searching for the directory part.
 
     Args:
-        pattern: Pattern containing * or ? wildcards
+        pattern: Pattern with wildcards (e.g., "State MSA Identity Theft Data/*")
         all_files: List of all file paths relative to dataset_directory
-        dataset_directory: Base directory for glob fallback
+        dataset_directory: Base directory for path resolution
 
     Returns:
-        List of matched file paths (relative to dataset_directory)
+        Resolved pattern with valid directory path, or original pattern if not found
     """
-    matched = []
-    pattern_lower = pattern.lower()
-    pattern_dir_lower = os.path.dirname(pattern).lower()
-    pattern_base_lower = os.path.basename(pattern).lower()
+    # Split into directory part and wildcard part
+    # e.g., "folder/subfolder/*.csv" -> dir_part="folder/subfolder", wildcard_part="*.csv"
+    parts = pattern.rsplit('/', 1)
+    if len(parts) == 1:
+        # No directory, just a wildcard like "*.csv"
+        return pattern
 
+    dir_part, wildcard_part = parts
+
+    # Check if the directory exists directly
+    full_dir = os.path.join(dataset_directory, dir_part)
+    if os.path.isdir(full_dir):
+        return pattern  # Already valid
+
+    # Search for the directory in all_files
+    dir_name = os.path.basename(dir_part)
+    dir_name_lower = dir_name.lower().replace(' ', '_').replace('-', '_')
+
+    # Look for directories that contain files
+    found_dirs = set()
     for f in all_files:
-        f_lower = f.lower()
-        # Match against full relative path (case-insensitive)
-        if fnmatch.fnmatch(f_lower, pattern_lower) or fnmatch.fnmatch(f_lower, f"**/{pattern_lower}"):
-            matched.append(f)
-        # Also try matching basename against pattern's basename (case-insensitive)
-        elif fnmatch.fnmatch(os.path.basename(f_lower), pattern_base_lower):
-            # Check if parent directory matches too (case-insensitive)
-            if not pattern_dir_lower or pattern_dir_lower in f_lower:
-                matched.append(f)
+        f_dir = os.path.dirname(f)
+        if f_dir:
+            # Check each component of the path
+            dir_parts = f_dir.split('/')
+            for i, part in enumerate(dir_parts):
+                part_normalized = part.lower().replace(' ', '_').replace('-', '_')
+                if part == dir_name or part_normalized == dir_name_lower:
+                    # Found matching directory
+                    found_path = '/'.join(dir_parts[:i+1])
+                    found_dirs.add(found_path)
 
-    if matched:
-        return matched
+    if found_dirs:
+        # Use the first match
+        found_dir = sorted(found_dirs)[0]
+        if verbose:
+            print(f"Resolved '{dir_part}' to '{found_dir}'")
+        return f"{found_dir}/{wildcard_part}"
 
-    # Fallback: try glob with recursive search
-    glob_pattern = os.path.join(dataset_directory, "**", pattern)
-    glob_matches = glob.glob(glob_pattern, recursive=True)
-    return [os.path.relpath(match, dataset_directory) for match in glob_matches]
+    # Not found - return original pattern as fallback
+    if verbose:
+        print(f"WARNING: Directory '{dir_part}' not found, using pattern as-is")
+    return pattern
 
 
-def _match_exact_or_fuzzy(
+def _search_and_match(
     pattern: str,
     all_files: List[str],
     dataset_directory: str
 ) -> List[str]:
     """
-    Match a pattern without wildcards using exact or fuzzy matching.
+    Search for a file or directory by name and return full relative paths.
 
     Args:
         pattern: File path or name pattern (no wildcards)
@@ -142,11 +160,12 @@ def _match_exact_or_fuzzy(
         List of matched file paths (relative to dataset_directory)
     """
     matched = []
-    exact_path = os.path.join(dataset_directory, pattern)
 
+    # First, check if the exact path exists
+    exact_path = os.path.join(dataset_directory, pattern)
     if os.path.exists(exact_path):
-        # Check if it's a directory
         if os.path.isdir(exact_path):
+            # Return all files in this directory
             for f in all_files:
                 if f.startswith(pattern + '/') or f.startswith(pattern + os.sep):
                     matched.append(f)
@@ -154,15 +173,25 @@ def _match_exact_or_fuzzy(
             matched.append(pattern)
         return matched
 
-    # Search for file anywhere in dataset with fuzzy matching
-    # Normalize pattern for fuzzy matching (e.g., "Constitution Beach" -> "constitution_beach")
+    # Search for file by basename in all_files
+    pattern_basename = os.path.basename(pattern)
     pattern_normalized = pattern.lower().replace(' ', '_').replace('-', '_')
+    basename_normalized = pattern_basename.lower().replace(' ', '_').replace('-', '_')
 
     for f in all_files:
-        # Exact suffix match
-        if f.endswith(pattern) or os.path.basename(f) == pattern:
+        f_basename = os.path.basename(f)
+        f_basename_normalized = f_basename.lower().replace(' ', '_').replace('-', '_')
+
+        # Exact basename match
+        if f_basename == pattern_basename:
             matched.append(f)
-        # Fuzzy match: check if normalized pattern is in the file path
+        # Exact path suffix match
+        elif f.endswith(pattern) or f.endswith('/' + pattern):
+            matched.append(f)
+        # Fuzzy basename match
+        elif basename_normalized == f_basename_normalized:
+            matched.append(f)
+        # Fuzzy substring match in path
         elif pattern_normalized in f.lower().replace(' ', '_').replace('-', '_'):
             matched.append(f)
 
@@ -175,7 +204,7 @@ def check_data_source_exists(
     all_files: List[str]
 ) -> bool:
     """
-    Check if a data source pattern matches any files.
+    Check if a data source pattern is valid.
 
     Args:
         data_source: A single file pattern
@@ -183,24 +212,18 @@ def check_data_source_exists(
         all_files: List of all file paths relative to dataset_directory
 
     Returns:
-        True if the pattern matches at least one file, False otherwise
+        True if the pattern is valid (wildcards are always valid), False otherwise
     """
     if not data_source or data_source in ("", "./", "."):
         return True  # "all files" patterns are always valid
 
-    if data_source.endswith('/'):
-        dir_pattern = data_source.rstrip('/')
-        for f in all_files:
-            if f.startswith(dir_pattern + '/') or dir_pattern in f:
-                return True
-        return False
+    # Wildcards and directory patterns are always valid (passed through to agent)
+    if '*' in data_source or '?' in data_source or data_source.endswith('/'):
+        return True
 
-    if '*' in data_source or '?' in data_source:
-        matched = _match_wildcard_pattern(data_source, all_files, dataset_directory)
-        return len(matched) > 0
-    else:
-        matched = _match_exact_or_fuzzy(data_source, all_files, dataset_directory)
-        return len(matched) > 0
+    # For exact patterns, check if file exists
+    matched = _match_exact_or_fuzzy(data_source, all_files, dataset_directory)
+    return len(matched) > 0
 
 
 def get_dataset_files(dataset_directory: str) -> Dict[str, None]:

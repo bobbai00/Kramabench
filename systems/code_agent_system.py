@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from benchmark.benchmark_api import System
 from code_agent import CodeAgentWrapper, CodeAgentResult
 from systems.data_source_utils import expand_data_sources
+from utils.answer_parser import parse_answer
 
 
 # Default max steps (can be overridden by CODE_AGENT_MAX_STEPS env var)
@@ -102,6 +103,8 @@ class CodeAgentSystem(System):
 Data files available (use these paths to read the data):
 {json.dumps(file_paths, indent=2)}
 
+Note: All paths are relative. Some paths may contain wildcards (e.g., "folder/*" or "file-*.csv"). Use glob patterns to match and read those files.
+
 Question: {query}
 
 Instructions:
@@ -118,7 +121,8 @@ Example final answers:
 - List: ["Tokyo", "London", "Paris"]
 - Descriptive: "The correlation coefficient is 0.85, indicating a strong positive relationship between temperature and sales."
 - String: "California"
-"""
+
+Your last line MUST BE: **Final Answer: <value>**"""
 
         # Save outputs
         query_dir = os.path.join(self.output_dir, query_id)
@@ -148,7 +152,7 @@ Example final answers:
             json.dump(stats, f, indent=2)
 
         # Parse answer
-        answer = self._parse_answer(result.response)
+        answer = parse_answer(result.response)
         with open(os.path.join(query_dir, "answer.json"), "w") as f:
             json.dump({"answer": answer}, f, indent=2)
 
@@ -162,32 +166,6 @@ Example final answers:
             "token_usage_input": 0,
             "token_usage_output": 0,
         }
-
-    def _parse_answer(self, response: str) -> str:
-        """Extract answer from response."""
-        if not response:
-            return "No response"
-
-        response = str(response).strip()
-
-        # JSON array
-        if response.startswith('[') and response.endswith(']'):
-            return response
-
-        # Number
-        try:
-            float(response.replace(',', ''))
-            return response
-        except ValueError:
-            pass
-
-        # Short string
-        if len(response) < 100 and '\n' not in response:
-            return response
-
-        # Last line
-        lines = [l.strip() for l in response.split('\n') if l.strip()]
-        return lines[-1] if lines else response
 
     def cleanup(self) -> None:
         """Cleanup agent resources."""
