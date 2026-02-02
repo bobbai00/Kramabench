@@ -6,14 +6,14 @@ This module provides a System implementation that uses the Texera Agent Service
 to solve benchmark tasks via dataflow-based agents.
 """
 
-import fnmatch
-import glob
 import os
 import json
+import time
 from typing import Dict, List, Optional
 
 from benchmark.benchmark_api import System
 from dataflow_agent import DataflowAgent, MessageResult, get_agent_workflow
+from systems.data_source_utils import expand_data_sources
 
 
 class DataflowSystem(System):
@@ -194,110 +194,18 @@ Your last line MUST BE: **Final Answer: <value>**"""
         """
         Expand wildcard patterns in data_sources to actual file paths.
 
-        Handles:
-        - Wildcards like "State MSA Identity Theft Data/*" or "file-*.csv"
-        - Empty string or "./" meaning all files
-        - Directory paths ending with "/"
-        - Fuzzy names like "Constitution Beach" matching "constitution_beach_datasheet.csv"
-
         Args:
             data_sources: List of file patterns (may contain wildcards)
 
         Returns:
             List of actual file paths (relative to current working directory)
         """
-        if not self.dataset_directory:
-            return []
-
-        all_files = list(self.dataset.keys())
-
-        # Handle empty data_sources or special "all files" patterns
-        if not data_sources:
-            return []
-
-        expanded_paths = []
-
-        for pattern in data_sources:
-            # Handle empty string or "./" as "all files"
-            if pattern == "" or pattern == "./" or pattern == ".":
-                expanded_paths.extend(all_files)
-                continue
-
-            # Handle directory paths ending with "/" - get all files in that directory
-            if pattern.endswith('/'):
-                dir_pattern = pattern.rstrip('/')
-                for f in all_files:
-                    if f.startswith(dir_pattern + '/') or dir_pattern in f:
-                        expanded_paths.append(f)
-                continue
-
-            # Check if pattern contains wildcards
-            if '*' in pattern or '?' in pattern:
-                # Try to match against all files using fnmatch (case-insensitive)
-                matched = []
-                pattern_lower = pattern.lower()
-                pattern_dir_lower = os.path.dirname(pattern).lower()
-                pattern_base_lower = os.path.basename(pattern).lower()
-
-                for f in all_files:
-                    f_lower = f.lower()
-                    # Match against full relative path (case-insensitive)
-                    if fnmatch.fnmatch(f_lower, pattern_lower) or fnmatch.fnmatch(f_lower, f"**/{pattern_lower}"):
-                        matched.append(f)
-                    # Also try matching basename against pattern's basename (case-insensitive)
-                    elif fnmatch.fnmatch(os.path.basename(f_lower), pattern_base_lower):
-                        # Check if parent directory matches too (case-insensitive)
-                        if not pattern_dir_lower or pattern_dir_lower in f_lower:
-                            matched.append(f)
-
-                if matched:
-                    expanded_paths.extend(matched)
-                else:
-                    # Fallback: try glob with recursive search
-                    glob_pattern = os.path.join(self.dataset_directory, "**", pattern)
-                    glob_matches = glob.glob(glob_pattern, recursive=True)
-                    for match in glob_matches:
-                        expanded_paths.append(os.path.relpath(match, self.dataset_directory))
-
-                    if not glob_matches:
-                        print(f"WARNING: No files matched pattern '{pattern}'")
-            else:
-                # No wildcards - treat as exact path or fuzzy match
-                exact_path = os.path.join(self.dataset_directory, pattern)
-                if os.path.exists(exact_path):
-                    # Check if it's a directory
-                    if os.path.isdir(exact_path):
-                        for f in all_files:
-                            if f.startswith(pattern + '/') or f.startswith(pattern + os.sep):
-                                expanded_paths.append(f)
-                    else:
-                        expanded_paths.append(pattern)
-                else:
-                    # Search for file anywhere in dataset with fuzzy matching
-                    found = False
-                    # Normalize pattern for fuzzy matching (e.g., "Constitution Beach" -> "constitution_beach")
-                    pattern_normalized = pattern.lower().replace(' ', '_').replace('-', '_')
-
-                    for f in all_files:
-                        # Exact suffix match
-                        if f.endswith(pattern) or os.path.basename(f) == pattern:
-                            expanded_paths.append(f)
-                            found = True
-                        # Fuzzy match: check if normalized pattern is in the file path
-                        elif pattern_normalized in f.lower().replace(' ', '_').replace('-', '_'):
-                            expanded_paths.append(f)
-                            found = True
-
-                    if not found:
-                        print(f"WARNING: File not found '{pattern}'")
-
-        # Convert to paths relative to cwd for agent use
-        result = []
-        for p in expanded_paths:
-            full_path = os.path.join(self.dataset_directory, p)
-            result.append(os.path.relpath(full_path))
-
-        return list(set(result))  # Remove duplicates
+        return expand_data_sources(
+            data_sources=data_sources,
+            dataset_directory=self.dataset_directory,
+            all_files=list(self.dataset.keys()),
+            verbose=self.verbose
+        )
 
     def serve_query(
         self,
@@ -382,7 +290,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 if self.verbose:
                     print(f"[DataflowSystem] Reset fallback warning: {e2}")
 
-        # Run the agent
+        # Run the agent with timing
+        start_time = time.time()
         try:
             result: MessageResult = self.agent.run(prompt)
         except Exception as e:
@@ -397,6 +306,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "token_usage_input": 0,
                 "token_usage_output": 0,
             }
+        elapsed_seconds = time.time() - start_time
 
         # Save response and messages for debugging
         response_path = os.path.join(query_output_dir, "response.txt")
@@ -417,6 +327,40 @@ Your last line MUST BE: **Final Answer: <value>**"""
         token_usage = usage.get("total_tokens", 0) or usage.get("totalTokens", 0)
         token_usage_input = usage.get("input_tokens", 0) or usage.get("inputTokens", 0)
         token_usage_output = usage.get("output_tokens", 0) or usage.get("outputTokens", 0)
+
+        # Count steps (number of assistant turns with tool_use or reasoning)
+        num_steps = 0
+        if result.messages:
+            for msg in result.messages:
+                if msg.get("role") == "assistant":
+                    content = msg.get("content", [])
+                    # Count as a step if it has tool_use or text content
+                    if isinstance(content, list):
+                        has_tool_use = any(
+                            isinstance(item, dict) and item.get("type") == "tool_use"
+                            for item in content
+                        )
+                        if has_tool_use:
+                            num_steps += 1
+                    elif content:
+                        num_steps += 1
+
+        # Also check stats from agent service if available
+        stats_from_service = result.stats or {}
+        if stats_from_service.get("steps"):
+            num_steps = stats_from_service.get("steps")
+
+        # Save stats.json
+        stats = {
+            "input_tokens": token_usage_input,
+            "output_tokens": token_usage_output,
+            "total_tokens": token_usage,
+            "num_steps": num_steps,
+            "elapsed_seconds": round(elapsed_seconds, 2),
+        }
+        stats_path = os.path.join(query_output_dir, "stats.json")
+        with open(stats_path, "w") as f:
+            json.dump(stats, f, indent=2)
 
         # Parse answer from response (or from messages if response is empty)
         answer = self._parse_answer(result.response, result.messages)

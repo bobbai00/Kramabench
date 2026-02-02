@@ -73,6 +73,10 @@ class CodeAgentResult:
     reasoning_trace: list[dict]
     elapsed_seconds: float
     error: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    num_steps: int = 0
 
 
 def extract_reasoning_trace(agent: CodeAgent) -> list[dict]:
@@ -166,24 +170,53 @@ class CodeAgentWrapper:
         if not self._agent:
             raise RuntimeError("Agent not set up. Call setup() first.")
 
-        start_time = time.time()
         error = None
         response = ""
+        input_tokens = 0
+        output_tokens = 0
+        total_tokens = 0
+        num_steps = 0
+        elapsed = 0.0
 
         try:
-            response = self._agent.run(prompt)
-            response = str(response) if response else ""
+            # Use return_full_result=True to get RunResult with token usage and timing
+            result = self._agent.run(prompt, return_full_result=True)
+
+            # Extract response (output)
+            response = str(result.output) if result.output else ""
+
+            # Extract token usage
+            if result.token_usage:
+                input_tokens = result.token_usage.input_tokens or 0
+                output_tokens = result.token_usage.output_tokens or 0
+                total_tokens = result.token_usage.total_tokens or 0
+
+            # Extract timing
+            if result.timing and result.timing.end_time:
+                elapsed = result.timing.end_time - result.timing.start_time
+
+            # Count steps
+            num_steps = len(result.steps) if result.steps else 0
+
         except Exception as e:
             error = str(e)
 
-        elapsed = time.time() - start_time
+        # Get reasoning trace from agent memory (more detailed than result.steps)
         trace = extract_reasoning_trace(self._agent)
+
+        # Use trace length if we didn't get steps from result
+        if num_steps == 0 and trace:
+            num_steps = len(trace)
 
         return CodeAgentResult(
             response=response,
             reasoning_trace=trace,
             elapsed_seconds=elapsed,
             error=error,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            num_steps=num_steps,
         )
 
     def reset(self):
