@@ -60,6 +60,7 @@ class AgentSettings:
     disabled_tools: list[str] = field(default_factory=list)
     agent_mode: str = AGENT_MODE
     only_use_relational_operators: bool = True  # Default to True to match agent-service
+    fine_grained_prompt: bool = False  # Use fine-grained prompts with atomic operation constraints
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -73,6 +74,7 @@ class AgentSettings:
             "disabledTools": self.disabled_tools,
             "agentMode": self.agent_mode,
             "onlyUseRelationalOperators": self.only_use_relational_operators,
+            "fineGrainedPrompt": self.fine_grained_prompt,
         }
 
 
@@ -531,6 +533,7 @@ class DataflowAgent:
             disabled_tools: Optional[list[str]] = None,
             agent_mode: str = AGENT_MODE,
             only_use_relational_operators: bool = True,
+            fine_grained_prompt: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -554,6 +557,7 @@ class DataflowAgent:
             disabled_tools: List of tool names to disable
             agent_mode: Agent mode ("code" or "general")
             only_use_relational_operators: Only allow relational operators
+            fine_grained_prompt: Use fine-grained prompts with atomic operation constraints
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -573,6 +577,7 @@ class DataflowAgent:
             disabled_tools=disabled_tools or [],
             agent_mode=agent_mode,
             only_use_relational_operators=only_use_relational_operators,
+            fine_grained_prompt=fine_grained_prompt,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint

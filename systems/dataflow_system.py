@@ -35,6 +35,7 @@ class DataflowSystem(System):
         tool_timeout_seconds: int = None,
         execution_timeout_minutes: int = None,
         agent_mode: str = None,
+        fine_grained_prompt: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -57,6 +58,7 @@ class DataflowSystem(System):
             tool_timeout_seconds: Tool timeout (env: DATAFLOW_TOOL_TIMEOUT, default: 240)
             execution_timeout_minutes: Execution timeout (env: DATAFLOW_EXEC_TIMEOUT, default: 4)
             agent_mode: Agent mode (env: DATAFLOW_AGENT_MODE, default: code)
+            fine_grained_prompt: Use fine-grained prompts (env: DATAFLOW_FINE_GRAINED_PROMPT, default: false)
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -71,6 +73,11 @@ class DataflowSystem(System):
         self.tool_timeout_seconds = tool_timeout_seconds or int(os.environ.get("DATAFLOW_TOOL_TIMEOUT", "240"))
         self.execution_timeout_minutes = execution_timeout_minutes or int(os.environ.get("DATAFLOW_EXEC_TIMEOUT", "4"))
         self.agent_mode = agent_mode or os.environ.get("DATAFLOW_AGENT_MODE", "code")
+        # fine_grained_prompt: if explicitly set use that, otherwise check env var
+        if fine_grained_prompt is not None:
+            self.fine_grained_prompt = fine_grained_prompt
+        else:
+            self.fine_grained_prompt = os.environ.get("DATAFLOW_FINE_GRAINED_PROMPT", "false").lower() == "true"
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -139,7 +146,7 @@ class DataflowSystem(System):
         """Initialize and setup the DataflowAgent."""
         if self.verbose:
             print(f"[DataflowSystem] Setting up agent with model: {self.model_type}")
-            print(f"[DataflowSystem] Agent settings: max_steps={self.max_steps}, mode={self.agent_mode}")
+            print(f"[DataflowSystem] Agent settings: max_steps={self.max_steps}, mode={self.agent_mode}, fine_grained={self.fine_grained_prompt}")
 
         self.agent = DataflowAgent(
             model_type=self.model_type,
@@ -150,6 +157,7 @@ class DataflowSystem(System):
             tool_timeout_seconds=self.tool_timeout_seconds,
             execution_timeout_minutes=self.execution_timeout_minutes,
             agent_mode=self.agent_mode,
+            fine_grained_prompt=self.fine_grained_prompt,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -269,6 +277,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "tool_timeout_seconds": self.tool_timeout_seconds,
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "agent_mode": self.agent_mode,
+                "fine_grained_prompt": self.fine_grained_prompt,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -575,6 +584,20 @@ class DataflowSystemGpt52(DataflowSystem):
         super().__init__(
             model_type="gpt-5.2",
             name="DataflowSystemGpt52",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt52FineGrained(DataflowSystem):
+    """DataflowSystem using GPT-5.2 model with fine-grained (one-line-per-action) prompt."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="DataflowSystemGpt52FineGrained",
+            fine_grained_prompt=True,
             verbose=verbose,
             *args,
             **kwargs
