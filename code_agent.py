@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from smolagents import CodeAgent
 from smolagents.models import OpenAIServerModel
 
-from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS
+from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTIONS
 
 # Default settings (CODE_AGENT_MAX_STEPS env var overrides default)
 DEFAULT_MODEL_TYPE = "claude-haiku-4.5"
@@ -21,6 +21,9 @@ DEFAULT_API_KEY = "dummy"
 
 # Customized prompt setting (set to "true" to enable)
 CUSTOMIZED_PROMPT_ENABLED = os.environ.get("CUSTOMIZED_PROMPT_ENABLED", "false").lower() == "true"
+
+# Fine-grained prompt setting (set to "true" to use one-line-per-action prompt)
+FINE_GRAINED_PROMPT_ENABLED = os.environ.get("FINE_GRAINED_PROMPT_ENABLED", "false").lower() == "true"
 
 # Imports the agent is allowed to use
 AUTHORIZED_IMPORTS = [
@@ -130,6 +133,7 @@ class CodeAgentWrapper:
         api_key: str = DEFAULT_API_KEY,
         authorized_imports: list[str] = None,
         verbosity_level: int = 1,
+        use_fine_grained_prompt: bool = None,
     ):
         self.model_type = model_type
         self.max_steps = max_steps
@@ -137,6 +141,8 @@ class CodeAgentWrapper:
         self.api_key = api_key
         self.authorized_imports = authorized_imports or AUTHORIZED_IMPORTS
         self.verbosity_level = verbosity_level
+        # If not explicitly set, fall back to environment variable
+        self.use_fine_grained_prompt = use_fine_grained_prompt if use_fine_grained_prompt is not None else FINE_GRAINED_PROMPT_ENABLED
         self._agent: Optional[CodeAgent] = None
         self._model: Optional[OpenAIServerModel] = None
 
@@ -159,7 +165,9 @@ class CodeAgentWrapper:
         }
 
         # Add custom instructions if enabled
-        if CUSTOMIZED_PROMPT_ENABLED:
+        if self.use_fine_grained_prompt:
+            agent_kwargs["instructions"] = FINE_GRAINED_INSTRUCTIONS
+        elif CUSTOMIZED_PROMPT_ENABLED:
             agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
 
         self._agent = CodeAgent(**agent_kwargs)
@@ -233,7 +241,9 @@ class CodeAgentWrapper:
             }
 
             # Add custom instructions if enabled
-            if CUSTOMIZED_PROMPT_ENABLED:
+            if self.use_fine_grained_prompt:
+                agent_kwargs["instructions"] = FINE_GRAINED_INSTRUCTIONS
+            elif CUSTOMIZED_PROMPT_ENABLED:
                 agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
 
             self._agent = CodeAgent(**agent_kwargs)

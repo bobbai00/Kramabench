@@ -28,6 +28,7 @@ class CodeAgentSystem(System):
         api_key: str = "dummy",
         verbose: bool = False,
         name: str = "CodeAgentSystem",
+        use_fine_grained_prompt: bool = None,
         *args, **kwargs
     ):
         super().__init__(name, verbose=verbose, *args, **kwargs)
@@ -35,6 +36,7 @@ class CodeAgentSystem(System):
         self.max_steps = max_steps
         self.api_base = api_base
         self.api_key = api_key
+        self.use_fine_grained_prompt = use_fine_grained_prompt
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
         os.makedirs(self.output_dir, exist_ok=True)
@@ -58,6 +60,7 @@ class CodeAgentSystem(System):
             api_base=self.api_base,
             api_key=self.api_key,
             verbosity_level=2 if self.verbose else 1,
+            use_fine_grained_prompt=self.use_fine_grained_prompt,
         )
         self.agent.setup()
 
@@ -222,3 +225,16 @@ class CodeAgentSystemGpt52(CodeAgentSystem):
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(model_type="gpt-5.2", name="CodeAgentSystemGpt52", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt52FineGrained(CodeAgentSystem):
+    """CodeAgentSystem using GPT-5.2 model with fine-grained (one-line-per-action) prompt."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="CodeAgentSystemGpt52FineGrained",
+            use_fine_grained_prompt=True,
+            verbose=verbose,
+            *args, **kwargs
+        )
