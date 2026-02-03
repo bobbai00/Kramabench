@@ -25,6 +25,10 @@ CUSTOMIZED_PROMPT_ENABLED = os.environ.get("CUSTOMIZED_PROMPT_ENABLED", "false")
 # Fine-grained prompt setting (set to "true" to use one-line-per-action prompt)
 FINE_GRAINED_PROMPT_ENABLED = os.environ.get("FINE_GRAINED_PROMPT_ENABLED", "false").lower() == "true"
 
+# Max print outputs length (set to limit characters shown to agent per code execution, empty/0 = no limit)
+_max_print_env = os.environ.get("CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH", "")
+DEFAULT_MAX_PRINT_OUTPUTS_LENGTH = int(_max_print_env) if _max_print_env.isdigit() and int(_max_print_env) > 0 else None
+
 # Imports the agent is allowed to use
 AUTHORIZED_IMPORTS = [
     # Data science essentials (with submodules)
@@ -134,6 +138,7 @@ class CodeAgentWrapper:
         authorized_imports: list[str] = None,
         verbosity_level: int = 1,
         use_fine_grained_prompt: bool = None,
+        max_print_outputs_length: int = None,
     ):
         self.model_type = model_type
         self.max_steps = max_steps
@@ -143,6 +148,8 @@ class CodeAgentWrapper:
         self.verbosity_level = verbosity_level
         # If not explicitly set, fall back to environment variable
         self.use_fine_grained_prompt = use_fine_grained_prompt if use_fine_grained_prompt is not None else FINE_GRAINED_PROMPT_ENABLED
+        # If not explicitly set, fall back to environment variable (None = no limit)
+        self.max_print_outputs_length = max_print_outputs_length if max_print_outputs_length is not None else DEFAULT_MAX_PRINT_OUTPUTS_LENGTH
         self._agent: Optional[CodeAgent] = None
         self._model: Optional[OpenAIServerModel] = None
 
@@ -163,6 +170,10 @@ class CodeAgentWrapper:
             "verbosity_level": self.verbosity_level,
             "executor_kwargs": {"additional_functions": {"open": open}},
         }
+
+        # Add max print outputs length if set
+        if self.max_print_outputs_length is not None:
+            agent_kwargs["max_print_outputs_length"] = self.max_print_outputs_length
 
         # Add custom instructions if enabled
         if self.use_fine_grained_prompt:
@@ -239,6 +250,10 @@ class CodeAgentWrapper:
                 "verbosity_level": self.verbosity_level,
                 "executor_kwargs": {"additional_functions": {"open": open}},
             }
+
+            # Add max print outputs length if set
+            if self.max_print_outputs_length is not None:
+                agent_kwargs["max_print_outputs_length"] = self.max_print_outputs_length
 
             # Add custom instructions if enabled
             if self.use_fine_grained_prompt:
