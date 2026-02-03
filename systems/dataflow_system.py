@@ -331,19 +331,19 @@ Your last line MUST BE: **Final Answer: <value>**"""
         token_usage_input = usage.get("input_tokens", 0) or usage.get("inputTokens", 0)
         token_usage_output = usage.get("output_tokens", 0) or usage.get("outputTokens", 0)
 
-        # Count steps (number of assistant turns with tool_use or reasoning)
+        # Count steps (number of assistant turns with tool calls)
         num_steps = 0
         if result.messages:
             for msg in result.messages:
                 if msg.get("role") == "assistant":
                     content = msg.get("content", [])
-                    # Count as a step if it has tool_use or text content
+                    # Count as a step if it has tool-call or tool_use
                     if isinstance(content, list):
-                        has_tool_use = any(
-                            isinstance(item, dict) and item.get("type") == "tool_use"
+                        has_tool_call = any(
+                            isinstance(item, dict) and item.get("type") in ("tool-call", "tool_use")
                             for item in content
                         )
-                        if has_tool_use:
+                        if has_tool_call:
                             num_steps += 1
                     elif content:
                         num_steps += 1
