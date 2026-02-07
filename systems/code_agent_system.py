@@ -95,7 +95,8 @@ class CodeAgentSystem(System):
         if subset_files:
             file_paths = self._expand_data_sources(subset_files)
         else:
-            file_paths = [os.path.relpath(os.path.join(self.dataset_directory, f)) for f in self.dataset.keys()]
+            # Use a recursive wildcard instead of listing every file
+            file_paths = [os.path.relpath(self.dataset_directory) + "/**/*"]
 
         if self.verbose:
             print(f"[{self.name}] Query: {query_id}, Files: {len(file_paths)}")
@@ -111,13 +112,17 @@ Note: All paths are relative. Some paths may contain wildcards (e.g., "folder/*"
 Question: {query}
 
 Instructions:
-1. Read the relevant data files using the provided paths and analyze the data.
+1. Read the relevant data files using the provided paths and analyze the data. The given data may be raw, and you need to examine carefully and clean the data if needed.
 2. Compute the answer step by step.
 3. IMPORTANT - Your final answer format:
    - For numeric questions: output just the number (e.g., "274")
    - For list questions: output a JSON array (e.g., ["Tokyo", "London", "Paris"])
    - For descriptive/analytical questions: output a complete sentence summarizing your findings (e.g., "The average period is 11 years, with maxima in 1968, 1979, 1989, 2000, and 2014.")
    - For simple string questions: output just the value (e.g., "California")
+4. Numeric format conventions:
+   - "percentage" or "rate": output the human-readable value, e.g., 54.03 means 54.03%
+   - "proportion" or "fraction": output the decimal, e.g., 0.5403
+   - "ratio": output the raw division result, e.g., 2.5 for 5/2
 
 Example final answers:
 - Numeric: "274"
@@ -238,3 +243,19 @@ class CodeAgentSystemGpt52FineGrained(CodeAgentSystem):
             verbose=verbose,
             *args, **kwargs
         )
+
+
+class CodeAgentSystemGpt52FullInput(CodeAgentSystem):
+    """CodeAgentSystem using GPT-5.2 model with full input mode (all dataset files via wildcard)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="CodeAgentSystemGpt52FullInput",
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+    def serve_query(self, query, query_id="default-0", subset_files=None):
+        """Override to always use full input (ignore subset_files)."""
+        return super().serve_query(query, query_id, subset_files=None)
