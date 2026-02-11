@@ -76,6 +76,7 @@ def main():
     parser.add_argument("--run_subtasks", action="store_true", default=False, help="Run subtasks if set. Default: False")
     parser.add_argument("--use_truth_subset", action="store_true", default=False, help="Whether to use the subset of files from truth data. Default: False")
     parser.add_argument("--no_pipeline_eval", action="store_true", default=False, help="Skip pipeline design and implementation evaluation (which uses API calls). Default: False")
+    parser.add_argument("--task_id", nargs="+", type=str, default=None, help="One or more task IDs to run (e.g., --task_id legal-hard-1 legal-hard-3). Default: run all tasks")
     args = parser.parse_args()
 
     system_name = args.sut
@@ -118,7 +119,8 @@ def main():
             run_subtasks=args.run_subtasks,
             use_deepresearch_subset=args.use_deepresearch_subset,
             evaluate_pipeline=evaluate_pipeline,
-            use_truth_subset = args.use_truth_subset
+            use_truth_subset=args.use_truth_subset,
+            task_id_filter=args.task_id
         )
 
         print(f"Starting benchmark workflow on dataset: {dataset_name}")
@@ -177,6 +179,9 @@ def main():
         if not args.run_subtasks:
             results_df = results_df[results_df['task_id'].apply(lambda x: x.count('-') < 3)]
             results_df = results_df[results_df['metric'] != 'llm_code_eval']
+
+        if args.task_id:
+            results_df = results_df[results_df['task_id'].isin(args.task_id)]
 
     aggregated_df = aggregate_results(system_name, results_df)
     # Update aggregated results file

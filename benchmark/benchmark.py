@@ -27,7 +27,8 @@ class Executor:
             run_subtasks: bool=False,
             use_deepresearch_subset: bool = False,
             use_truth_subset: bool = False,
-            verbose=False
+            verbose=False,
+            task_id_filter: Optional[List[str]] = None
         ):
         """
         `workload_path` is a json file containing workloads.
@@ -38,6 +39,13 @@ class Executor:
             raise Exception("Executor __init__ error: System.process_dataset was not called.")
         with open(workload_path) as f:
             self.workload = json.load(f)
+        self.task_id_filter = task_id_filter
+        if self.task_id_filter:
+            all_task_ids = {task["id"] for task in self.workload}
+            missing = set(self.task_id_filter) - all_task_ids
+            if missing:
+                print(f"Warning: task IDs not found in workload: {missing}")
+            self.workload = [task for task in self.workload if task["id"] in set(self.task_id_filter)]
         self.num_queries = len(self.workload)
         self.cur_query_id = 0
         self.results_directory = results_directory
@@ -149,6 +157,9 @@ class Executor:
             if cache_path:
                 with open(cache_path, 'r') as f:
                     results = json.load(f)
+                if self.task_id_filter:
+                    filter_set = set(self.task_id_filter)
+                    results = [r for r in results if r["task_id"] in filter_set]
                 if self.verbose:
                     print(f"Using cached output {cache_path}...")
                 return results
@@ -163,7 +174,7 @@ class Executor:
                 break
             results.append(result)
         
-        if cache_system_output:
+        if cache_system_output and not self.task_id_filter:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             new_filename = f"{basename}_{timestamp}{ext}"
             cache_dir = cache_path = os.path.join(self.results_directory, f"response_cache")
@@ -184,7 +195,8 @@ class Evaluator:
             task_fixture_directory: str | os.PathLike,
             results_directory: str | os.PathLike,
             run_subtasks: bool = False,
-            evaluate_pipeline: bool = False
+            evaluate_pipeline: bool = False,
+            task_id_filter: Optional[List[str]] = None
         ):
         """
         `task_fixtures_directory` contains the tasks fixtures for finding valid
@@ -195,6 +207,8 @@ class Evaluator:
         self.results_directory = results_directory
         with open(workload_path) as f:
             self.workload = json.load(f)
+        if task_id_filter:
+            self.workload = [task for task in self.workload if task["id"] in set(task_id_filter)]
         with open(os.path.join(task_fixture_directory, 'task_fixtures.json')) as f:
             self.task_fixtures = json.load(f)
         with open(os.path.join(task_fixture_directory, 'input_type_fixtures.json')) as f:
@@ -347,7 +361,8 @@ class Benchmark:
             run_subtasks: bool = False,
             use_deepresearch_subset = False,
             evaluate_pipeline = False,
-            use_truth_subset = False
+            use_truth_subset = False,
+            task_id_filter: Optional[List[str]] = None
     ):
         systems_module = __import__("systems")
         system_class_ = getattr(systems_module, system_name)
@@ -361,6 +376,7 @@ class Benchmark:
         self.use_deepresearch_subset = use_deepresearch_subset
         self.evaluate_pipeline = evaluate_pipeline
         self.use_truth_subset = use_truth_subset
+        self.task_id_filter = task_id_filter
     
     def run_benchmark(
             self,
@@ -382,7 +398,8 @@ class Benchmark:
             verbose=verbose,
             run_subtasks=self.run_subtasks,
             use_deepresearch_subset=self.use_deepresearch_subset,
-            use_truth_subset=self.use_truth_subset
+            use_truth_subset=self.use_truth_subset,
+            task_id_filter=self.task_id_filter
         )
         results = executor.run_workload(use_system_cache=self.use_system_cache, cache_system_output=self.cache_system_output)
         # Add processing time to each result
@@ -399,7 +416,8 @@ class Benchmark:
             task_fixture_directory=self.task_fixture_directory,
             results_directory=results_directory,
             run_subtasks=self.run_subtasks,
-            evaluate_pipeline=self.evaluate_pipeline
+            evaluate_pipeline=self.evaluate_pipeline,
+            task_id_filter=self.task_id_filter
         )
         eval_results = evaluator.evaluate_results(results)
         eval_end_time = time.time()
