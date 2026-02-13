@@ -245,6 +245,27 @@ class CodeAgentSystemGpt52FineGrained(CodeAgentSystem):
         )
 
 
+class CodeAgentSystemGpt5MiniHigh(CodeAgentSystem):
+    """CodeAgentSystem using GPT-5-mini-high model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="gpt-5-mini-high", name="CodeAgentSystemGpt5MiniHigh", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniMedium(CodeAgentSystem):
+    """CodeAgentSystem using GPT-5-mini-medium model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="gpt-5-mini-medium", name="CodeAgentSystemGpt5MiniMedium", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniLow(CodeAgentSystem):
+    """CodeAgentSystem using GPT-5-mini-low model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(model_type="gpt-5-mini-low", name="CodeAgentSystemGpt5MiniLow", verbose=verbose, *args, **kwargs)
+
+
 class CodeAgentSystemGpt52FullInput(CodeAgentSystem):
     """CodeAgentSystem using GPT-5.2 model with full input mode (all dataset files via wildcard)."""
 

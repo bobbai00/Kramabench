@@ -606,6 +606,45 @@ class DataflowSystemGpt52FineGrained(DataflowSystem):
         )
 
 
+class DataflowSystemGpt5MiniHigh(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-high model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-high",
+            name="DataflowSystemGpt5MiniHigh",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt5MiniMedium(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-medium model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-medium",
+            name="DataflowSystemGpt5MiniMedium",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt5MiniLow(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-low model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-low",
+            name="DataflowSystemGpt5MiniLow",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
 class DataflowSystemGpt52FullInput(DataflowSystem):
     """DataflowSystem using GPT-5.2 model with full input mode (all dataset files via wildcard)."""
 
