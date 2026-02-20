@@ -16,7 +16,7 @@ from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTI
 # Default settings (CODE_AGENT_MAX_STEPS env var overrides default)
 DEFAULT_MODEL_TYPE = "claude-haiku-4.5"
 DEFAULT_MAX_STEPS = int(os.environ.get("CODE_AGENT_MAX_STEPS", 50))
-DEFAULT_API_BASE = "http://localhost:9096/api"
+DEFAULT_API_BASE = "http://localhost:4000"
 DEFAULT_API_KEY = "dummy"
 
 # Customized prompt setting (set to "true" to enable)
@@ -28,6 +28,17 @@ FINE_GRAINED_PROMPT_ENABLED = os.environ.get("FINE_GRAINED_PROMPT_ENABLED", "fal
 # Max print outputs length (set to limit characters shown to agent per code execution, empty/0 = no limit)
 _max_print_env = os.environ.get("CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH", "")
 DEFAULT_MAX_PRINT_OUTPUTS_LENGTH = int(_max_print_env) if _max_print_env.isdigit() and int(_max_print_env) > 0 else None
+
+REASONING_EFFORT_SUFFIXES = ("-high", "-medium", "-low")
+
+
+def _parse_model_and_reasoning_effort(model_type: str) -> tuple[str, Optional[str]]:
+    """Parse model name like 'gpt-5-mini-medium' into ('gpt-5-mini', 'medium')."""
+    for suffix in REASONING_EFFORT_SUFFIXES:
+        if model_type.endswith(suffix):
+            return model_type[: -len(suffix)], suffix.lstrip("-")
+    return model_type, None
+
 
 # Imports the agent is allowed to use
 AUTHORIZED_IMPORTS = [
@@ -155,10 +166,15 @@ class CodeAgentWrapper:
 
     def setup(self) -> "CodeAgentWrapper":
         """Setup the agent."""
+        model_id, reasoning_effort = _parse_model_and_reasoning_effort(self.model_type)
+        model_kwargs = {}
+        if reasoning_effort:
+            model_kwargs["reasoning_effort"] = reasoning_effort
         self._model = OpenAIServerModel(
-            model_id=self.model_type,
+            model_id=model_id,
             api_base=self.api_base,
             api_key=self.api_key,
+            **model_kwargs,
         )
 
         # Build agent kwargs

@@ -18,7 +18,7 @@ from code_agent import CodeAgentWrapper, AUTHORIZED_IMPORTS
 # Default settings - use o4-mini by default for session benchmarks
 DEFAULT_MODEL_TYPE = os.environ.get("CODE_AGENT_MODEL", "o4-mini")
 DEFAULT_MAX_STEPS = int(os.environ.get("CODE_AGENT_MAX_STEPS", 50))
-DEFAULT_API_BASE = os.environ.get("CODE_AGENT_API_BASE", "http://localhost:9096/api")
+DEFAULT_API_BASE = os.environ.get("CODE_AGENT_API_BASE", "http://localhost:4000")
 DEFAULT_API_KEY = os.environ.get("CODE_AGENT_API_KEY", "dummy")
 
 

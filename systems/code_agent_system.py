@@ -24,7 +24,7 @@ class CodeAgentSystem(System):
         self,
         model_type: str = "claude-haiku-4.5",
         max_steps: int = DEFAULT_MAX_STEPS,
-        api_base: str = "http://localhost:9096/api",
+        api_base: str = "http://localhost:4000",
         api_key: str = "dummy",
         verbose: bool = False,
         name: str = "CodeAgentSystem",
