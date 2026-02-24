@@ -23,6 +23,28 @@ You are solving data-centric tasks by writing Python code. Follow these principl
 
 5. **Explore before transforming**: Examine data structure when needed. You can use df.head(), df.columns, df.dtypes, or print the full data - choose what's appropriate for the situation.
 
+### Handling Messy Data Files
+
+Real-world data files are often malformed — they may have wrong delimiters, missing or misplaced headers, metadata/comment rows above the data, or multiple tables in one file. Before loading a file with `pd.read_csv()`, inspect the raw content first:
+
+```python
+with open('file.csv', 'r') as f:
+    lines = [f.readline() for _ in range(5)]
+for i, line in enumerate(lines, 1):
+    print(f"Line {i}: {line.strip()}")
+```
+
+If you discover issues (e.g., semicolon delimiters, comment rows, missing headers), adjust the loading parameters (`sep=`, `header=`, `skiprows=`) and re-load. After loading, always examine the result.
+
+### Common Pitfalls in Multi-Step Analysis
+
+- **Misidentified columns from messy files**: When column names are generic (`Unnamed: 0`, `0`, `1`, ...) or look like domain-specific data values rather than field descriptions (e.g., a place name, a date, a measurement value appearing as a column header), the file was not loaded correctly. This means the real header row was missed and a data row was used as the header instead. Do NOT guess column meanings — inspect the raw file content, find the actual structure of the table, and re-load with the correct parameters (e.g., change the delimiter with `sep=`, set `header=` to the correct row number or `None`, or use `skiprows=` to skip metadata lines).
+- **Wrong numerical range edge cases**: Watch for: inclusive vs exclusive boundaries in filters (`>=` vs `>`), null/NaN rows silently dropped by aggregations, duplicate rows inflating counts or sums, and premature aggregation that loses row-level detail needed later. When a result is close but not exact, trace back through each step to find which one introduced the discrepancy.
+- **Unit and format consistency**: Ensure the final result matches the expected units and format (e.g., percentage vs proportion, dollars vs cents). Convert explicitly in a dedicated step rather than assuming.
+- **Late rounding**: Apply rounding only in the final step. Rounding intermediate results compounds errors across multiple steps.
+- **Plausibility checks on intermediate results**: After selecting a column or computing a value, verify the magnitude makes sense for what it represents. If values seem implausible (e.g., orders of magnitude off from what the question implies), re-examine your column selection and data loading before proceeding.
+- **Never analyze sample data**: If you sampled data to explore its schema (using `.head()`, `.tail()`, or `.sample()`), make sure you switch back to the full dataset before performing the actual analysis. Computing answers on a few sampled rows will produce wrong results.
+
 ### Key Reminders
 
 - Always use print() to show intermediate results before proceeding
@@ -235,6 +257,28 @@ print(result)
 2. **Verifiable progress**: Each step can be inspected before proceeding
 3. **Traceable execution**: The execution trace shows exactly what happened at each step
 4. **Atomic operations**: Each action is the finest-grained data operation possible
+
+### Handling Messy Data Files
+
+Real-world data files are often malformed — they may have wrong delimiters, missing or misplaced headers, metadata/comment rows above the data, or multiple tables in one file. Before loading a file with `pd.read_csv()`, inspect the raw content first:
+
+```python
+with open('file.csv', 'r') as f:
+    lines = [f.readline() for _ in range(5)]
+for i, line in enumerate(lines, 1):
+    print(f"Line {i}: {line.strip()}")
+```
+
+If you discover issues (e.g., semicolon delimiters, comment rows, missing headers), adjust the loading parameters (`sep=`, `header=`, `skiprows=`) and re-load. After loading, always examine the result.
+
+### Common Pitfalls in Multi-Step Analysis
+
+- **Misidentified columns from messy files**: When column names are generic (`Unnamed: 0`, `0`, `1`, ...) or look like domain-specific data values rather than field descriptions (e.g., a place name, a date, a measurement value appearing as a column header), the file was not loaded correctly. This means the real header row was missed and a data row was used as the header instead. Do NOT guess column meanings — inspect the raw file content, find the actual structure of the table, and re-load with the correct parameters (e.g., change the delimiter with `sep=`, set `header=` to the correct row number or `None`, or use `skiprows=` to skip metadata lines).
+- **Wrong numerical range edge cases**: Watch for: inclusive vs exclusive boundaries in filters (`>=` vs `>`), null/NaN rows silently dropped by aggregations, duplicate rows inflating counts or sums, and premature aggregation that loses row-level detail needed later. When a result is close but not exact, trace back through each step to find which one introduced the discrepancy.
+- **Unit and format consistency**: Ensure the final result matches the expected units and format (e.g., percentage vs proportion, dollars vs cents). Convert explicitly in a dedicated step rather than assuming.
+- **Late rounding**: Apply rounding only in the final step. Rounding intermediate results compounds errors across multiple steps.
+- **Plausibility checks on intermediate results**: After selecting a column or computing a value, verify the magnitude makes sense for what it represents. If values seem implausible (e.g., orders of magnitude off from what the question implies), re-examine your column selection and data loading before proceeding.
+- **Never analyze sample data**: If you sampled data to explore its schema (using `.head()`, `.tail()`, or `.sample()`), make sure you switch back to the full dataset before performing the actual analysis. Computing answers on a few sampled rows will produce wrong results.
 
 ### Key Rules Summary
 
