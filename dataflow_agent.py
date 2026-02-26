@@ -61,6 +61,10 @@ class AgentSettings:
     agent_mode: str = AGENT_MODE
     only_use_relational_operators: bool = True  # Default to True to match agent-service
     fine_grained_prompt: bool = False  # Use fine-grained prompts with atomic operation constraints
+    enable_context_optimization: bool = False  # Condense message history between steps
+    frontier_depth: int = 1  # BFS levels backward from leaf operators for frontier computation
+    trimmed_result_char_limit: int = 0  # Max chars from trimmed non-frontier results (0 = fully skip)
+    cache_enabled: bool = True  # Whether to enable operator result caching
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -75,6 +79,10 @@ class AgentSettings:
             "agentMode": self.agent_mode,
             "onlyUseRelationalOperators": self.only_use_relational_operators,
             "fineGrainedPrompt": self.fine_grained_prompt,
+            "enableContextOptimization": self.enable_context_optimization,
+            "frontierDepth": self.frontier_depth,
+            "trimmedResultCharLimit": self.trimmed_result_char_limit,
+            "cacheEnabled": self.cache_enabled,
         }
 
 
@@ -534,6 +542,10 @@ class DataflowAgent:
             agent_mode: str = AGENT_MODE,
             only_use_relational_operators: bool = True,
             fine_grained_prompt: bool = False,
+            enable_context_optimization: bool = False,
+            frontier_depth: int = 1,
+            trimmed_result_char_limit: int = 0,
+            cache_enabled: bool = True,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -578,6 +590,10 @@ class DataflowAgent:
             agent_mode=agent_mode,
             only_use_relational_operators=only_use_relational_operators,
             fine_grained_prompt=fine_grained_prompt,
+            enable_context_optimization=enable_context_optimization,
+            frontier_depth=frontier_depth,
+            trimmed_result_char_limit=trimmed_result_char_limit,
+            cache_enabled=cache_enabled,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint

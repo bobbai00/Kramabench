@@ -36,6 +36,10 @@ class DataflowSystem(System):
         execution_timeout_minutes: int = None,
         agent_mode: str = None,
         fine_grained_prompt: bool = None,
+        enable_context_optimization: bool = None,
+        frontier_depth: int = None,
+        trimmed_result_char_limit: int = None,
+        cache_enabled: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -78,6 +82,26 @@ class DataflowSystem(System):
             self.fine_grained_prompt = fine_grained_prompt
         else:
             self.fine_grained_prompt = os.environ.get("DATAFLOW_FINE_GRAINED_PROMPT", "false").lower() == "true"
+        # enable_context_optimization: if explicitly set use that, otherwise check env var
+        if enable_context_optimization is not None:
+            self.enable_context_optimization = enable_context_optimization
+        else:
+            self.enable_context_optimization = os.environ.get("DATAFLOW_ENABLE_CONTEXT_OPTIMIZATION", "false").lower() == "true"
+        # frontier_depth: if explicitly set use that, otherwise check env var
+        if frontier_depth is not None:
+            self.frontier_depth = frontier_depth
+        else:
+            self.frontier_depth = int(os.environ.get("DATAFLOW_FRONTIER_DEPTH", "1"))
+        # trimmed_result_char_limit: if explicitly set use that, otherwise check env var
+        if trimmed_result_char_limit is not None:
+            self.trimmed_result_char_limit = trimmed_result_char_limit
+        else:
+            self.trimmed_result_char_limit = int(os.environ.get("DATAFLOW_TRIMMED_RESULT_CHAR_LIMIT", "0"))
+        # cache_enabled: if explicitly set use that, otherwise check env var
+        if cache_enabled is not None:
+            self.cache_enabled = cache_enabled
+        else:
+            self.cache_enabled = os.environ.get("DATAFLOW_CACHE_ENABLED", "true").lower() == "true"
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -158,6 +182,10 @@ class DataflowSystem(System):
             execution_timeout_minutes=self.execution_timeout_minutes,
             agent_mode=self.agent_mode,
             fine_grained_prompt=self.fine_grained_prompt,
+            enable_context_optimization=self.enable_context_optimization,
+            frontier_depth=self.frontier_depth,
+            trimmed_result_char_limit=self.trimmed_result_char_limit,
+            cache_enabled=self.cache_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -280,6 +308,10 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "agent_mode": self.agent_mode,
                 "fine_grained_prompt": self.fine_grained_prompt,
+                "enable_context_optimization": self.enable_context_optimization,
+                "frontier_depth": self.frontier_depth,
+                "trimmed_result_char_limit": self.trimmed_result_char_limit,
+                "cache_enabled": self.cache_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -592,6 +624,21 @@ class DataflowSystemGpt52(DataflowSystem):
         )
 
 
+class DataflowSystemGpt52CtxOptD1(DataflowSystem):
+    """DataflowSystem using GPT-5.2 model with context optimization, frontier depth 1."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="DataflowSystemGpt52CtxOptD1",
+            enable_context_optimization=True,
+            frontier_depth=1,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
 class DataflowSystemGpt52FineGrained(DataflowSystem):
     """DataflowSystem using GPT-5.2 model with fine-grained (one-line-per-action) prompt."""
 
@@ -660,3 +707,69 @@ class DataflowSystemGpt52FullInput(DataflowSystem):
     def serve_query(self, query, query_id="default-0", subset_files=None):
         """Override to always use full input (ignore subset_files)."""
         return super().serve_query(query, query_id, subset_files=None)
+
+
+class DataflowSystemGpt5MiniMediumCtxOptD1(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-medium with context optimization, frontier depth 1."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-medium",
+            name="DataflowSystemGpt5MiniMediumCtxOptD1",
+            enable_context_optimization=True,
+            frontier_depth=1,
+            trimmed_result_char_limit=0,
+            cache_enabled=True,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt5MiniMediumCtxOptD2(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-medium with context optimization, frontier depth 2."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-medium",
+            name="DataflowSystemGpt5MiniMediumCtxOptD2",
+            enable_context_optimization=True,
+            frontier_depth=2,
+            trimmed_result_char_limit=0,
+            cache_enabled=True,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt5MiniMediumCtxOptD1Limit1000(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-medium with context optimization, frontier depth 1, trimmed result limit 1000."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-medium",
+            name="DataflowSystemGpt5MiniMediumCtxOptD1Limit1000",
+            enable_context_optimization=True,
+            frontier_depth=1,
+            trimmed_result_char_limit=1000,
+            cache_enabled=True,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt5MiniMediumNoCache(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-medium with cache disabled, trimmed result limit 5000."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-medium",
+            name="DataflowSystemGpt5MiniMediumNoCache",
+            cache_enabled=False,
+            trimmed_result_char_limit=5000,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
