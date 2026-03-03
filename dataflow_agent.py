@@ -67,6 +67,7 @@ class AgentSettings:
     cache_enabled: bool = True  # Whether to enable operator result caching
     execution_backend: str = "texera"  # Execution backend: "texera" or "hamilton"
     latest_only: bool = False  # Keep only the latest tool call/result for each operator
+    dynamic_depth_enabled: bool = False  # Auto-compute frontier depth as ceil(avg source-to-sink path length)
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -87,6 +88,7 @@ class AgentSettings:
             "cacheEnabled": self.cache_enabled,
             "executionBackend": self.execution_backend,
             "latestOnly": self.latest_only,
+            "dynamicDepthEnabled": self.dynamic_depth_enabled,
         }
 
 
@@ -400,6 +402,28 @@ def get_agent_workflow(
     return response.json()
 
 
+def get_agent_react_steps(
+        agent_id: str, agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT
+) -> dict:
+    """
+    Get the ReAct steps (reasoning trace) for an agent.
+
+    Args:
+        agent_id: Agent ID
+        agent_endpoint: Agent service endpoint URL
+
+    Returns:
+        Dict with 'steps' (list of ReActStep) and 'state' (agent state string)
+
+    Raises:
+        requests.HTTPError: If API call fails
+    """
+    url = f"{agent_endpoint}/api/agents/{agent_id}/react-steps"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+
 def clear_agent_history(
         agent_id: str, agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT
 ) -> bool:
@@ -552,6 +576,7 @@ class DataflowAgent:
             cache_enabled: bool = True,
             execution_backend: str = "texera",
             latest_only: bool = False,
+            dynamic_depth_enabled: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -602,6 +627,7 @@ class DataflowAgent:
             cache_enabled=cache_enabled,
             execution_backend=execution_backend,
             latest_only=latest_only,
+            dynamic_depth_enabled=dynamic_depth_enabled,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint

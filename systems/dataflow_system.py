@@ -12,7 +12,7 @@ import time
 from typing import Dict, List, Optional
 
 from benchmark.benchmark_api import System
-from dataflow_agent import DataflowAgent, MessageResult, get_agent_workflow
+from dataflow_agent import DataflowAgent, MessageResult, get_agent_workflow, get_agent_react_steps
 from systems.data_source_utils import expand_data_sources
 from utils.answer_parser import parse_answer
 
@@ -42,6 +42,8 @@ class DataflowSystem(System):
         cache_enabled: bool = None,
         execution_backend: str = None,
         latest_only: bool = None,
+        dynamic_depth_enabled: bool = None,
+        collect_react_steps: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -114,6 +116,16 @@ class DataflowSystem(System):
             self.latest_only = latest_only
         else:
             self.latest_only = os.environ.get("DATAFLOW_LATEST_ONLY", "false").lower() == "true"
+        # dynamic_depth_enabled: if explicitly set use that, otherwise check env var
+        if dynamic_depth_enabled is not None:
+            self.dynamic_depth_enabled = dynamic_depth_enabled
+        else:
+            self.dynamic_depth_enabled = os.environ.get("DATAFLOW_DYNAMIC_DEPTH_ENABLED", "false").lower() == "true"
+        # collect_react_steps: if explicitly set use that, otherwise check env var
+        if collect_react_steps is not None:
+            self.collect_react_steps = collect_react_steps
+        else:
+            self.collect_react_steps = os.environ.get("DATAFLOW_COLLECT_REACT_STEPS", "false").lower() == "true"
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -200,6 +212,7 @@ class DataflowSystem(System):
             cache_enabled=self.cache_enabled,
             execution_backend=self.execution_backend,
             latest_only=self.latest_only,
+            dynamic_depth_enabled=self.dynamic_depth_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -328,6 +341,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "cache_enabled": self.cache_enabled,
                 "execution_backend": self.execution_backend,
                 "latest_only": self.latest_only,
+                "dynamic_depth_enabled": self.dynamic_depth_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -472,6 +486,23 @@ Your last line MUST BE: **Final Answer: <value>**"""
         except Exception as e:
             if self.verbose:
                 print(f"[DataflowSystem] Could not save workflow: {e}")
+
+        # Save react_steps.json if flag is enabled
+        if self.collect_react_steps:
+            try:
+                react_data = get_agent_react_steps(
+                    agent_id=self.agent.agent_id,
+                    agent_endpoint=self.agent.agent_service_endpoint
+                )
+                react_path = os.path.join(query_output_dir, "react_steps.json")
+                with open(react_path, "w") as f:
+                    json.dump(react_data, f, indent=2, default=str)
+                if self.verbose:
+                    step_count = len(react_data.get("steps", []))
+                    print(f"[DataflowSystem] React steps saved ({step_count} steps) to {react_path}")
+            except Exception as e:
+                if self.verbose:
+                    print(f"[DataflowSystem] Could not save react steps: {e}")
 
         return {
             "explanation": explanation,
