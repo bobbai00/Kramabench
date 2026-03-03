@@ -40,6 +40,8 @@ class DataflowSystem(System):
         frontier_depth: int = None,
         trimmed_result_char_limit: int = None,
         cache_enabled: bool = None,
+        execution_backend: str = None,
+        latest_only: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -102,6 +104,16 @@ class DataflowSystem(System):
             self.cache_enabled = cache_enabled
         else:
             self.cache_enabled = os.environ.get("DATAFLOW_CACHE_ENABLED", "true").lower() == "true"
+        # execution_backend: if explicitly set use that, otherwise check env var
+        if execution_backend is not None:
+            self.execution_backend = execution_backend
+        else:
+            self.execution_backend = os.environ.get("DATAFLOW_EXECUTION_BACKEND", "texera")
+        # latest_only: if explicitly set use that, otherwise check env var
+        if latest_only is not None:
+            self.latest_only = latest_only
+        else:
+            self.latest_only = os.environ.get("DATAFLOW_LATEST_ONLY", "false").lower() == "true"
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -186,6 +198,8 @@ class DataflowSystem(System):
             frontier_depth=self.frontier_depth,
             trimmed_result_char_limit=self.trimmed_result_char_limit,
             cache_enabled=self.cache_enabled,
+            execution_backend=self.execution_backend,
+            latest_only=self.latest_only,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -312,6 +326,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "frontier_depth": self.frontier_depth,
                 "trimmed_result_char_limit": self.trimmed_result_char_limit,
                 "cache_enabled": self.cache_enabled,
+                "execution_backend": self.execution_backend,
+                "latest_only": self.latest_only,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")

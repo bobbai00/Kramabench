@@ -65,6 +65,8 @@ class AgentSettings:
     frontier_depth: int = 1  # BFS levels backward from leaf operators for frontier computation
     trimmed_result_char_limit: int = 0  # Max chars from trimmed non-frontier results (0 = fully skip)
     cache_enabled: bool = True  # Whether to enable operator result caching
+    execution_backend: str = "texera"  # Execution backend: "texera" or "hamilton"
+    latest_only: bool = False  # Keep only the latest tool call/result for each operator
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -83,6 +85,8 @@ class AgentSettings:
             "frontierDepth": self.frontier_depth,
             "trimmedResultCharLimit": self.trimmed_result_char_limit,
             "cacheEnabled": self.cache_enabled,
+            "executionBackend": self.execution_backend,
+            "latestOnly": self.latest_only,
         }
 
 
@@ -546,6 +550,8 @@ class DataflowAgent:
             frontier_depth: int = 1,
             trimmed_result_char_limit: int = 0,
             cache_enabled: bool = True,
+            execution_backend: str = "texera",
+            latest_only: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -594,6 +600,8 @@ class DataflowAgent:
             frontier_depth=frontier_depth,
             trimmed_result_char_limit=trimmed_result_char_limit,
             cache_enabled=cache_enabled,
+            execution_backend=execution_backend,
+            latest_only=latest_only,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
