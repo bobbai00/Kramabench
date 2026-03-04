@@ -43,6 +43,8 @@ class DataflowSystem(System):
         execution_backend: str = None,
         latest_only: bool = None,
         dynamic_depth_enabled: bool = None,
+        parallel_tool_calls: bool = None,
+        optional_result_retrieval: bool = None,
         collect_react_steps: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -121,6 +123,16 @@ class DataflowSystem(System):
             self.dynamic_depth_enabled = dynamic_depth_enabled
         else:
             self.dynamic_depth_enabled = os.environ.get("DATAFLOW_DYNAMIC_DEPTH_ENABLED", "false").lower() == "true"
+        # parallel_tool_calls: if explicitly set use that, otherwise check env var
+        if parallel_tool_calls is not None:
+            self.parallel_tool_calls = parallel_tool_calls
+        else:
+            self.parallel_tool_calls = os.environ.get("DATAFLOW_PARALLEL_TOOL_CALLS", "false").lower() == "true"
+        # optional_result_retrieval: if explicitly set use that, otherwise check env var
+        if optional_result_retrieval is not None:
+            self.optional_result_retrieval = optional_result_retrieval
+        else:
+            self.optional_result_retrieval = os.environ.get("DATAFLOW_OPTIONAL_RESULT_RETRIEVAL", "false").lower() == "true"
         # collect_react_steps: if explicitly set use that, otherwise check env var
         if collect_react_steps is not None:
             self.collect_react_steps = collect_react_steps
@@ -213,6 +225,8 @@ class DataflowSystem(System):
             execution_backend=self.execution_backend,
             latest_only=self.latest_only,
             dynamic_depth_enabled=self.dynamic_depth_enabled,
+            parallel_tool_calls=self.parallel_tool_calls,
+            optional_result_retrieval=self.optional_result_retrieval,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -342,6 +356,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "execution_backend": self.execution_backend,
                 "latest_only": self.latest_only,
                 "dynamic_depth_enabled": self.dynamic_depth_enabled,
+                "parallel_tool_calls": self.parallel_tool_calls,
+                "optional_result_retrieval": self.optional_result_retrieval,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")

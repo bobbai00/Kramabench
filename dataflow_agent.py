@@ -68,6 +68,8 @@ class AgentSettings:
     execution_backend: str = "texera"  # Execution backend: "texera" or "hamilton"
     latest_only: bool = False  # Keep only the latest tool call/result for each operator
     dynamic_depth_enabled: bool = False  # Auto-compute frontier depth as ceil(avg source-to-sink path length)
+    parallel_tool_calls: bool = False  # Allow the model to issue multiple tool calls in a single response
+    optional_result_retrieval: bool = False  # When true, retrieveResult becomes an optional parameter the LLM can set per call
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -89,6 +91,8 @@ class AgentSettings:
             "executionBackend": self.execution_backend,
             "latestOnly": self.latest_only,
             "dynamicDepthEnabled": self.dynamic_depth_enabled,
+            "parallelToolCalls": self.parallel_tool_calls,
+            "optionalResultRetrieval": self.optional_result_retrieval,
         }
 
 
@@ -577,6 +581,8 @@ class DataflowAgent:
             execution_backend: str = "texera",
             latest_only: bool = False,
             dynamic_depth_enabled: bool = False,
+            parallel_tool_calls: bool = False,
+            optional_result_retrieval: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -628,6 +634,8 @@ class DataflowAgent:
             execution_backend=execution_backend,
             latest_only=latest_only,
             dynamic_depth_enabled=dynamic_depth_enabled,
+            parallel_tool_calls=parallel_tool_calls,
+            optional_result_retrieval=optional_result_retrieval,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
