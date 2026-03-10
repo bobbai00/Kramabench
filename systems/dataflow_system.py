@@ -46,6 +46,7 @@ class DataflowSystem(System):
         parallel_tool_calls: bool = None,
         optional_result_retrieval: bool = None,
         no_execution_metadata: bool = None,
+        simplified_tools: bool = None,
         collect_react_steps: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -139,6 +140,11 @@ class DataflowSystem(System):
             self.no_execution_metadata = no_execution_metadata
         else:
             self.no_execution_metadata = os.environ.get("DATAFLOW_NO_EXECUTION_METADATA", "false").lower() == "true"
+        # simplified_tools: if explicitly set use that, otherwise check env var
+        if simplified_tools is not None:
+            self.simplified_tools = simplified_tools
+        else:
+            self.simplified_tools = os.environ.get("DATAFLOW_SIMPLIFIED_TOOLS", "false").lower() == "true"
         # collect_react_steps: if explicitly set use that, otherwise check env var
         if collect_react_steps is not None:
             self.collect_react_steps = collect_react_steps
@@ -234,6 +240,7 @@ class DataflowSystem(System):
             parallel_tool_calls=self.parallel_tool_calls,
             optional_result_retrieval=self.optional_result_retrieval,
             no_execution_metadata=self.no_execution_metadata,
+            simplified_tools=self.simplified_tools,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -366,6 +373,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "parallel_tool_calls": self.parallel_tool_calls,
                 "optional_result_retrieval": self.optional_result_retrieval,
                 "no_execution_metadata": self.no_execution_metadata,
+                "simplified_tools": self.simplified_tools,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -840,6 +848,20 @@ class DataflowSystemGpt5MiniMediumNoCache(DataflowSystem):
             name="DataflowSystemGpt5MiniMediumNoCache",
             cache_enabled=False,
             trimmed_result_char_limit=5000,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt52Dagster(DataflowSystem):
+    """DataflowSystem using GPT-5.2 with Dagster execution backend."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="DataflowSystemGpt52Dagster",
+            execution_backend="dagster",
             verbose=verbose,
             *args,
             **kwargs

@@ -71,6 +71,7 @@ class AgentSettings:
     parallel_tool_calls: bool = False  # Allow the model to issue multiple tool calls in a single response
     optional_result_retrieval: bool = False  # When true, retrieveResult becomes an optional parameter the LLM can set per call
     no_execution_metadata: bool = False  # When true, suppress execution metadata in tool results
+    simplified_tools: bool = False  # When true, getCurrentWorkflow tool is not registered
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -95,6 +96,7 @@ class AgentSettings:
             "parallelToolCalls": self.parallel_tool_calls,
             "optionalResultRetrieval": self.optional_result_retrieval,
             "noExecutionMetadata": self.no_execution_metadata,
+            "simplifiedTools": self.simplified_tools,
         }
 
 
@@ -586,6 +588,7 @@ class DataflowAgent:
             parallel_tool_calls: bool = False,
             optional_result_retrieval: bool = False,
             no_execution_metadata: bool = False,
+            simplified_tools: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -640,6 +643,7 @@ class DataflowAgent:
             parallel_tool_calls=parallel_tool_calls,
             optional_result_retrieval=optional_result_retrieval,
             no_execution_metadata=no_execution_metadata,
+            simplified_tools=simplified_tools,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
