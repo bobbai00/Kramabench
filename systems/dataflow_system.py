@@ -47,6 +47,7 @@ class DataflowSystem(System):
         optional_result_retrieval: bool = None,
         no_execution_metadata: bool = None,
         simplified_tools: bool = None,
+        no_action_detail: bool = None,
         collect_react_steps: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -145,6 +146,11 @@ class DataflowSystem(System):
             self.simplified_tools = simplified_tools
         else:
             self.simplified_tools = os.environ.get("DATAFLOW_SIMPLIFIED_TOOLS", "false").lower() == "true"
+        # no_action_detail: if explicitly set use that, otherwise check env var
+        if no_action_detail is not None:
+            self.no_action_detail = no_action_detail
+        else:
+            self.no_action_detail = os.environ.get("DATAFLOW_NO_ACTION_DETAIL", "false").lower() == "true"
         # collect_react_steps: if explicitly set use that, otherwise check env var
         if collect_react_steps is not None:
             self.collect_react_steps = collect_react_steps
@@ -241,6 +247,7 @@ class DataflowSystem(System):
             optional_result_retrieval=self.optional_result_retrieval,
             no_execution_metadata=self.no_execution_metadata,
             simplified_tools=self.simplified_tools,
+            no_action_detail=self.no_action_detail,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -374,6 +381,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "optional_result_retrieval": self.optional_result_retrieval,
                 "no_execution_metadata": self.no_execution_metadata,
                 "simplified_tools": self.simplified_tools,
+                "no_action_detail": self.no_action_detail,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
