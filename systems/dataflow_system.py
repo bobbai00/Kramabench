@@ -38,7 +38,7 @@ class DataflowSystem(System):
         fine_grained_prompt: bool = None,
         enable_context_optimization: bool = None,
         frontier_depth: int = None,
-        trimmed_result_char_limit: int = None,
+        minimum_result_char_limit: int = None,
         cache_enabled: bool = None,
         execution_backend: str = None,
         latest_only: bool = None,
@@ -101,11 +101,11 @@ class DataflowSystem(System):
             self.frontier_depth = frontier_depth
         else:
             self.frontier_depth = int(os.environ.get("DATAFLOW_FRONTIER_DEPTH", "1"))
-        # trimmed_result_char_limit: if explicitly set use that, otherwise check env var
-        if trimmed_result_char_limit is not None:
-            self.trimmed_result_char_limit = trimmed_result_char_limit
+        # minimum_result_char_limit: if explicitly set use that, otherwise check env var
+        if minimum_result_char_limit is not None:
+            self.minimum_result_char_limit = minimum_result_char_limit
         else:
-            self.trimmed_result_char_limit = int(os.environ.get("DATAFLOW_TRIMMED_RESULT_CHAR_LIMIT", "0"))
+            self.minimum_result_char_limit = int(os.environ.get("DATAFLOW_MINIMUM_RESULT_CHAR_LIMIT", "0"))
         # cache_enabled: if explicitly set use that, otherwise check env var
         if cache_enabled is not None:
             self.cache_enabled = cache_enabled
@@ -238,7 +238,7 @@ class DataflowSystem(System):
             fine_grained_prompt=self.fine_grained_prompt,
             enable_context_optimization=self.enable_context_optimization,
             frontier_depth=self.frontier_depth,
-            trimmed_result_char_limit=self.trimmed_result_char_limit,
+            minimum_result_char_limit=self.minimum_result_char_limit,
             cache_enabled=self.cache_enabled,
             execution_backend=self.execution_backend,
             latest_only=self.latest_only,
@@ -372,7 +372,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "fine_grained_prompt": self.fine_grained_prompt,
                 "enable_context_optimization": self.enable_context_optimization,
                 "frontier_depth": self.frontier_depth,
-                "trimmed_result_char_limit": self.trimmed_result_char_limit,
+                "minimum_result_char_limit": self.minimum_result_char_limit,
                 "cache_enabled": self.cache_enabled,
                 "execution_backend": self.execution_backend,
                 "latest_only": self.latest_only,
@@ -805,7 +805,7 @@ class DataflowSystemGpt5MiniMediumCtxOptD1(DataflowSystem):
             name="DataflowSystemGpt5MiniMediumCtxOptD1",
             enable_context_optimization=True,
             frontier_depth=1,
-            trimmed_result_char_limit=0,
+            minimum_result_char_limit=0,
             cache_enabled=True,
             verbose=verbose,
             *args,
@@ -822,7 +822,7 @@ class DataflowSystemGpt5MiniMediumCtxOptD2(DataflowSystem):
             name="DataflowSystemGpt5MiniMediumCtxOptD2",
             enable_context_optimization=True,
             frontier_depth=2,
-            trimmed_result_char_limit=0,
+            minimum_result_char_limit=0,
             cache_enabled=True,
             verbose=verbose,
             *args,
@@ -839,7 +839,7 @@ class DataflowSystemGpt5MiniMediumCtxOptD1Limit1000(DataflowSystem):
             name="DataflowSystemGpt5MiniMediumCtxOptD1Limit1000",
             enable_context_optimization=True,
             frontier_depth=1,
-            trimmed_result_char_limit=1000,
+            minimum_result_char_limit=1000,
             cache_enabled=True,
             verbose=verbose,
             *args,
@@ -855,7 +855,7 @@ class DataflowSystemGpt5MiniMediumNoCache(DataflowSystem):
             model_type="gpt-5-mini-medium",
             name="DataflowSystemGpt5MiniMediumNoCache",
             cache_enabled=False,
-            trimmed_result_char_limit=5000,
+            minimum_result_char_limit=5000,
             verbose=verbose,
             *args,
             **kwargs

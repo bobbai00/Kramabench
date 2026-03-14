@@ -63,7 +63,7 @@ class AgentSettings:
     fine_grained_prompt: bool = False  # Use fine-grained prompts with atomic operation constraints
     enable_context_optimization: bool = False  # Condense message history between steps
     frontier_depth: int = 1  # BFS levels backward from leaf operators for frontier computation
-    trimmed_result_char_limit: int = 0  # Max chars from trimmed non-frontier results (0 = fully skip)
+    minimum_result_char_limit: int = 0  # Minimum characters to keep from execution results after log-fallback decay
     cache_enabled: bool = True  # Whether to enable operator result caching
     execution_backend: str = "texera"  # Execution backend: "texera" or "hamilton"
     latest_only: bool = False  # Keep only the latest tool call/result for each operator
@@ -89,7 +89,7 @@ class AgentSettings:
             "fineGrainedPrompt": self.fine_grained_prompt,
             "enableContextOptimization": self.enable_context_optimization,
             "frontierDepth": self.frontier_depth,
-            "trimmedResultCharLimit": self.trimmed_result_char_limit,
+            "minimumResultCharLimit": self.minimum_result_char_limit,
             "cacheEnabled": self.cache_enabled,
             "executionBackend": self.execution_backend,
             "latestOnly": self.latest_only,
@@ -582,7 +582,7 @@ class DataflowAgent:
             fine_grained_prompt: bool = False,
             enable_context_optimization: bool = False,
             frontier_depth: int = 1,
-            trimmed_result_char_limit: int = 0,
+            minimum_result_char_limit: int = 0,
             cache_enabled: bool = True,
             execution_backend: str = "texera",
             latest_only: bool = False,
@@ -638,7 +638,7 @@ class DataflowAgent:
             fine_grained_prompt=fine_grained_prompt,
             enable_context_optimization=enable_context_optimization,
             frontier_depth=frontier_depth,
-            trimmed_result_char_limit=trimmed_result_char_limit,
+            minimum_result_char_limit=minimum_result_char_limit,
             cache_enabled=cache_enabled,
             execution_backend=execution_backend,
             latest_only=latest_only,
