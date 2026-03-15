@@ -4,12 +4,14 @@ Code Agent - Wrapper for smolagents CodeAgent for KramaBench benchmarking.
 """
 
 import os
+import re
 import time
 from typing import Optional, Any
 from dataclasses import dataclass
 
 from smolagents import CodeAgent
-from smolagents.models import OpenAIServerModel
+from smolagents.models import ChatMessage, MessageRole, OpenAIServerModel
+from smolagents.memory import ActionStep
 
 from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTIONS
 
@@ -40,7 +42,70 @@ def _parse_model_and_reasoning_effort(model_type: str) -> tuple[str, Optional[st
     return model_type, None
 
 
-# Imports the agent is allowed to use
+def _strip_code_blocks(text: str) -> str:
+    """Remove code blocks from model output, keeping the reasoning.
+
+    Handles both smolagents default tags (<code>...</code>) and markdown (```...```)."""
+    # smolagents default: <code>...</code>
+    result = re.sub(r"<code>.*?</code>", "[code omitted]", text, flags=re.DOTALL)
+    # markdown style: ```...```
+    result = re.sub(r"```.*?```", "[code omitted]", result, flags=re.DOTALL)
+    return result.strip()
+
+
+class NoActionDetailCodeAgent(CodeAgent):
+    """CodeAgent subclass that strips code from historical steps to reduce context size."""
+
+    def write_memory_to_messages(self, summary_mode: bool = False) -> list[ChatMessage]:
+        messages = self.memory.system_prompt.to_messages(summary_mode=summary_mode)
+
+        # Find the last ActionStep index
+        action_steps = [
+            (i, step) for i, step in enumerate(self.memory.steps)
+            if isinstance(step, ActionStep)
+        ]
+        last_action_idx = action_steps[-1][0] if action_steps else -1
+
+        for i, memory_step in enumerate(self.memory.steps):
+            if isinstance(memory_step, ActionStep) and i != last_action_idx:
+                # For historical ActionSteps: emit messages without code detail
+                # Keep the reasoning (stripped of code blocks) as assistant message
+                if memory_step.model_output is not None and not summary_mode:
+                    stripped = _strip_code_blocks(str(memory_step.model_output))
+                    messages.append(
+                        ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=[{"type": "text", "text": stripped}],
+                        )
+                    )
+                # Skip tool_calls — omit the code call message entirely
+                # Keep observations/errors so the agent knows what happened
+                if memory_step.observations is not None:
+                    messages.append(
+                        ChatMessage(
+                            role=MessageRole.TOOL_RESPONSE,
+                            content=[{"type": "text", "text": f"Observation:\n{memory_step.observations}"}],
+                        )
+                    )
+                if memory_step.error is not None:
+                    error_msg = (
+                        "Error:\n" + str(memory_step.error)
+                        + "\nNow let's retry: take care not to repeat previous errors! "
+                        "If you have retried several times, try a completely different approach.\n"
+                    )
+                    messages.append(
+                        ChatMessage(
+                            role=MessageRole.TOOL_RESPONSE,
+                            content=[{"type": "text", "text": error_msg}],
+                        )
+                    )
+            else:
+                # Latest ActionStep or non-ActionStep: emit full messages
+                messages.extend(memory_step.to_messages(summary_mode=summary_mode))
+
+        return messages
+
+
 AUTHORIZED_IMPORTS = [
     # Data science essentials (with submodules)
     "numpy.*",      # numpy.linalg, numpy.random, numpy.fft, etc.
@@ -150,6 +215,7 @@ class CodeAgentWrapper:
         verbosity_level: int = 1,
         use_fine_grained_prompt: bool = None,
         max_print_outputs_length: int = None,
+        no_action_detail: bool = False,
     ):
         self.model_type = model_type
         self.max_steps = max_steps
@@ -161,6 +227,7 @@ class CodeAgentWrapper:
         self.use_fine_grained_prompt = use_fine_grained_prompt if use_fine_grained_prompt is not None else FINE_GRAINED_PROMPT_ENABLED
         # If not explicitly set, fall back to environment variable (None = no limit)
         self.max_print_outputs_length = max_print_outputs_length if max_print_outputs_length is not None else DEFAULT_MAX_PRINT_OUTPUTS_LENGTH
+        self.no_action_detail = no_action_detail
         self._agent: Optional[CodeAgent] = None
         self._model: Optional[OpenAIServerModel] = None
 
@@ -197,7 +264,8 @@ class CodeAgentWrapper:
         elif CUSTOMIZED_PROMPT_ENABLED:
             agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
 
-        self._agent = CodeAgent(**agent_kwargs)
+        agent_cls = NoActionDetailCodeAgent if self.no_action_detail else CodeAgent
+        self._agent = agent_cls(**agent_kwargs)
         return self
 
     def run(self, prompt: str) -> CodeAgentResult:
@@ -277,7 +345,8 @@ class CodeAgentWrapper:
             elif CUSTOMIZED_PROMPT_ENABLED:
                 agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
 
-            self._agent = CodeAgent(**agent_kwargs)
+            agent_cls = NoActionDetailCodeAgent if self.no_action_detail else CodeAgent
+            self._agent = agent_cls(**agent_kwargs)
 
     def cleanup(self):
         """Cleanup resources."""

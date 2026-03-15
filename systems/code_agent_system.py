@@ -29,6 +29,7 @@ class CodeAgentSystem(System):
         verbose: bool = False,
         name: str = "CodeAgentSystem",
         use_fine_grained_prompt: bool = None,
+        no_action_detail: bool = False,
         *args, **kwargs
     ):
         super().__init__(name, verbose=verbose, *args, **kwargs)
@@ -37,6 +38,7 @@ class CodeAgentSystem(System):
         self.api_base = api_base
         self.api_key = api_key
         self.use_fine_grained_prompt = use_fine_grained_prompt
+        self.no_action_detail = no_action_detail
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
         os.makedirs(self.output_dir, exist_ok=True)
@@ -61,6 +63,7 @@ class CodeAgentSystem(System):
             api_key=self.api_key,
             verbosity_level=2 if self.verbose else 1,
             use_fine_grained_prompt=self.use_fine_grained_prompt,
+            no_action_detail=self.no_action_detail,
         )
         self.agent.setup()
 
