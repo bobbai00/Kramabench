@@ -73,6 +73,7 @@ class AgentSettings:
     no_execution_metadata: bool = False  # When true, suppress execution metadata in tool results
     simplified_tools: bool = False  # When true, getCurrentWorkflow tool is not registered
     no_action_detail: bool = False  # When true, code/properties details in definition tool calls are replaced with a placeholder
+    no_log_fallback: bool = False  # When true, non-frontier operators use minimumResultCharLimit directly instead of log-fallback decay
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -99,6 +100,7 @@ class AgentSettings:
             "noExecutionMetadata": self.no_execution_metadata,
             "simplifiedTools": self.simplified_tools,
             "noActionDetail": self.no_action_detail,
+            "noLogFallback": self.no_log_fallback,
         }
 
 
@@ -592,6 +594,7 @@ class DataflowAgent:
             no_execution_metadata: bool = False,
             simplified_tools: bool = False,
             no_action_detail: bool = False,
+            no_log_fallback: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -648,6 +651,7 @@ class DataflowAgent:
             no_execution_metadata=no_execution_metadata,
             simplified_tools=simplified_tools,
             no_action_detail=no_action_detail,
+            no_log_fallback=no_log_fallback,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint

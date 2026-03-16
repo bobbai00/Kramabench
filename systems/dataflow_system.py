@@ -48,6 +48,7 @@ class DataflowSystem(System):
         no_execution_metadata: bool = None,
         simplified_tools: bool = None,
         no_action_detail: bool = None,
+        no_log_fallback: bool = None,
         collect_react_steps: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -151,6 +152,11 @@ class DataflowSystem(System):
             self.no_action_detail = no_action_detail
         else:
             self.no_action_detail = os.environ.get("DATAFLOW_NO_ACTION_DETAIL", "false").lower() == "true"
+        # no_log_fallback: if explicitly set use that, otherwise check env var
+        if no_log_fallback is not None:
+            self.no_log_fallback = no_log_fallback
+        else:
+            self.no_log_fallback = os.environ.get("DATAFLOW_NO_LOG_FALLBACK", "false").lower() == "true"
         # collect_react_steps: if explicitly set use that, otherwise check env var
         if collect_react_steps is not None:
             self.collect_react_steps = collect_react_steps
@@ -248,6 +254,7 @@ class DataflowSystem(System):
             no_execution_metadata=self.no_execution_metadata,
             simplified_tools=self.simplified_tools,
             no_action_detail=self.no_action_detail,
+            no_log_fallback=self.no_log_fallback,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -382,6 +389,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "no_execution_metadata": self.no_execution_metadata,
                 "simplified_tools": self.simplified_tools,
                 "no_action_detail": self.no_action_detail,
+                "no_log_fallback": self.no_log_fallback,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
