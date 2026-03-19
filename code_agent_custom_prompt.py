@@ -36,21 +36,16 @@ for i, line in enumerate(lines, 1):
 
 If you discover issues (e.g., semicolon delimiters, comment rows, missing headers), adjust the loading parameters (`sep=`, `header=`, `skiprows=`) and re-load. After loading, always examine the result.
 
-### Common Pitfalls in Multi-Step Analysis
-
-- **Misidentified columns from messy files**: When column names are generic (`Unnamed: 0`, `0`, `1`, ...) or look like domain-specific data values rather than field descriptions (e.g., a place name, a date, a measurement value appearing as a column header), the file was not loaded correctly. This means the real header row was missed and a data row was used as the header instead. Do NOT guess column meanings — inspect the raw file content, find the actual structure of the table, and re-load with the correct parameters (e.g., change the delimiter with `sep=`, set `header=` to the correct row number or `None`, or use `skiprows=` to skip metadata lines).
-- **Wrong numerical range edge cases**: Watch for: inclusive vs exclusive boundaries in filters (`>=` vs `>`), null/NaN rows silently dropped by aggregations, duplicate rows inflating counts or sums, and premature aggregation that loses row-level detail needed later. When a result is close but not exact, trace back through each step to find which one introduced the discrepancy.
-- **Unit and format consistency**: Ensure the final result matches the expected units and format (e.g., percentage vs proportion, dollars vs cents). Convert explicitly in a dedicated step rather than assuming.
-- **Late rounding**: Apply rounding only in the final step. Rounding intermediate results compounds errors across multiple steps.
-- **Plausibility checks on intermediate results**: After selecting a column or computing a value, verify the magnitude makes sense for what it represents. If values seem implausible (e.g., orders of magnitude off from what the question implies), re-examine your column selection and data loading before proceeding.
-- **Never analyze sample data**: If you sampled data to explore its schema (using `.head()`, `.tail()`, or `.sample()`), make sure you switch back to the full dataset before performing the actual analysis. Computing answers on a few sampled rows will produce wrong results.
-
 ### Key Reminders
 
 - Always use print() to show intermediate results before proceeding
 - Keep each code block focused on ONE transformation
 - Store intermediate results in variables for reuse
 - When debugging, add more print() statements to narrow down the issue
+- Be aware of columns from messy files: When column names are generic (`Unnamed: 0`, `0`, `1`, ...) or look like domain-specific data values rather than field descriptions (e.g., a place name, a date, a measurement value appearing as a column header), the file was not loaded correctly. This means the real header row was missed and a data row was used as the header instead. Do NOT guess column meanings — inspect the raw file content, find the actual structure of the table, and re-load with the correct parameters (e.g., change the delimiter with `sep=`, set `header=` to the correct row number or `None`, or use `skiprows=` to skip metadata lines).
+- Understand column semantics: Before analysis, examine column names and their stats to understand what each column represents. Columns may carry semantic meaning that affects how data should be filtered or interpreted — respect these signals and apply appropriate preprocessing before computing results.
+- Normalize before grouping or joining: String keys may contain naming variants such as special character delimiters, encoding differences, or duplicate entries across files. Inspect sample values and stats of grouping/join columns, normalize where needed, and verify matched counts are plausible after joins.
+- Load all relevant data files then choosing the correct subset of data to process: When the question requires comparing across groups, load all relevant files first, then determine the correct subset.`;
 """
 
 
