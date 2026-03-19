@@ -327,6 +327,74 @@ class CodeAgentSystemParser:
         print(f"Final answer: {trace.final_answer}")
     """
 
+    @staticmethod
+    def _normalize_answer(answer: Optional[str], answer_type: str) -> Optional[str]:
+        """
+        Normalize the extracted answer based on the ground truth answer_type.
+
+        Handles mismatches such as:
+        - answer_type is string_exact but agent outputs a JSON list → convert to Python str() format
+
+        Args:
+            answer: Raw extracted answer string
+            answer_type: Ground truth answer_type (e.g., 'string_exact', 'list_exact')
+
+        Returns:
+            Normalized answer string
+        """
+        if answer is None or not answer_type:
+            return answer
+
+        # string_exact/approximate but answer looks like a JSON array
+        # Convert JSON ["a", "b"] to Python str() format ['a', 'b']
+        if answer_type.startswith("string") and answer.startswith("["):
+            try:
+                parsed = json.loads(answer)
+                if isinstance(parsed, list):
+                    return str(parsed)
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        return answer
+
+    @staticmethod
+    def _get_answer_type_from_workload(task_id: str, trace_file: Path) -> str:
+        """
+        Look up answer_type for a task from the workload JSON files.
+
+        Infers the domain from the task_id (e.g., 'wildfire-hard-17' → 'wildfire')
+        and searches for the workload file relative to the project root.
+
+        Args:
+            task_id: Task identifier (e.g., 'environment-hard-20')
+            trace_file: Path to the trace file (used to find project root)
+
+        Returns:
+            answer_type string, or empty string if not found
+        """
+        # Extract domain from task_id: everything before '-easy-' or '-hard-'
+        domain = re.split(r'-(easy|hard)-', task_id)[0] if task_id else ""
+        if not domain:
+            return ""
+
+        # Walk up from trace file to find the workload directory
+        # Trace path: {project_root}/system_scratch/{system}/{task_id}/file.json
+        try:
+            candidate = trace_file.parent
+            for _ in range(5):  # walk up at most 5 levels
+                candidate = candidate.parent
+                workload_path = candidate / "workload" / f"{domain}.json"
+                if workload_path.exists():
+                    with open(workload_path, "r", encoding="utf-8") as f:
+                        tasks = json.load(f)
+                    for task in tasks:
+                        if task.get("id") == task_id:
+                            return task.get("answer_type", "")
+                    return ""
+        except Exception:
+            pass
+        return ""
+
     def parse_file(self, file_path: str | Path) -> CodeAgentTrace:
         """
         Parse a reasoning trace from a JSON file.
@@ -350,6 +418,12 @@ class CodeAgentSystemParser:
             trace.query_id = file_path.parent.name
         except Exception:
             pass
+
+        # Normalize final answer using answer_type from workload
+        if trace.query_id and trace.final_answer:
+            answer_type = self._get_answer_type_from_workload(trace.query_id, file_path)
+            if answer_type:
+                trace.final_answer = self._normalize_answer(trace.final_answer, answer_type)
 
         return trace
 
