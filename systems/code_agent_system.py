@@ -41,6 +41,7 @@ class CodeAgentSystem(System):
         self.no_action_detail = no_action_detail
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
+        self.format_hints: Dict[str, str] = {}  # Map task_id -> format_hint string
         os.makedirs(self.output_dir, exist_ok=True)
 
     def process_dataset(self, dataset_directory: str | os.PathLike) -> None:
@@ -55,6 +56,9 @@ class CodeAgentSystem(System):
         if self.verbose:
             print(f"[{self.name}] Found {len(self.dataset)} files in {dataset_directory}")
 
+        # Load format hints
+        self._load_format_hints(dataset_directory)
+
         # Setup agent
         self.agent = CodeAgentWrapper(
             model_type=self.model_type,
@@ -66,6 +70,26 @@ class CodeAgentSystem(System):
             no_action_detail=self.no_action_detail,
         )
         self.agent.setup()
+
+    def _load_format_hints(self, dataset_directory: str) -> None:
+        """Load format hints for the domain."""
+        try:
+            parts = str(dataset_directory).rstrip('/').split('/')
+            if 'data' in parts:
+                data_idx = parts.index('data')
+                domain = parts[data_idx + 1]
+                project_root = '/'.join(parts[:data_idx])
+                hint_path = os.path.join(project_root, 'format_hint', f'{domain}.json')
+                if os.path.exists(hint_path):
+                    with open(hint_path, 'r') as f:
+                        hints = json.load(f)
+                        for hint in hints:
+                            self.format_hints[hint['id']] = hint.get('format_hint', '')
+                    if self.verbose:
+                        print(f"[{self.name}] Loaded {len(hints)} format hints from {hint_path}")
+        except Exception as e:
+            if self.verbose:
+                print(f"[{self.name}] Could not load format hints: {e}")
 
     def _expand_data_sources(self, data_sources: List[str]) -> List[str]:
         """
@@ -105,6 +129,7 @@ class CodeAgentSystem(System):
             print(f"[{self.name}] Query: {query_id}, Files: {len(file_paths)}")
 
         # Build prompt
+        format_hint = self.format_hints.get(query_id, "")
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
 
 Data files available (use these paths to read the data):
@@ -114,24 +139,7 @@ Note: All paths are relative. Some paths may contain wildcards (e.g., "folder/*"
 
 Question: {query}
 
-Instructions:
-1. Read the relevant data files using the provided paths and analyze the data. The given data may be raw, and you need to examine carefully and clean the data if needed.
-2. Compute the answer step by step.
-3. IMPORTANT - Your final answer format:
-   - For numeric questions: output just the number (e.g., "274")
-   - For list questions: output a JSON array (e.g., ["Tokyo", "London", "Paris"])
-   - For descriptive/analytical questions: output a complete sentence summarizing your findings (e.g., "The average period is 11 years, with maxima in 1968, 1979, 1989, 2000, and 2014.")
-   - For simple string questions: output just the value (e.g., "California")
-4. Numeric format conventions:
-   - "percentage" or "rate": output the human-readable value, e.g., 54.03 means 54.03%
-   - "proportion" or "fraction": output the decimal, e.g., 0.5403
-   - "ratio": output the raw division result, e.g., 2.5 for 5/2
-
-Example final answers:
-- Numeric: "274"
-- List: ["Tokyo", "London", "Paris"]
-- Descriptive: "The correlation coefficient is 0.85, indicating a strong positive relationship between temperature and sales."
-- String: "California"
+Answer format: {format_hint}
 
 Your last line MUST BE: **Final Answer: <value>**"""
 

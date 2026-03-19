@@ -172,6 +172,7 @@ class DataflowSystem(System):
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
         self.workload_data: Dict[str, dict] = {}  # Map task_id -> task dict (for ground truth)
+        self.format_hints: Dict[str, str] = {}  # Map task_id -> format_hint string
 
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
@@ -203,6 +204,9 @@ class DataflowSystem(System):
         # Try to load workload for ground truth lookup
         self._load_workload(dataset_directory)
 
+        # Try to load format hints
+        self._load_format_hints(dataset_directory)
+
         # Initialize the agent
         self._setup_agent()
 
@@ -231,6 +235,26 @@ class DataflowSystem(System):
         except Exception as e:
             if self.verbose:
                 print(f"[DataflowSystem] Could not load workload for ground truth: {e}")
+
+    def _load_format_hints(self, dataset_directory: str) -> None:
+        """Load format hints for the domain."""
+        try:
+            parts = dataset_directory.rstrip('/').split('/')
+            if 'data' in parts:
+                data_idx = parts.index('data')
+                domain = parts[data_idx + 1]
+                project_root = '/'.join(parts[:data_idx])
+                hint_path = os.path.join(project_root, 'format_hint', f'{domain}.json')
+                if os.path.exists(hint_path):
+                    with open(hint_path, 'r') as f:
+                        hints = json.load(f)
+                        for hint in hints:
+                            self.format_hints[hint['id']] = hint.get('format_hint', '')
+                    if self.verbose:
+                        print(f"[DataflowSystem] Loaded {len(hints)} format hints from {hint_path}")
+        except Exception as e:
+            if self.verbose:
+                print(f"[DataflowSystem] Could not load format hints: {e}")
 
     def _setup_agent(self) -> None:
         """Initialize and setup the DataflowAgent."""
@@ -266,13 +290,14 @@ class DataflowSystem(System):
         )
         self.agent.setup()
 
-    def _build_prompt(self, query: str, file_paths: List[str]) -> str:
+    def _build_prompt(self, query: str, file_paths: List[str], format_hint: str = "") -> str:
         """
         Build the prompt for the agent.
 
         Args:
             query: The natural language query
             file_paths: List of file paths available for the query
+            format_hint: Optional format hint for the expected answer format
 
         Returns:
             Formatted prompt string
@@ -286,24 +311,7 @@ Note: All paths are relative. Some paths may contain wildcards (e.g., "folder/*"
 
 Question: {query}
 
-Instructions:
-1. Read the relevant data files using the provided paths and analyze the data. The given data may be raw, and you need to examine carefully and clean the data if needed.
-2. Compute the answer step by step.
-3. IMPORTANT - Your final answer format:
-   - For numeric questions: output just the number (e.g., "274")
-   - For list questions: output a JSON array (e.g., ["Tokyo", "London", "Paris"])
-   - For descriptive/analytical questions: output a complete sentence summarizing your findings (e.g., "The average period is 11 years, with maxima in 1968, 1979, 1989, 2000, and 2014.")
-   - For simple string questions: output just the value (e.g., "California")
-4. Numeric format conventions:
-   - "percentage" or "rate": output the human-readable value, e.g., 54.03 means 54.03%
-   - "proportion" or "fraction": output the decimal, e.g., 0.5403
-   - "ratio": output the raw division result, e.g., 2.5 for 5/2
-
-Example final answers:
-- Numeric: "274"
-- List: ["Tokyo", "London", "Paris"]
-- Descriptive: "The correlation coefficient is 0.85, indicating a strong positive relationship between temperature and sales."
-- String: "California"
+Answer format: {format_hint}
 
 Your last line MUST BE: **Final Answer: <value>**"""
 
@@ -357,8 +365,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
             print(f"[DataflowSystem] Processing query: {query_id}")
             print(f"[DataflowSystem] Using {len(file_paths)} files")
 
-        # Build prompt with file paths
-        prompt = self._build_prompt(query, file_paths)
+        # Build prompt with file paths and format hint
+        format_hint = self.format_hints.get(query_id, "")
+        prompt = self._build_prompt(query, file_paths, format_hint=format_hint)
 
         # Save prompt for debugging
         query_output_dir = os.path.join(self.output_dir, query_id)
@@ -872,6 +881,48 @@ class DataflowSystemGpt5MiniMediumNoCache(DataflowSystem):
             name="DataflowSystemGpt5MiniMediumNoCache",
             cache_enabled=False,
             minimum_result_char_limit=5000,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt52NoActionDetail(DataflowSystem):
+    """DataflowSystem using GPT-5.2 with no-action-detail enabled."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="DataflowSystemGpt52NoActionDetail",
+            no_action_detail=True,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt5MiniMediumNoActionDetail(DataflowSystem):
+    """DataflowSystem using GPT-5-mini-medium with no-action-detail enabled."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini-medium",
+            name="DataflowSystemGpt5MiniMediumNoActionDetail",
+            no_action_detail=True,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemGpt52CarryMetadata(DataflowSystem):
+    """DataflowSystem using GPT-5.2 with carry-metadata enabled."""
+
+    def __init__(self, verbose=False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="DataflowSystemGpt52CarryMetadata",
+            carry_metadata=True,
             verbose=verbose,
             *args,
             **kwargs
