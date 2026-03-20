@@ -241,6 +241,7 @@ class CodeAgentWrapper:
             model_id=model_id,
             api_base=self.api_base,
             api_key=self.api_key,
+            temperature=0.2,
             **model_kwargs,
         )
 
