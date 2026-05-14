@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 TEXERA_API_ENDPOINT = "http://localhost:8080"
 TEXERA_COMPUTING_UNIT_ENDPOINT = "http://localhost:8888"
 TEXERA_AGENT_SERVICE_ENDPOINT = "http://localhost:3001"
+TEXERA_WORKFLOW_EXECUTION_ENDPOINT = "http://localhost:8085"
 
 # Authentication Configuration
 TEXERA_USERNAME = "texera"
@@ -222,37 +223,64 @@ def delete_workflow(
 
 
 def get_or_create_computing_unit(
-        token: str, computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT
+        token: str,
+        computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
+        execution_endpoint: str = TEXERA_WORKFLOW_EXECUTION_ENDPOINT,
+        name: str = "kramabench-cu",
 ) -> Optional[int]:
     """
-    Get an existing computing unit or return None if not available.
+    Get an existing computing unit or create a new one.
 
-    The computing unit is optional for basic agent operations.
+    The execution endpoint requires a real cuid for its FK constraint on
+    workflow_executions; without one, every run logs a FK violation in
+    cu-master even though the workflow still executes.
 
     Args:
         token: JWT access token
         computing_unit_endpoint: Computing unit service endpoint URL (default: port 8888)
+        execution_endpoint: WORKFLOW_EXECUTION_SERVICE endpoint that the CU advertises
+            (required for unitType=local; default: port 8085 / ComputingUnitMaster)
+        name: Display name for the CU when one needs to be created
 
     Returns:
-        Computing unit ID (cuid) or None if not available
+        Computing unit ID (cuid). Returns None only when the computing-unit
+        service is unreachable.
     """
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Try to list existing computing units from the computing-unit service
     list_url = f"{computing_unit_endpoint}/api/computing-unit"
     try:
         response = requests.get(list_url, headers=headers, timeout=5)
         if response.status_code == 200:
             units = response.json()
             if units and len(units) > 0:
-                # Return the first available computing unit
                 return units[0].get("computingUnit", {}).get("cuid") or units[0].get(
                     "cuid"
                 )
-        return None
     except Exception as e:
-        # Computing unit service may not be available, which is OK
         print(f"[DataflowAgent] Computing unit service not available: {e}")
+        return None
+
+    # No CU exists — create one. unitType=local means single-node (no k8s pod),
+    # uri is the WORKFLOW_EXECUTION_SERVICE endpoint the engine reports back.
+    create_url = f"{computing_unit_endpoint}/api/computing-unit/create"
+    payload = {
+        "name": name,
+        "unitType": "local",
+        "cpuLimit": "NaN",
+        "memoryLimit": "NaN",
+        "gpuLimit": "NaN",
+        "jvmMemorySize": "NaN",
+        "shmSize": "NaN",
+        "uri": execution_endpoint,
+    }
+    try:
+        response = requests.post(create_url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("computingUnit", {}).get("cuid") or data.get("cuid")
+    except Exception as e:
+        print(f"[DataflowAgent] Failed to create computing unit: {e}")
         return None
 
 
