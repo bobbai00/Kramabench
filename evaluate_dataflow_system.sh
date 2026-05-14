@@ -8,7 +8,7 @@ for workload in "${WORKLOADS[@]}"; do
     echo "=========================================="
     echo "Evaluating: $workload"
     echo "=========================================="
-    python evaluate.py --sut DataflowSystemGptO3 --workload "$workload" --no_pipeline_eval --verbose --use_system_cache
+    python evaluate.py --sut DataflowSystemGpt52ResultChars5000Hamilton --workload "$workload" --no_pipeline_eval --verbose --use_system_cache
     echo ""
 done
 

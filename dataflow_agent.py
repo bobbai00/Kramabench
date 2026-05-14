@@ -3,13 +3,15 @@
 Dataflow Agent - Python client for Texera Agent Service benchmarking.
 
 This module provides a DataflowAgent class that communicates with the Texera Agent Service
-to run DABstep benchmark tasks. It handles authentication, workflow creation, and agent
-interaction via REST APIs.
+to run benchmark tasks. Agent lifecycle (login, workflow create/delete, agent create/delete,
+clear history, workflow & react-step retrieval) goes through REST. The chat turn itself —
+`sendMessage` — is WebSocket-only after the agent-service refactor.
 """
 
 import time
 import json
 import requests
+import websocket
 from typing import Optional, Any
 from dataclasses import dataclass, field
 
@@ -23,20 +25,22 @@ TEXERA_COMPUTING_UNIT_ENDPOINT = "http://localhost:8888"
 TEXERA_AGENT_SERVICE_ENDPOINT = "http://localhost:3001"
 
 # Authentication Configuration
-TEXERA_USERNAME = "bob@test.com"
-TEXERA_PASSWORD = "123456"
+TEXERA_USERNAME = "texera"
+TEXERA_PASSWORD = "texera"
 
 # Agent Settings (matches agent-service AgentSettingsApi)
 # Available models: claude-haiku-4.5, claude-sonnet-4-5, gpt-5-mini, llama-local
 AGENT_MODEL_TYPE = "claude-haiku-4.5"
-AGENT_MAX_STEPS = 50
-AGENT_MAX_OPERATOR_RESULT_CHAR_LIMIT = 20000  # 20,000 characters (matches smolagents)
-AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT = 4000  # 4,000 characters per cell
-AGENT_OPERATOR_RESULT_SERIALIZATION_MODE = "table"  # "json", "table", or "toon"
-AGENT_TOOL_TIMEOUT_SECONDS = 240  # 4 minutes (matches agent-service default)
-AGENT_EXECUTION_TIMEOUT_MINUTES = 4  # 4 minutes (matches agent-service default)
+AGENT_MAX_STEPS = 100
+AGENT_MAX_OPERATOR_RESULT_CHAR_LIMIT = 2000
+AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT = 2000
+AGENT_OPERATOR_RESULT_SERIALIZATION_MODE = "tsv"  # only "tsv" is supported
+AGENT_TOOL_TIMEOUT_SECONDS = 240
+AGENT_EXECUTION_TIMEOUT_MINUTES = 4
 AGENT_DISABLED_TOOLS: list[str] = []
 AGENT_MODE = "code"  # "code" or "general"
+AGENT_CONTEXT_MODE = "latest"  # "full", "delta", or "latest"
+AGENT_PARALLEL_TOOL_CALLS = True
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -59,26 +63,13 @@ class AgentSettings:
     execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES
     disabled_tools: list[str] = field(default_factory=list)
     agent_mode: str = AGENT_MODE
-    only_use_relational_operators: bool = True  # Default to True to match agent-service
-    fine_grained_prompt: bool = False  # Use fine-grained prompts with atomic operation constraints
-    enable_context_optimization: bool = False  # Condense message history between steps
-    frontier_depth: int = 1  # BFS levels backward from leaf operators for frontier computation
-    minimum_result_char_limit: int = 0  # Minimum characters to keep from execution results after log-fallback decay
-    cache_enabled: bool = True  # Whether to enable operator result caching
-    execution_backend: str = "texera"  # Execution backend: "texera" or "hamilton"
-    latest_only: bool = False  # Keep only the latest tool call/result for each operator
-    dynamic_depth_enabled: bool = False  # Auto-compute frontier depth as ceil(avg source-to-sink path length)
-    parallel_tool_calls: bool = False  # Allow the model to issue multiple tool calls in a single response
-    optional_result_retrieval: bool = False  # When true, retrieveResult becomes an optional parameter the LLM can set per call
-    no_execution_metadata: bool = False  # When true, suppress execution metadata in tool results
-    simplified_tools: bool = False  # When true, getCurrentWorkflow tool is not registered
-    no_action_detail: bool = False  # When true, code/properties details in definition tool calls are replaced with a placeholder
-    no_log_fallback: bool = False  # When true, non-frontier operators use minimumResultCharLimit directly instead of log-fallback decay
-    carry_metadata: bool = False  # When true, per-column statistics are included in the execution metadata section
+    context_mode: str = AGENT_CONTEXT_MODE  # "full", "delta", or "latest"
+    parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS
+    allowed_operator_types: Optional[list[str]] = None  # None -> server default
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
-        return {
+        payload: dict[str, Any] = {
             "maxSteps": self.max_steps,
             "maxOperatorResultCharLimit": self.max_operator_result_char_limit,
             "maxOperatorResultCellCharLimit": self.max_operator_result_cell_char_limit,
@@ -87,23 +78,12 @@ class AgentSettings:
             "executionTimeoutMinutes": self.execution_timeout_minutes,
             "disabledTools": self.disabled_tools,
             "agentMode": self.agent_mode,
-            "onlyUseRelationalOperators": self.only_use_relational_operators,
-            "fineGrainedPrompt": self.fine_grained_prompt,
-            "enableContextOptimization": self.enable_context_optimization,
-            "frontierDepth": self.frontier_depth,
-            "minimumResultCharLimit": self.minimum_result_char_limit,
-            "cacheEnabled": self.cache_enabled,
-            "executionBackend": self.execution_backend,
-            "latestOnly": self.latest_only,
-            "dynamicDepthEnabled": self.dynamic_depth_enabled,
+            "contextMode": self.context_mode,
             "parallelToolCalls": self.parallel_tool_calls,
-            "optionalResultRetrieval": self.optional_result_retrieval,
-            "noExecutionMetadata": self.no_execution_metadata,
-            "simplifiedTools": self.simplified_tools,
-            "noActionDetail": self.no_action_detail,
-            "noLogFallback": self.no_log_fallback,
-            "carryMetadata": self.carry_metadata,
         }
+        if self.allowed_operator_types is not None:
+            payload["allowedOperatorTypes"] = self.allowed_operator_types
+        return payload
 
 
 @dataclass
@@ -314,8 +294,11 @@ def create_agent(
         "modelType": model_type,
         "userToken": token,
         "workflowId": workflow_id,
-        "computingUnitId": computing_unit_id,
     }
+    # The new agent-service validates `computingUnitId` as a strict number when
+    # present, so omit it entirely when no compute unit is available.
+    if computing_unit_id is not None:
+        payload["computingUnitId"] = computing_unit_id
 
     if name:
         payload["name"] = name
@@ -360,38 +343,107 @@ def delete_agent(
     return True
 
 
+def _http_to_ws_url(endpoint: str) -> str:
+    """Convert an http(s):// endpoint URL into the matching ws(s):// scheme."""
+    if endpoint.startswith("https://"):
+        return "wss://" + endpoint[len("https://"):]
+    if endpoint.startswith("http://"):
+        return "ws://" + endpoint[len("http://"):]
+    return endpoint
+
+
 def send_message(
-        agent_id: str, message: str, agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT
+        agent_id: str,
+        message: str,
+        agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
+        receive_timeout: int = 600,
 ) -> MessageResult:
     """
-    Send a message to an agent and get the response.
+    Send a message to an agent via the WebSocket protocol and collect the response.
+
+    The agent-service no longer exposes a REST `/message` endpoint; instead it
+    publishes streaming step events over `ws://.../api/agents/:id/react`. This
+    function opens the WS, sends `{type: "message", content: ...}`, and reads
+    events until a `complete` or `error` arrives.
 
     Args:
         agent_id: Agent ID to send message to
         message: Message content
-        agent_endpoint: Agent service endpoint URL
+        agent_endpoint: Agent service HTTP endpoint URL (converted to ws://)
+        receive_timeout: Per-recv socket timeout in seconds
 
     Returns:
-        MessageResult with response details
+        MessageResult with response, accumulated usage, stopped flag, and error.
+        `messages` is left empty here — callers should fetch the ReAct trace via
+        `get_agent_react_steps` if they need the per-step record.
 
     Raises:
-        requests.HTTPError: If message sending fails
+        websocket.WebSocketException: If the WebSocket layer fails.
     """
-    url = f"{agent_endpoint}/api/agents/{agent_id}/message"
-    payload = {"message": message}
+    ws_url = f"{_http_to_ws_url(agent_endpoint)}/api/agents/{agent_id}/react"
+    ws = websocket.create_connection(ws_url, timeout=receive_timeout)
 
-    response = requests.post(url, json=payload)
-    response.raise_for_status()
+    try:
+        ws.send(json.dumps({"type": "message", "content": message, "messageSource": "chat"}))
 
-    data = response.json()
-    return MessageResult(
-        response=data["response"],
-        messages=data.get("messages", []),
-        usage=data.get("usage", {}),
-        stats=data.get("stats", {}),
-        stopped=data.get("stopped", False),
-        error=data.get("error"),
-    )
+        final_response = ""
+        usage_total = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        step_count = 0
+        stopped = False
+        error: Optional[str] = None
+        complete = False
+
+        while not complete:
+            try:
+                raw = ws.recv()
+            except websocket.WebSocketTimeoutException:
+                error = f"WebSocket recv timed out after {receive_timeout}s"
+                break
+            if not raw:
+                break
+            try:
+                event = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            ev_type = event.get("type")
+            if ev_type == "step":
+                step = event.get("step") or {}
+                # Only count agent steps that arrived during this turn — the
+                # WS `init` payload already enumerated prior steps separately,
+                # so step events here are scoped to the current message.
+                if step.get("role") == "agent":
+                    step_count += 1
+                    if step.get("isEnd") and step.get("content"):
+                        final_response = step["content"]
+                u = step.get("usage") or {}
+                usage_total["input_tokens"] += int(u.get("inputTokens") or 0)
+                usage_total["output_tokens"] += int(u.get("outputTokens") or 0)
+                usage_total["total_tokens"] += int(u.get("totalTokens") or 0)
+            elif ev_type == "complete":
+                complete = True
+            elif ev_type == "error":
+                error = event.get("error") or "unknown WebSocket error"
+                break
+            elif ev_type == "state":
+                if event.get("state") == "STOPPING":
+                    stopped = True
+            # init / snapshot / nextContext / headChange are ignored — they
+            # are UI affordances, not part of the turn's output.
+
+        return MessageResult(
+            response=final_response,
+            messages=[],
+            usage=usage_total,
+            stats={"steps": step_count},
+            stopped=stopped,
+            error=error,
+        )
+    finally:
+        try:
+            ws.close()
+        except Exception:
+            pass
 
 
 def get_agent_workflow(
@@ -455,28 +507,6 @@ def clear_agent_history(
         requests.HTTPError: If API call fails
     """
     url = f"{agent_endpoint}/api/agents/{agent_id}/clear"
-    response = requests.post(url)
-    response.raise_for_status()
-    return True
-
-
-def reset_agent(
-        agent_id: str, agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT
-) -> bool:
-    """
-    Reset an agent (clear history and workflow).
-
-    Args:
-        agent_id: Agent ID
-        agent_endpoint: Agent service endpoint URL
-
-    Returns:
-        True if successful
-
-    Raises:
-        requests.HTTPError: If API call fails
-    """
-    url = f"{agent_endpoint}/api/agents/{agent_id}/reset"
     response = requests.post(url)
     response.raise_for_status()
     return True
@@ -582,22 +612,9 @@ class DataflowAgent:
             execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES,
             disabled_tools: Optional[list[str]] = None,
             agent_mode: str = AGENT_MODE,
-            only_use_relational_operators: bool = True,
-            fine_grained_prompt: bool = False,
-            enable_context_optimization: bool = False,
-            frontier_depth: int = 1,
-            minimum_result_char_limit: int = 0,
-            cache_enabled: bool = True,
-            execution_backend: str = "texera",
-            latest_only: bool = False,
-            dynamic_depth_enabled: bool = False,
-            parallel_tool_calls: bool = False,
-            optional_result_retrieval: bool = False,
-            no_execution_metadata: bool = False,
-            simplified_tools: bool = False,
-            no_action_detail: bool = False,
-            no_log_fallback: bool = False,
-            carry_metadata: bool = False,
+            context_mode: str = AGENT_CONTEXT_MODE,
+            parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS,
+            allowed_operator_types: Optional[list[str]] = None,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -613,15 +630,16 @@ class DataflowAgent:
         Args:
             model_type: LLM model type to use
             max_steps: Maximum number of steps per message
-            max_operator_result_char_limit: Max characters for operator results (uses symmetric truncation)
+            max_operator_result_char_limit: Max characters for operator results
             max_operator_result_cell_char_limit: Max characters per cell in results
-            operator_result_serialization_mode: Result format ("json", "table", or "toon")
+            operator_result_serialization_mode: Result format (only "tsv" is supported)
             tool_timeout_seconds: Tool execution timeout in seconds
             execution_timeout_minutes: Workflow execution timeout in minutes
             disabled_tools: List of tool names to disable
             agent_mode: Agent mode ("code" or "general")
-            only_use_relational_operators: Only allow relational operators
-            fine_grained_prompt: Use fine-grained prompts with atomic operation constraints
+            context_mode: Snapshot-selection policy ("full", "delta", or "latest")
+            parallel_tool_calls: Allow the model to emit multiple tool calls per turn
+            allowed_operator_types: Optional whitelist of operator type names; None uses server default
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -640,22 +658,9 @@ class DataflowAgent:
             execution_timeout_minutes=execution_timeout_minutes,
             disabled_tools=disabled_tools or [],
             agent_mode=agent_mode,
-            only_use_relational_operators=only_use_relational_operators,
-            fine_grained_prompt=fine_grained_prompt,
-            enable_context_optimization=enable_context_optimization,
-            frontier_depth=frontier_depth,
-            minimum_result_char_limit=minimum_result_char_limit,
-            cache_enabled=cache_enabled,
-            execution_backend=execution_backend,
-            latest_only=latest_only,
-            dynamic_depth_enabled=dynamic_depth_enabled,
+            context_mode=context_mode,
             parallel_tool_calls=parallel_tool_calls,
-            optional_result_retrieval=optional_result_retrieval,
-            no_execution_metadata=no_execution_metadata,
-            simplified_tools=simplified_tools,
-            no_action_detail=no_action_detail,
-            no_log_fallback=no_log_fallback,
-            carry_metadata=carry_metadata,
+            allowed_operator_types=allowed_operator_types,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
@@ -792,14 +797,21 @@ class DataflowAgent:
             self._log("History cleared")
 
     def reset(self):
-        """Reset the agent (clear history and workflow state)."""
+        """
+        Reset the agent's conversation by clearing history.
+
+        The agent-service no longer exposes a full reset endpoint (it was
+        removed in the refactor); only `clear` remains. To get a truly fresh
+        workflow alongside cleared history, callers should `cleanup()` and
+        re-`setup()` instead.
+        """
         if self._agent_info:
-            reset_agent(
+            clear_agent_history(
                 agent_id=self._agent_info.id,
                 agent_endpoint=self.agent_service_endpoint,
             )
             self._last_result = None
-            self._log("Agent reset")
+            self._log("Agent history cleared (reset)")
 
     def cleanup(self):
         """

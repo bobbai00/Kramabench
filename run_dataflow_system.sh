@@ -4,15 +4,15 @@
 trap 'echo ""; echo "Interrupted! Killing all subprocesses..."; kill 0; exit 1' INT TERM
 
 export DATAFLOW_MAX_CELL_CHARS=10000
+export DATAFLOW_MAX_RESULT_CHARS=1000
 export DATAFLOW_MAX_STEPS=100
-export FINE_GRAINED_PROMPT_ENABLED=false
 
 # Configuration
-SUT=${SUT:-DataflowSystemGpt5MiniMediumResultChars1000NoActionDetailCarryMetadataParallel}
+SUT=${SUT:-DataflowSystemHaiku45}
 # Set ORACLE_MODE=true to use ground truth subset files (--use_truth_subset)
 # Set ORACLE_MODE=false to use all files in dataset directory
 ORACLE_MODE=${ORACLE_MODE:-true}
-# Set PARALLEL=true to run all workloads in parallel (default: true)
+# Set PARALLEL=true to run all workloads in parallel (default: false)
 PARALLEL=${PARALLEL:-false}
 
 # WORKLOADS=("environment" "biomedical")

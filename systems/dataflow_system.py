@@ -35,22 +35,10 @@ class DataflowSystem(System):
         tool_timeout_seconds: int = None,
         execution_timeout_minutes: int = None,
         agent_mode: str = None,
-        fine_grained_prompt: bool = None,
-        enable_context_optimization: bool = None,
-        frontier_depth: int = None,
-        minimum_result_char_limit: int = None,
-        cache_enabled: bool = None,
-        execution_backend: str = None,
-        latest_only: bool = None,
-        dynamic_depth_enabled: bool = None,
+        context_mode: str = None,
         parallel_tool_calls: bool = None,
-        optional_result_retrieval: bool = None,
-        no_execution_metadata: bool = None,
-        simplified_tools: bool = None,
-        no_action_detail: bool = None,
-        no_log_fallback: bool = None,
-        carry_metadata: bool = None,
-        collect_react_steps: bool = None,
+        allowed_operator_types: Optional[List[str]] = None,
+        disabled_tools: Optional[List[str]] = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -65,109 +53,39 @@ class DataflowSystem(System):
         3. Defaults
 
         Args:
-            model_type: LLM model type (env: DATAFLOW_MODEL_TYPE, default: claude-sonnet-4-5)
+            model_type: LLM model type (env: DATAFLOW_MODEL_TYPE, default: claude-haiku-4.5)
             max_steps: Maximum steps per query (env: DATAFLOW_MAX_STEPS, default: 100)
-            max_operator_result_char_limit: Max chars for operator results (env: DATAFLOW_MAX_RESULT_CHARS, default: 20000)
-            max_operator_result_cell_char_limit: Max chars per cell (env: DATAFLOW_MAX_CELL_CHARS, default: 4000)
-            operator_result_serialization_mode: Result format (env: DATAFLOW_SERIALIZATION_MODE, default: table)
+            max_operator_result_char_limit: Max chars for operator results (env: DATAFLOW_MAX_RESULT_CHARS, default: 2000)
+            max_operator_result_cell_char_limit: Max chars per cell (env: DATAFLOW_MAX_CELL_CHARS, default: 2000)
+            operator_result_serialization_mode: Result format (env: DATAFLOW_SERIALIZATION_MODE, default: tsv)
             tool_timeout_seconds: Tool timeout (env: DATAFLOW_TOOL_TIMEOUT, default: 240)
             execution_timeout_minutes: Execution timeout (env: DATAFLOW_EXEC_TIMEOUT, default: 4)
             agent_mode: Agent mode (env: DATAFLOW_AGENT_MODE, default: code)
-            fine_grained_prompt: Use fine-grained prompts (env: DATAFLOW_FINE_GRAINED_PROMPT, default: false)
+            context_mode: Context selection policy (env: DATAFLOW_CONTEXT_MODE, default: latest)
+            parallel_tool_calls: Allow parallel tool calls (env: DATAFLOW_PARALLEL_TOOL_CALLS, default: true)
+            allowed_operator_types: Optional whitelist of operator types; None uses server default
+            disabled_tools: Optional list of tool names to disable
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
         super().__init__(name, verbose=verbose, *args, **kwargs)
 
         # Read from env vars with fallback to defaults
-        self.model_type = model_type or os.environ.get("DATAFLOW_MODEL_TYPE", "claude-sonnet-4-5")
+        self.model_type = model_type or os.environ.get("DATAFLOW_MODEL_TYPE", "claude-haiku-4.5")
         self.max_steps = max_steps or int(os.environ.get("DATAFLOW_MAX_STEPS", "100"))
-        self.max_operator_result_char_limit = max_operator_result_char_limit or int(os.environ.get("DATAFLOW_MAX_RESULT_CHARS", "20000"))
-        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or int(os.environ.get("DATAFLOW_MAX_CELL_CHARS", "4000"))
-        self.operator_result_serialization_mode = operator_result_serialization_mode or os.environ.get("DATAFLOW_SERIALIZATION_MODE", "table")
+        self.max_operator_result_char_limit = max_operator_result_char_limit or int(os.environ.get("DATAFLOW_MAX_RESULT_CHARS", "2000"))
+        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or int(os.environ.get("DATAFLOW_MAX_CELL_CHARS", "2000"))
+        self.operator_result_serialization_mode = operator_result_serialization_mode or os.environ.get("DATAFLOW_SERIALIZATION_MODE", "tsv")
         self.tool_timeout_seconds = tool_timeout_seconds or int(os.environ.get("DATAFLOW_TOOL_TIMEOUT", "240"))
         self.execution_timeout_minutes = execution_timeout_minutes or int(os.environ.get("DATAFLOW_EXEC_TIMEOUT", "4"))
         self.agent_mode = agent_mode or os.environ.get("DATAFLOW_AGENT_MODE", "code")
-        # fine_grained_prompt: if explicitly set use that, otherwise check env var
-        if fine_grained_prompt is not None:
-            self.fine_grained_prompt = fine_grained_prompt
-        else:
-            self.fine_grained_prompt = os.environ.get("DATAFLOW_FINE_GRAINED_PROMPT", "false").lower() == "true"
-        # enable_context_optimization: if explicitly set use that, otherwise check env var
-        if enable_context_optimization is not None:
-            self.enable_context_optimization = enable_context_optimization
-        else:
-            self.enable_context_optimization = os.environ.get("DATAFLOW_ENABLE_CONTEXT_OPTIMIZATION", "false").lower() == "true"
-        # frontier_depth: if explicitly set use that, otherwise check env var
-        if frontier_depth is not None:
-            self.frontier_depth = frontier_depth
-        else:
-            self.frontier_depth = int(os.environ.get("DATAFLOW_FRONTIER_DEPTH", "1"))
-        # minimum_result_char_limit: if explicitly set use that, otherwise check env var
-        if minimum_result_char_limit is not None:
-            self.minimum_result_char_limit = minimum_result_char_limit
-        else:
-            self.minimum_result_char_limit = int(os.environ.get("DATAFLOW_MINIMUM_RESULT_CHAR_LIMIT", "0"))
-        # cache_enabled: if explicitly set use that, otherwise check env var
-        if cache_enabled is not None:
-            self.cache_enabled = cache_enabled
-        else:
-            self.cache_enabled = os.environ.get("DATAFLOW_CACHE_ENABLED", "true").lower() == "true"
-        # execution_backend: if explicitly set use that, otherwise check env var
-        if execution_backend is not None:
-            self.execution_backend = execution_backend
-        else:
-            self.execution_backend = os.environ.get("DATAFLOW_EXECUTION_BACKEND", "texera")
-        # latest_only: if explicitly set use that, otherwise check env var
-        if latest_only is not None:
-            self.latest_only = latest_only
-        else:
-            self.latest_only = os.environ.get("DATAFLOW_LATEST_ONLY", "false").lower() == "true"
-        # dynamic_depth_enabled: if explicitly set use that, otherwise check env var
-        if dynamic_depth_enabled is not None:
-            self.dynamic_depth_enabled = dynamic_depth_enabled
-        else:
-            self.dynamic_depth_enabled = os.environ.get("DATAFLOW_DYNAMIC_DEPTH_ENABLED", "false").lower() == "true"
-        # parallel_tool_calls: if explicitly set use that, otherwise check env var
+        self.context_mode = context_mode or os.environ.get("DATAFLOW_CONTEXT_MODE", "latest")
         if parallel_tool_calls is not None:
             self.parallel_tool_calls = parallel_tool_calls
         else:
-            self.parallel_tool_calls = os.environ.get("DATAFLOW_PARALLEL_TOOL_CALLS", "false").lower() == "true"
-        # optional_result_retrieval: if explicitly set use that, otherwise check env var
-        if optional_result_retrieval is not None:
-            self.optional_result_retrieval = optional_result_retrieval
-        else:
-            self.optional_result_retrieval = os.environ.get("DATAFLOW_OPTIONAL_RESULT_RETRIEVAL", "false").lower() == "true"
-        # no_execution_metadata: if explicitly set use that, otherwise check env var
-        if no_execution_metadata is not None:
-            self.no_execution_metadata = no_execution_metadata
-        else:
-            self.no_execution_metadata = os.environ.get("DATAFLOW_NO_EXECUTION_METADATA", "false").lower() == "true"
-        # simplified_tools: if explicitly set use that, otherwise check env var
-        if simplified_tools is not None:
-            self.simplified_tools = simplified_tools
-        else:
-            self.simplified_tools = os.environ.get("DATAFLOW_SIMPLIFIED_TOOLS", "false").lower() == "true"
-        # no_action_detail: if explicitly set use that, otherwise check env var
-        if no_action_detail is not None:
-            self.no_action_detail = no_action_detail
-        else:
-            self.no_action_detail = os.environ.get("DATAFLOW_NO_ACTION_DETAIL", "false").lower() == "true"
-        # no_log_fallback: if explicitly set use that, otherwise check env var
-        if no_log_fallback is not None:
-            self.no_log_fallback = no_log_fallback
-        else:
-            self.no_log_fallback = os.environ.get("DATAFLOW_NO_LOG_FALLBACK", "false").lower() == "true"
-        # carry_metadata: if explicitly set use that, otherwise check env var
-        if carry_metadata is not None:
-            self.carry_metadata = carry_metadata
-        else:
-            self.carry_metadata = os.environ.get("DATAFLOW_CARRY_METADATA", "false").lower() == "true"
-        # collect_react_steps: if explicitly set use that, otherwise check env var
-        if collect_react_steps is not None:
-            self.collect_react_steps = collect_react_steps
-        else:
-            self.collect_react_steps = os.environ.get("DATAFLOW_COLLECT_REACT_STEPS", "false").lower() == "true"
+            self.parallel_tool_calls = os.environ.get("DATAFLOW_PARALLEL_TOOL_CALLS", "true").lower() == "true"
+        self.allowed_operator_types = allowed_operator_types
+        self.disabled_tools = disabled_tools
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -260,7 +178,7 @@ class DataflowSystem(System):
         """Initialize and setup the DataflowAgent."""
         if self.verbose:
             print(f"[DataflowSystem] Setting up agent with model: {self.model_type}")
-            print(f"[DataflowSystem] Agent settings: max_steps={self.max_steps}, mode={self.agent_mode}, fine_grained={self.fine_grained_prompt}")
+            print(f"[DataflowSystem] Agent settings: max_steps={self.max_steps}, mode={self.agent_mode}, context_mode={self.context_mode}")
 
         self.agent = DataflowAgent(
             model_type=self.model_type,
@@ -271,21 +189,10 @@ class DataflowSystem(System):
             tool_timeout_seconds=self.tool_timeout_seconds,
             execution_timeout_minutes=self.execution_timeout_minutes,
             agent_mode=self.agent_mode,
-            fine_grained_prompt=self.fine_grained_prompt,
-            enable_context_optimization=self.enable_context_optimization,
-            frontier_depth=self.frontier_depth,
-            minimum_result_char_limit=self.minimum_result_char_limit,
-            cache_enabled=self.cache_enabled,
-            execution_backend=self.execution_backend,
-            latest_only=self.latest_only,
-            dynamic_depth_enabled=self.dynamic_depth_enabled,
+            context_mode=self.context_mode,
             parallel_tool_calls=self.parallel_tool_calls,
-            optional_result_retrieval=self.optional_result_retrieval,
-            no_execution_metadata=self.no_execution_metadata,
-            simplified_tools=self.simplified_tools,
-            no_action_detail=self.no_action_detail,
-            no_log_fallback=self.no_log_fallback,
-            carry_metadata=self.carry_metadata,
+            allowed_operator_types=self.allowed_operator_types,
+            disabled_tools=self.disabled_tools,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -392,21 +299,10 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "tool_timeout_seconds": self.tool_timeout_seconds,
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "agent_mode": self.agent_mode,
-                "fine_grained_prompt": self.fine_grained_prompt,
-                "enable_context_optimization": self.enable_context_optimization,
-                "frontier_depth": self.frontier_depth,
-                "minimum_result_char_limit": self.minimum_result_char_limit,
-                "cache_enabled": self.cache_enabled,
-                "execution_backend": self.execution_backend,
-                "latest_only": self.latest_only,
-                "dynamic_depth_enabled": self.dynamic_depth_enabled,
+                "context_mode": self.context_mode,
                 "parallel_tool_calls": self.parallel_tool_calls,
-                "optional_result_retrieval": self.optional_result_retrieval,
-                "no_execution_metadata": self.no_execution_metadata,
-                "simplified_tools": self.simplified_tools,
-                "no_action_detail": self.no_action_detail,
-                "no_log_fallback": self.no_log_fallback,
-                "carry_metadata": self.carry_metadata,
+                "allowed_operator_types": self.allowed_operator_types,
+                "disabled_tools": self.disabled_tools,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -449,18 +345,33 @@ Your last line MUST BE: **Final Answer: <value>**"""
             }
         elapsed_seconds = time.time() - start_time
 
-        # Save response and messages for debugging
+        # Save response for debugging
         response_path = os.path.join(query_output_dir, "response.txt")
         with open(response_path, "w") as f:
             f.write(result.response or "(empty response)")
 
-        messages_path = os.path.join(query_output_dir, "messages.json")
-        with open(messages_path, "w") as f:
-            json.dump(result.messages, f, indent=2, default=str)
+        # Fetch the full ReAct trace from the agent — this replaces the old
+        # `messages.json` export. We always save it so every trace is auditable.
+        react_data: Dict = {}
+        react_steps: List[Dict] = []
+        try:
+            react_data = get_agent_react_steps(
+                agent_id=self.agent.agent_id,
+                agent_endpoint=self.agent.agent_service_endpoint,
+            )
+            react_steps = react_data.get("steps", []) or []
+            react_path = os.path.join(query_output_dir, "react_steps.json")
+            with open(react_path, "w") as f:
+                json.dump(react_data, f, indent=2, default=str)
+            if self.verbose:
+                print(f"[DataflowSystem] React steps saved ({len(react_steps)} steps) to {react_path}")
+        except Exception as e:
+            if self.verbose:
+                print(f"[DataflowSystem] Could not save react steps: {e}")
 
         if self.verbose:
             print(f"[DataflowSystem] Raw response length: {len(result.response) if result.response else 0}")
-            print(f"[DataflowSystem] Messages count: {len(result.messages)}")
+            print(f"[DataflowSystem] React steps count: {len(react_steps)}")
             print(f"[DataflowSystem] Stopped: {result.stopped}, Error: {result.error}")
 
         # Extract token usage
@@ -469,27 +380,16 @@ Your last line MUST BE: **Final Answer: <value>**"""
         token_usage_input = usage.get("input_tokens", 0) or usage.get("inputTokens", 0)
         token_usage_output = usage.get("output_tokens", 0) or usage.get("outputTokens", 0)
 
-        # Count steps (number of assistant turns with tool calls)
-        num_steps = 0
-        if result.messages:
-            for msg in result.messages:
-                if msg.get("role") == "assistant":
-                    content = msg.get("content", [])
-                    # Count as a step if it has tool-call or tool_use
-                    if isinstance(content, list):
-                        has_tool_call = any(
-                            isinstance(item, dict) and item.get("type") in ("tool-call", "tool_use")
-                            for item in content
-                        )
-                        if has_tool_call:
-                            num_steps += 1
-                    elif content:
-                        num_steps += 1
-
-        # Also check stats from agent service if available
+        # Step count: prefer the WS-derived count from MessageResult.stats; fall
+        # back to counting agent steps with tool calls in the ReAct trace.
         stats_from_service = result.stats or {}
-        if stats_from_service.get("steps"):
-            num_steps = stats_from_service.get("steps")
+        num_steps = int(stats_from_service.get("steps") or 0)
+        if num_steps == 0 and react_steps:
+            num_steps = sum(
+                1
+                for s in react_steps
+                if s.get("role") == "agent" and (s.get("toolCalls") or [])
+            )
 
         # Save stats.json
         stats = {
@@ -552,23 +452,6 @@ Your last line MUST BE: **Final Answer: <value>**"""
             if self.verbose:
                 print(f"[DataflowSystem] Could not save workflow: {e}")
 
-        # Save react_steps.json if flag is enabled
-        if self.collect_react_steps:
-            try:
-                react_data = get_agent_react_steps(
-                    agent_id=self.agent.agent_id,
-                    agent_endpoint=self.agent.agent_service_endpoint
-                )
-                react_path = os.path.join(query_output_dir, "react_steps.json")
-                with open(react_path, "w") as f:
-                    json.dump(react_data, f, indent=2, default=str)
-                if self.verbose:
-                    step_count = len(react_data.get("steps", []))
-                    print(f"[DataflowSystem] React steps saved ({step_count} steps) to {react_path}")
-            except Exception as e:
-                if self.verbose:
-                    print(f"[DataflowSystem] Could not save react steps: {e}")
-
         return {
             "explanation": explanation,
             "pipeline_code": "",  # Skip pipeline eval
@@ -592,98 +475,6 @@ Your last line MUST BE: **Final Answer: <value>**"""
         self.cleanup()
 
 
-# Pre-configured variants for different models
-class DataflowSystemHaiku(DataflowSystem):
-    """DataflowSystem using Claude Haiku 4.5 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-haiku-4.5",
-            name="DataflowSystemHaiku",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemSonnet(DataflowSystem):
-    """DataflowSystem using Claude Sonnet 4.5 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-sonnet-4-5",
-            name="DataflowSystemSonnet",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGPT(DataflowSystem):
-    """DataflowSystem using GPT-5-mini model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            name="DataflowSystemGPT",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemSonnet37(DataflowSystem):
-    """DataflowSystem using Claude Sonnet 3.7 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-sonnet-3.7",
-            name="DataflowSystemSonnet37",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemSonnet35(DataflowSystem):
-    """DataflowSystem using Claude Sonnet 3.5 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-sonnet-3.5",
-            name="DataflowSystemSonnet35",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGptO3(DataflowSystem):
-    """DataflowSystem using GPT o3 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="o3",
-            name="DataflowSystemGptO3",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemSonnet4(DataflowSystem):
-    """DataflowSystem using Claude Sonnet 4 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-sonnet-4",
-            name="DataflowSystemSonnet4",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
 class DataflowSystemHaiku45(DataflowSystem):
     """DataflowSystem using Claude Haiku 4.5 model."""
 
@@ -691,252 +482,6 @@ class DataflowSystemHaiku45(DataflowSystem):
         super().__init__(
             model_type="claude-haiku-4.5",
             name="DataflowSystemHaiku45",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemO4Mini(DataflowSystem):
-    """DataflowSystem using OpenAI o4-mini model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="o4-mini",
-            name="DataflowSystemO4Mini",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGemini25Pro(DataflowSystem):
-    """DataflowSystem using Google Gemini 2.5 Pro model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gemini-2.5-pro",
-            name="DataflowSystemGemini25Pro",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52(DataflowSystem):
-    """DataflowSystem using GPT-5.2 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52CtxOptD1(DataflowSystem):
-    """DataflowSystem using GPT-5.2 model with context optimization, frontier depth 1."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52CtxOptD1",
-            enable_context_optimization=True,
-            frontier_depth=1,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52FineGrained(DataflowSystem):
-    """DataflowSystem using GPT-5.2 model with fine-grained (one-line-per-action) prompt."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52FineGrained",
-            fine_grained_prompt=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniHigh(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-high model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-high",
-            name="DataflowSystemGpt5MiniHigh",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniMedium(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-medium model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-medium",
-            name="DataflowSystemGpt5MiniMedium",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniLow(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-low model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-low",
-            name="DataflowSystemGpt5MiniLow",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52FullInput(DataflowSystem):
-    """DataflowSystem using GPT-5.2 model with full input mode (all dataset files via wildcard)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52FullInput",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-    def serve_query(self, query, query_id="default-0", subset_files=None):
-        """Override to always use full input (ignore subset_files)."""
-        return super().serve_query(query, query_id, subset_files=None)
-
-
-class DataflowSystemGpt5MiniMediumCtxOptD1(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-medium with context optimization, frontier depth 1."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-medium",
-            name="DataflowSystemGpt5MiniMediumCtxOptD1",
-            enable_context_optimization=True,
-            frontier_depth=1,
-            minimum_result_char_limit=0,
-            cache_enabled=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniMediumCtxOptD2(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-medium with context optimization, frontier depth 2."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-medium",
-            name="DataflowSystemGpt5MiniMediumCtxOptD2",
-            enable_context_optimization=True,
-            frontier_depth=2,
-            minimum_result_char_limit=0,
-            cache_enabled=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniMediumCtxOptD1Limit1000(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-medium with context optimization, frontier depth 1, trimmed result limit 1000."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-medium",
-            name="DataflowSystemGpt5MiniMediumCtxOptD1Limit1000",
-            enable_context_optimization=True,
-            frontier_depth=1,
-            minimum_result_char_limit=1000,
-            cache_enabled=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniMediumNoCache(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-medium with cache disabled, trimmed result limit 5000."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-medium",
-            name="DataflowSystemGpt5MiniMediumNoCache",
-            cache_enabled=False,
-            minimum_result_char_limit=5000,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52NoActionDetail(DataflowSystem):
-    """DataflowSystem using GPT-5.2 with no-action-detail enabled."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52NoActionDetail",
-            no_action_detail=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt5MiniMediumNoActionDetail(DataflowSystem):
-    """DataflowSystem using GPT-5-mini-medium with no-action-detail enabled."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini-medium",
-            name="DataflowSystemGpt5MiniMediumNoActionDetail",
-            no_action_detail=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52CarryMetadata(DataflowSystem):
-    """DataflowSystem using GPT-5.2 with carry-metadata enabled."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52CarryMetadata",
-            carry_metadata=True,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemGpt52Dagster(DataflowSystem):
-    """DataflowSystem using GPT-5.2 with Dagster execution backend."""
-
-    def __init__(self, verbose=False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="DataflowSystemGpt52Dagster",
-            execution_backend="dagster",
             verbose=verbose,
             *args,
             **kwargs

@@ -152,6 +152,19 @@ def main():
                     "value": parsed_value
                 })
 
+            # Persist the per-task evaluation so the trace folder has a
+            # self-contained verdict alongside the ReAct steps, workflow,
+            # ground truth, and prompt/response.
+            try:
+                task_scratch_dir = os.path.join(system_output_dir, task_id)
+                if os.path.isdir(task_scratch_dir):
+                    eval_dump = {k: v for k, v in task_result.items() if k != "subresponses"}
+                    with open(os.path.join(task_scratch_dir, "evaluation.json"), "w") as ef:
+                        json.dump(eval_dump, ef, indent=2, default=str)
+            except Exception as e:
+                if verbose:
+                    print(f"[evaluate] Could not write evaluation.json for {task_id}: {e}")
+
         results_df = pd.DataFrame(flat_measures)
         results_df.to_csv(measures_path, index=False)
 

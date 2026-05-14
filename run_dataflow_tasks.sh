@@ -3,15 +3,21 @@
 # Kill all child processes on Ctrl+C
 trap 'echo ""; echo "Interrupted! Killing all subprocesses..."; kill 0; exit 1' INT TERM
 
+# Dataflow system settings
 export DATAFLOW_MAX_CELL_CHARS=${DATAFLOW_MAX_CELL_CHARS:-10000}
 export DATAFLOW_MAX_RESULT_CHARS=${DATAFLOW_MAX_RESULT_CHARS:-1000}
 export DATAFLOW_MAX_STEPS=${DATAFLOW_MAX_STEPS:-100}
-export DATAFLOW_FINE_GRAINED_PROMPT=${DATAFLOW_FINE_GRAINED_PROMPT:-false}
-export DATAFLOW_COLLECT_REACT_STEPS=true
+
+# Code agent system settings
+export CODE_AGENT_MAX_STEPS=${CODE_AGENT_MAX_STEPS:-100}
+export CUSTOMIZED_PROMPT_ENABLED=${CUSTOMIZED_PROMPT_ENABLED:-true}
+export FINE_GRAINED_PROMPT_ENABLED=${FINE_GRAINED_PROMPT_ENABLED:-false}
+export CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH=${CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH:-5000}
+export OPENAI_API_KEY=${OPENAI_API_KEY:-dummy}
 
 # Configuration
-# Set SUT to override system under test (default: DataflowSystemHaiku45CtxOptD1Limit500)
-SUT=${SUT:-DataflowSystemHaiku45CtxOptD1Limit500}
+# Set SUT to override system under test (default: DataflowSystemHaiku45)
+SUT=${SUT:-DataflowSystemHaiku45}
 # Set ORACLE_MODE=true to use ground truth subset files (--use_truth_subset)
 # Set ORACLE_MODE=false to use all files in dataset directory
 ORACLE_MODE=${ORACLE_MODE:-true}
@@ -23,8 +29,8 @@ PARALLEL=${PARALLEL:-auto}
 #   Tasks are grouped by workload and run in parallel.
 # Legacy usage also supported: ./run_dataflow_tasks.sh <workload> <task_id> [task_id ...]
 # Example: ./run_dataflow_tasks.sh legal-hard-1 legal-hard-3 astronomy-easy-1
-# Example: SUT=DataflowSystemGpt52ResultChars2000 ./run_dataflow_tasks.sh legal-hard-1
-# Example: PARALLEL=true SUT=DataflowSystemGpt52 ./run_dataflow_tasks.sh legal legal-hard-1 legal-hard-3
+# Example: SUT=DataflowSystemHaiku45 ./run_dataflow_tasks.sh legal-hard-1
+# Example: PARALLEL=true SUT=DataflowSystemHaiku45 ./run_dataflow_tasks.sh legal legal-hard-1 legal-hard-3
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <task_id> [task_id ...]"

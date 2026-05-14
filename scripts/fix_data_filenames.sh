@@ -98,16 +98,19 @@ create_symlink "$WILDFIRE_DIR/nifc_human_caused_acres.csv" "$WILDFIRE_DIR/nifc_h
 echo ""
 
 # -----------------------------------------------------------------------------
-# 2. Astronomy: Create omni2.txt symlink pointing to omni2.text
+# 2. Astronomy: Create symlinks for misnamed files
 # -----------------------------------------------------------------------------
-echo "2. Astronomy domain - create omni2.txt symlink to omni2.text"
+echo "2. Astronomy domain - create symlinks for misnamed files"
 ASTRONOMY_DIR="$PROJECT_ROOT/data/astronomy/input"
 
-# First, undo any previous renames
+# omni2.txt -> omni2.text
 restore_rename "$ASTRONOMY_DIR/omni2_low_res/omni2.text" "$ASTRONOMY_DIR/omni2_low_res/omni2.txt"
-
-# Create symlink
 create_symlink "$ASTRONOMY_DIR/omni2_low_res/omni2.text" "$ASTRONOMY_DIR/omni2_low_res/omni2.txt"
+
+# NOTE: STORM-AI and swarm/POD files have workload definition bugs:
+# - STORM-AI: workload references wrong date ranges (files exist with different dates)
+# - swarm/POD: workload pattern uses T???? (4 chars) but files have T?????? (6 chars)
+# These require workload fixes, not file symlinks.
 
 echo ""
 

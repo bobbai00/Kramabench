@@ -106,6 +106,31 @@ results/aggregated_results.csv                      # one-row-per-domain summary
 
 ---
 
+## Session-Based Benchmark
+
+KramaBench also supports **session-based evaluation** where multiple queries (subtasks) are executed sequentially while maintaining agent state between queries. This tests an agent's ability to build upon previous work within a session.
+
+```bash
+# Run with CodeAgentSession (code-generating agent)
+python evaluate_sessions.py --system CodeAgentSession --workload environment
+
+# Run with DataflowAgentSession (Texera dataflow agent)
+python evaluate_sessions.py --system DataflowAgentSession --workload biomedical
+
+# With verbose output
+python evaluate_sessions.py --system CodeAgentSession --workload legal --verbose
+
+# Run specific tasks
+python evaluate_sessions.py --system DataflowAgentSession --workload astronomy --task astronomy-easy-1
+```
+
+Session metrics include:
+- **Chain accuracy**: Fraction of subtasks answered correctly
+- **Final score**: Accuracy of the final answer
+- **All correct**: Whether all subtasks and final answer are correct
+
+---
+
 ## Dataset availability
 The dataset can be also found on HuggingFace at [this link](https://huggingface.co/datasets/eugenie-y/KramaBench)
 To use it in your scripts run 
