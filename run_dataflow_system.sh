@@ -3,9 +3,9 @@
 # Kill all child processes on Ctrl+C
 trap 'echo ""; echo "Interrupted! Killing all subprocesses..."; kill 0; exit 1' INT TERM
 
-export DATAFLOW_MAX_CELL_CHARS=10000
-export DATAFLOW_MAX_RESULT_CHARS=1000
-export DATAFLOW_MAX_STEPS=100
+# Dataflow system configuration lives entirely in systems/dataflow_system.py.
+# To override settings for a run, define a subclass there (e.g. DataflowSystemHaiku45)
+# rather than exporting env vars.
 
 # Configuration
 SUT=${SUT:-DataflowSystemHaiku45}

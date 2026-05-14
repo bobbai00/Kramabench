@@ -47,22 +47,22 @@ class DataflowSystem(System):
         """
         Initialize the DataflowSystem.
 
-        Parameters can be set via:
-        1. Constructor arguments
-        2. Environment variables (DATAFLOW_MODEL_TYPE, DATAFLOW_MAX_STEPS, etc.)
-        3. Defaults
+        Configuration flows from constructor arguments only — subclasses
+        (e.g. DataflowSystemHaiku45) pin model-specific values; any caller
+        can override per-instance by passing kwargs. Class-level defaults
+        live in this method body.
 
         Args:
-            model_type: LLM model type (env: DATAFLOW_MODEL_TYPE, default: claude-haiku-4.5)
-            max_steps: Maximum steps per query (env: DATAFLOW_MAX_STEPS, default: 100)
-            max_operator_result_char_limit: Max chars for operator results (env: DATAFLOW_MAX_RESULT_CHARS, default: 2000)
-            max_operator_result_cell_char_limit: Max chars per cell (env: DATAFLOW_MAX_CELL_CHARS, default: 2000)
-            operator_result_serialization_mode: Result format (env: DATAFLOW_SERIALIZATION_MODE, default: tsv)
-            tool_timeout_seconds: Tool timeout (env: DATAFLOW_TOOL_TIMEOUT, default: 240)
-            execution_timeout_minutes: Execution timeout (env: DATAFLOW_EXEC_TIMEOUT, default: 4)
-            agent_mode: Agent mode (env: DATAFLOW_AGENT_MODE, default: code)
-            context_mode: Context selection policy (env: DATAFLOW_CONTEXT_MODE, default: latest)
-            parallel_tool_calls: Allow parallel tool calls (env: DATAFLOW_PARALLEL_TOOL_CALLS, default: true)
+            model_type: LLM model type (default: claude-haiku-4.5)
+            max_steps: Maximum steps per query (default: 50)
+            max_operator_result_char_limit: Max chars for operator results (default: 1000)
+            max_operator_result_cell_char_limit: Max chars per cell (default: 5000)
+            operator_result_serialization_mode: Result format (default: tsv)
+            tool_timeout_seconds: Tool timeout (default: 240)
+            execution_timeout_minutes: Execution timeout (default: 4)
+            agent_mode: Agent mode (default: code)
+            context_mode: Context selection policy (default: latest)
+            parallel_tool_calls: Allow parallel tool calls (default: True)
             allowed_operator_types: Optional whitelist of operator types; None uses server default
             disabled_tools: Optional list of tool names to disable
             verbose: Enable verbose logging
@@ -70,20 +70,16 @@ class DataflowSystem(System):
         """
         super().__init__(name, verbose=verbose, *args, **kwargs)
 
-        # Read from env vars with fallback to defaults
-        self.model_type = model_type or os.environ.get("DATAFLOW_MODEL_TYPE", "claude-haiku-4.5")
-        self.max_steps = max_steps or int(os.environ.get("DATAFLOW_MAX_STEPS", "100"))
-        self.max_operator_result_char_limit = max_operator_result_char_limit or int(os.environ.get("DATAFLOW_MAX_RESULT_CHARS", "2000"))
-        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or int(os.environ.get("DATAFLOW_MAX_CELL_CHARS", "2000"))
-        self.operator_result_serialization_mode = operator_result_serialization_mode or os.environ.get("DATAFLOW_SERIALIZATION_MODE", "tsv")
-        self.tool_timeout_seconds = tool_timeout_seconds or int(os.environ.get("DATAFLOW_TOOL_TIMEOUT", "240"))
-        self.execution_timeout_minutes = execution_timeout_minutes or int(os.environ.get("DATAFLOW_EXEC_TIMEOUT", "4"))
-        self.agent_mode = agent_mode or os.environ.get("DATAFLOW_AGENT_MODE", "code")
-        self.context_mode = context_mode or os.environ.get("DATAFLOW_CONTEXT_MODE", "latest")
-        if parallel_tool_calls is not None:
-            self.parallel_tool_calls = parallel_tool_calls
-        else:
-            self.parallel_tool_calls = os.environ.get("DATAFLOW_PARALLEL_TOOL_CALLS", "true").lower() == "true"
+        self.model_type = model_type or "claude-haiku-4.5"
+        self.max_steps = max_steps or 50
+        self.max_operator_result_char_limit = max_operator_result_char_limit or 1000
+        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 5000
+        self.operator_result_serialization_mode = operator_result_serialization_mode or "tsv"
+        self.tool_timeout_seconds = tool_timeout_seconds or 240
+        self.execution_timeout_minutes = execution_timeout_minutes or 4
+        self.agent_mode = agent_mode or "code"
+        self.context_mode = context_mode or "latest"
+        self.parallel_tool_calls = True if parallel_tool_calls is None else parallel_tool_calls
         self.allowed_operator_types = allowed_operator_types
         self.disabled_tools = disabled_tools
 
@@ -481,6 +477,8 @@ class DataflowSystemHaiku45(DataflowSystem):
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
             model_type="claude-haiku-4.5",
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=5000,
             name="DataflowSystemHaiku45",
             verbose=verbose,
             *args,

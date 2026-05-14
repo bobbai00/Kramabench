@@ -3,10 +3,8 @@
 # Kill all child processes on Ctrl+C
 trap 'echo ""; echo "Interrupted! Killing all subprocesses..."; kill 0; exit 1' INT TERM
 
-# Dataflow system settings
-export DATAFLOW_MAX_CELL_CHARS=${DATAFLOW_MAX_CELL_CHARS:-10000}
-export DATAFLOW_MAX_RESULT_CHARS=${DATAFLOW_MAX_RESULT_CHARS:-1000}
-export DATAFLOW_MAX_STEPS=${DATAFLOW_MAX_STEPS:-100}
+# Dataflow system configuration lives entirely in systems/dataflow_system.py.
+# To override settings for a run, define a subclass there (e.g. DataflowSystemHaiku45).
 
 # Code agent system settings
 export CODE_AGENT_MAX_STEPS=${CODE_AGENT_MAX_STEPS:-100}
@@ -71,7 +69,6 @@ if [ "$IS_LEGACY" = "true" ]; then
 
     echo "=========================================="
     echo "Running: $SUT | $WORKLOAD | Tasks: ${TASK_IDS[*]}"
-    echo "DATAFLOW_MAX_RESULT_CHARS=$DATAFLOW_MAX_RESULT_CHARS"
     echo "=========================================="
     python evaluate.py --sut "$SUT" --workload "$WORKLOAD" --no_pipeline_eval --verbose --task_id "${TASK_IDS[@]}" $EXTRA_ARGS
     echo ""
@@ -142,7 +139,6 @@ else
             read -ra TASK_IDS <<< "${WORKLOAD_TASKS[$workload]}"
             echo "=========================================="
             echo "Running: $SUT | $workload | Tasks: ${TASK_IDS[*]}"
-            echo "DATAFLOW_MAX_RESULT_CHARS=$DATAFLOW_MAX_RESULT_CHARS"
             echo "=========================================="
             python evaluate.py --sut "$SUT" --workload "$workload" --no_pipeline_eval --verbose --task_id "${TASK_IDS[@]}" $EXTRA_ARGS \
                 | tee "$LOG_DIR/${workload}.log"
