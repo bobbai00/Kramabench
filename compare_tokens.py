@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Compare token usage between two DataflowSystem variants by workload and difficulty."""
+"""Compare token usage between two DataflowSystem variants by workload and difficulty.
+
+Usage:
+    python compare_tokens.py                        # use the SYSTEMS list below
+    python compare_tokens.py <SUT1> <SUT2> ...      # override SYSTEMS from argv
+"""
 
 import json
 import os
@@ -14,10 +19,13 @@ import pandas as pd
 
 SCRATCH_DIR = Path("system_scratch")
 
-# Pricing per million tokens, keyed by model identifier
+# Pricing per million tokens. Keys are the substring used to identify the model
+# from a system name (substring match, longest key wins).
 MODEL_PRICING = {
-    "Gpt52": {"input": 1.75, "output": 14.00},
-    "Gpt5Mini": {"input": 0.25, "output": 2.00},
+    "Gpt52":   {"input": 1.75, "output": 14.00},
+    "Gpt5Mini":{"input": 0.25, "output":  2.00},
+    "GPT5Mini":{"input": 0.25, "output":  2.00},
+    "Haiku45": {"input": 1.00, "output":  5.00},
 }
 
 # Default pricing (GPT-5.2)
@@ -198,6 +206,11 @@ def safe_trim_mean(values: list[float]) -> float:
 
 
 def main():
+    global SYSTEMS
+    # Allow ad-hoc system lists via argv without editing the module header.
+    if len(sys.argv) > 1:
+        SYSTEMS = sys.argv[1:]
+
     all_data = {}
     for sys_name in SYSTEMS:
         all_data[sys_name] = load_stats(sys_name)
