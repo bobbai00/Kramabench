@@ -39,6 +39,7 @@ class DataflowSystem(System):
         parallel_tool_calls: bool = None,
         allowed_operator_types: Optional[List[str]] = None,
         disabled_tools: Optional[List[str]] = None,
+        stats_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -82,6 +83,7 @@ class DataflowSystem(System):
         self.parallel_tool_calls = True if parallel_tool_calls is None else parallel_tool_calls
         self.allowed_operator_types = allowed_operator_types
         self.disabled_tools = disabled_tools
+        self.stats_enabled = stats_enabled
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -121,8 +123,18 @@ class DataflowSystem(System):
         # Try to load format hints
         self._load_format_hints(dataset_directory)
 
-        # Initialize the agent
-        self._setup_agent()
+        # Initialize the agent. Best-effort: when `evaluate.py --use_system_cache`
+        # short-circuits to the cached response file, `serve_query` is never
+        # called and the agent isn't actually needed. Don't make scoring-only
+        # runs fall over just because the JVM stack happens to be down.
+        try:
+            self._setup_agent()
+        except Exception as e:
+            if self.verbose:
+                print(f"[DataflowSystem] Agent setup failed ({e}); proceeding "
+                      f"without live agent. Live serve_query calls will fail; "
+                      f"this is safe when --use_system_cache is in effect.")
+            self.agent = None
 
     def _load_workload(self, dataset_directory: str) -> None:
         """Load workload files to enable ground truth saving."""
@@ -189,6 +201,7 @@ class DataflowSystem(System):
             parallel_tool_calls=self.parallel_tool_calls,
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
+            stats_enabled=self.stats_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -299,6 +312,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "parallel_tool_calls": self.parallel_tool_calls,
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
+                "stats_enabled": self.stats_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -499,3 +513,69 @@ class DataflowSystemGPT5Mini(DataflowSystem):
             *args,
             **kwargs
         )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Haiku-4.5 × {context-mode, stats} matrix — 3 × 2 = 6 variants.
+# Each subclass pins one combination so the benchmark can sweep both
+# dimensions by name (no env vars required). All other agent parameters
+# follow `DataflowSystemHaiku45`'s defaults.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _Haiku45Variant(DataflowSystem):
+    """Base for the Haiku 4.5 sweep — subclasses only override name + the
+    `context_mode` / `stats_enabled` pair so the matrix stays declarative."""
+
+    _CONTEXT_MODE: str = "latest"
+    _STATS_ENABLED: bool = False
+    _NAME: str = "DataflowSystemHaiku45"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=5000,
+            context_mode=self._CONTEXT_MODE,
+            stats_enabled=self._STATS_ENABLED,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs
+        )
+
+
+class DataflowSystemHaiku45LatestStatsOff(_Haiku45Variant):
+    _CONTEXT_MODE = "latest"
+    _STATS_ENABLED = False
+    _NAME = "DataflowSystemHaiku45LatestStatsOff"
+
+
+class DataflowSystemHaiku45LatestStatsOn(_Haiku45Variant):
+    _CONTEXT_MODE = "latest"
+    _STATS_ENABLED = True
+    _NAME = "DataflowSystemHaiku45LatestStatsOn"
+
+
+class DataflowSystemHaiku45DeltaStatsOff(_Haiku45Variant):
+    _CONTEXT_MODE = "delta"
+    _STATS_ENABLED = False
+    _NAME = "DataflowSystemHaiku45DeltaStatsOff"
+
+
+class DataflowSystemHaiku45DeltaStatsOn(_Haiku45Variant):
+    _CONTEXT_MODE = "delta"
+    _STATS_ENABLED = True
+    _NAME = "DataflowSystemHaiku45DeltaStatsOn"
+
+
+class DataflowSystemHaiku45FullStatsOff(_Haiku45Variant):
+    _CONTEXT_MODE = "full"
+    _STATS_ENABLED = False
+    _NAME = "DataflowSystemHaiku45FullStatsOff"
+
+
+class DataflowSystemHaiku45FullStatsOn(_Haiku45Variant):
+    _CONTEXT_MODE = "full"
+    _STATS_ENABLED = True
+    _NAME = "DataflowSystemHaiku45FullStatsOn"

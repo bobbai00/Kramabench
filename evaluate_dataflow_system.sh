@@ -129,7 +129,22 @@ for w in workloads:
     for tid in task_order:
         td = f"{scratch}/{tid}"
         if not os.path.isdir(td):
-            missing.append(tid); continue
+            # Insert a stub entry so the cache stays parallel to the workload
+            # task order. evaluate.py iterates `workload[i]` and indexes
+            # `responses[i]` (benchmark.py:347), so a "missing" hole would
+            # trip an IndexError. The stub scores 0 for every metric — the
+            # honest read of "we never produced an answer".
+            fresh.append({
+                "task_id": tid,
+                "model_output": {"id": "main-task", "answer": "No response from agent"},
+                "code": "",
+                "token_usage_sut": 0,
+                "token_usage_sut_input": 0,
+                "token_usage_sut_output": 0,
+                "runtime": 0.0,
+            })
+            missing.append(tid)
+            continue
         entry, used_answer_json = build_entry(td, tid)
         fresh.append(entry)
         if used_answer_json:

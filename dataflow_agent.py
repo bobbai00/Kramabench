@@ -67,6 +67,7 @@ class AgentSettings:
     context_mode: str = AGENT_CONTEXT_MODE  # "full", "delta", or "latest"
     parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS
     allowed_operator_types: Optional[list[str]] = None  # None -> server default
+    stats_enabled: bool = False  # Render `Column stats:` block per non-error result.
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -81,6 +82,7 @@ class AgentSettings:
             "agentMode": self.agent_mode,
             "contextMode": self.context_mode,
             "parallelToolCalls": self.parallel_tool_calls,
+            "statsEnabled": self.stats_enabled,
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
@@ -643,6 +645,7 @@ class DataflowAgent:
             context_mode: str = AGENT_CONTEXT_MODE,
             parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS,
             allowed_operator_types: Optional[list[str]] = None,
+            stats_enabled: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -689,6 +692,7 @@ class DataflowAgent:
             context_mode=context_mode,
             parallel_tool_calls=parallel_tool_calls,
             allowed_operator_types=allowed_operator_types,
+            stats_enabled=stats_enabled,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
