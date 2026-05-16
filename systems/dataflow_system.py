@@ -484,3 +484,18 @@ class DataflowSystemHaiku45(DataflowSystem):
             *args,
             **kwargs
         )
+
+
+class DataflowSystemGPT5Mini(DataflowSystem):
+    """DataflowSystem using GPT-5 Mini model."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=5000,
+            name="DataflowSystemGPT5Mini",
+            verbose=verbose,
+            *args,
+            **kwargs
+        )

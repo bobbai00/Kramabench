@@ -23,6 +23,15 @@ set -euo pipefail
 SUT=${SUT:-DataflowSystemHaiku45}
 WORKLOADS=("archeology" "astronomy" "biomedical" "environment" "legal" "wildfire")
 
+# Allow overriding the workload set, e.g.
+#   WORKLOADS_OVERRIDE="legal environment" ./evaluate_dataflow_system.sh
+# Useful when only some workloads have scratch on disk; otherwise the script
+# would build empty caches and the harness would IndexError on the missing
+# domains.
+if [ -n "${WORKLOADS_OVERRIDE:-}" ]; then
+    read -ra WORKLOADS <<< "$WORKLOADS_OVERRIDE"
+fi
+
 # Use the project venv if it exists so the script works even when the caller
 # hasn't activated it (e.g. background watchers).  Fall back to whatever
 # `python` resolves to on PATH otherwise.
