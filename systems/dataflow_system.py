@@ -40,6 +40,8 @@ class DataflowSystem(System):
         allowed_operator_types: Optional[List[str]] = None,
         disabled_tools: Optional[List[str]] = None,
         stats_enabled: bool = False,
+        recent_events_cap: Optional[int] = None,
+        include_code_in_recent_events: Optional[bool] = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -57,7 +59,7 @@ class DataflowSystem(System):
             model_type: LLM model type (default: claude-haiku-4.5)
             max_steps: Maximum steps per query (default: 50)
             max_operator_result_char_limit: Max chars for operator results (default: 1000)
-            max_operator_result_cell_char_limit: Max chars per cell (default: 5000)
+            max_operator_result_cell_char_limit: Max chars per cell (default: 2000)
             operator_result_serialization_mode: Result format (default: tsv)
             tool_timeout_seconds: Tool timeout (default: 240)
             execution_timeout_minutes: Execution timeout (default: 4)
@@ -74,7 +76,7 @@ class DataflowSystem(System):
         self.model_type = model_type or "claude-haiku-4.5"
         self.max_steps = max_steps or 50
         self.max_operator_result_char_limit = max_operator_result_char_limit or 1000
-        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 5000
+        self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 2000
         self.operator_result_serialization_mode = operator_result_serialization_mode or "tsv"
         self.tool_timeout_seconds = tool_timeout_seconds or 240
         self.execution_timeout_minutes = execution_timeout_minutes or 4
@@ -84,6 +86,8 @@ class DataflowSystem(System):
         self.allowed_operator_types = allowed_operator_types
         self.disabled_tools = disabled_tools
         self.stats_enabled = stats_enabled
+        self.recent_events_cap = recent_events_cap
+        self.include_code_in_recent_events = include_code_in_recent_events
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -202,6 +206,8 @@ class DataflowSystem(System):
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
             stats_enabled=self.stats_enabled,
+            recent_events_cap=self.recent_events_cap,
+            include_code_in_recent_events=self.include_code_in_recent_events,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -313,6 +319,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
                 "stats_enabled": self.stats_enabled,
+                "recent_events_cap": self.recent_events_cap,
+                "include_code_in_recent_events": self.include_code_in_recent_events,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -492,7 +500,7 @@ class DataflowSystemHaiku45(DataflowSystem):
         super().__init__(
             model_type="claude-haiku-4.5",
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=5000,
+            max_operator_result_cell_char_limit=2000,
             name="DataflowSystemHaiku45",
             verbose=verbose,
             *args,
@@ -507,7 +515,7 @@ class DataflowSystemGPT5Mini(DataflowSystem):
         super().__init__(
             model_type="gpt-5-mini",
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=5000,
+            max_operator_result_cell_char_limit=2000,
             name="DataflowSystemGPT5Mini",
             verbose=verbose,
             *args,
@@ -535,7 +543,7 @@ class _Haiku45Variant(DataflowSystem):
         super().__init__(
             model_type="claude-haiku-4.5",
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=5000,
+            max_operator_result_cell_char_limit=2000,
             context_mode=self._CONTEXT_MODE,
             stats_enabled=self._STATS_ENABLED,
             name=self._NAME,
@@ -579,3 +587,129 @@ class DataflowSystemHaiku45FullStatsOn(_Haiku45Variant):
     _CONTEXT_MODE = "full"
     _STATS_ENABLED = True
     _NAME = "DataflowSystemHaiku45FullStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# GPT family × {latest, delta} with stats=on. Pins gpt-5-mini and gpt-5.2
+# from the LiteLLM catalogue so the benchmark can sweep models alongside
+# the Haiku 4.5 matrix above. Stats are on for all four — the comparison
+# is purely about model × context-mode at the same render configuration.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTStatsOnVariant(DataflowSystem):
+    """Base for the GPT-family stats-on sweep. Subclasses pin model + context."""
+
+    _MODEL_TYPE: str = "gpt-5-mini"
+    _CONTEXT_MODE: str = "latest"
+    _NAME: str = "DataflowSystem"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type=self._MODEL_TYPE,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=2000,
+            context_mode=self._CONTEXT_MODE,
+            stats_enabled=True,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestStatsOn(_GPTStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _CONTEXT_MODE = "latest"
+    _NAME = "DataflowSystemGPT5MiniLatestStatsOn"
+
+
+class DataflowSystemGPT5MiniDeltaStatsOn(_GPTStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _CONTEXT_MODE = "delta"
+    _NAME = "DataflowSystemGPT5MiniDeltaStatsOn"
+
+
+class DataflowSystemGPT52LatestStatsOn(_GPTStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _CONTEXT_MODE = "latest"
+    _NAME = "DataflowSystemGPT52LatestStatsOn"
+
+
+class DataflowSystemGPT52DeltaStatsOn(_GPTStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _CONTEXT_MODE = "delta"
+    _NAME = "DataflowSystemGPT52DeltaStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Recent-events-cap variants for the GPT family. Each pins a small
+# `recent_events_cap` so the agent's prompt only sees the last N ReActStep
+# events at any turn; code is preserved for those kept events. Used to
+# probe the over-exploration / step-cap regression mode where many small
+# operators accumulate context cost across long traces.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTStatsOnRecent5Variant(_GPTStatsOnVariant):
+    """Variant base that pins recent_events_cap=5 + code restoration."""
+
+    _RECENT_EVENTS_CAP: int = 5
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("recent_events_cap", self._RECENT_EVENTS_CAP)
+        kwargs.setdefault("include_code_in_recent_events", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT5MiniLatestStatsOnRecent5(_GPTStatsOnRecent5Variant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _CONTEXT_MODE = "latest"
+    _NAME = "DataflowSystemGPT5MiniLatestStatsOnRecent5"
+
+
+class DataflowSystemGPT52LatestStatsOnRecent5(_GPTStatsOnRecent5Variant):
+    _MODEL_TYPE = "gpt-5.2"
+    _CONTEXT_MODE = "latest"
+    _NAME = "DataflowSystemGPT52LatestStatsOnRecent5"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# GPT 5.2 × {Cap0, Cap1, Cap2, Cap3} — Latest mode + stats on, varying the
+# recentEventsCap. Used to explore how aggressively bounding rendered
+# event history affects token cost vs. accuracy on the thrash workloads
+# (wildfire / environment / legal).
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPT52LatestStatsOnCapVariant(_GPTStatsOnVariant):
+    """GPT 5.2 + Latest + stats=on, with a configurable recent_events_cap."""
+
+    _MODEL_TYPE = "gpt-5.2"
+    _CONTEXT_MODE = "latest"
+    _RECENT_EVENTS_CAP: int = 0
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("recent_events_cap", self._RECENT_EVENTS_CAP)
+        kwargs.setdefault("include_code_in_recent_events", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT52LatestStatsOnCap0(_GPT52LatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 0
+    _NAME = "DataflowSystemGPT52LatestStatsOnCap0"
+
+
+class DataflowSystemGPT52LatestStatsOnCap1(_GPT52LatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 1
+    _NAME = "DataflowSystemGPT52LatestStatsOnCap1"
+
+
+class DataflowSystemGPT52LatestStatsOnCap2(_GPT52LatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 2
+    _NAME = "DataflowSystemGPT52LatestStatsOnCap2"
+
+
+class DataflowSystemGPT52LatestStatsOnCap3(_GPT52LatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 3
+    _NAME = "DataflowSystemGPT52LatestStatsOnCap3"

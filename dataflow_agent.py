@@ -68,6 +68,13 @@ class AgentSettings:
     parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS
     allowed_operator_types: Optional[list[str]] = None  # None -> server default
     stats_enabled: bool = False  # Render `Column stats:` block per non-error result.
+    # Hard cap on how many of the most-recent ReActStep events are rendered
+    # into the assembled context. None -> server default (10000 = effectively off).
+    # A small finite value (e.g. 5) bounds context size for long traces.
+    recent_events_cap: Optional[int] = None
+    # When the cap is in effect, include the full `code` parameter of each
+    # kept createOrModifyOperator action in the rendered context. None -> server default (true).
+    include_code_in_recent_events: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -86,6 +93,10 @@ class AgentSettings:
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
+        if self.recent_events_cap is not None:
+            payload["recentEventsCap"] = self.recent_events_cap
+        if self.include_code_in_recent_events is not None:
+            payload["includeCodeInRecentEvents"] = self.include_code_in_recent_events
         return payload
 
 
@@ -646,6 +657,8 @@ class DataflowAgent:
             parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS,
             allowed_operator_types: Optional[list[str]] = None,
             stats_enabled: bool = False,
+            recent_events_cap: Optional[int] = None,
+            include_code_in_recent_events: Optional[bool] = None,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -693,6 +706,8 @@ class DataflowAgent:
             parallel_tool_calls=parallel_tool_calls,
             allowed_operator_types=allowed_operator_types,
             stats_enabled=stats_enabled,
+            recent_events_cap=recent_events_cap,
+            include_code_in_recent_events=include_code_in_recent_events,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
