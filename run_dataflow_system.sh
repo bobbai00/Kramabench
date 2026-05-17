@@ -23,6 +23,12 @@ PARALLEL=${PARALLEL:-false}
 WORKLOADS=("legal" "environment" "wildfire" "astronomy" "archeology" "biomedical")
 # WORKLOADS=("environment" "wildfire" "astronomy" "biomedical")
 
+# Allow ad-hoc override of the workload list via env (space-separated names)
+# without editing the script. e.g. WORKLOADS_OVERRIDE="legal environment wildfire".
+if [ -n "$WORKLOADS_OVERRIDE" ]; then
+    read -ra WORKLOADS <<< "$WORKLOADS_OVERRIDE"
+fi
+
 # Build extra arguments based on mode
 EXTRA_ARGS=""
 if [ "$ORACLE_MODE" = "true" ]; then

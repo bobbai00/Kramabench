@@ -48,13 +48,11 @@ def cost(input_tokens, output_tokens, pricing=None):
     return input_tokens / 1_000_000 * pricing["input"] + output_tokens / 1_000_000 * pricing["output"]
 
 SYSTEMS = [
-    "CodeAgentSystemGpt52",
-    "DataflowSystemGpt52ResultChars5000",
-    "DataflowSystemGpt52ResultChars5000Hamilton",
-    "DataflowSystemGpt52ResultChars5000LatestOnly",
-    "DataflowSystemGpt52ResultChars5000OptionalResultRetrieval",
-    "DataflowSystemGpt52ResultChars5000ParallelToolCalls",
-    "DataflowSystemGpt52ResultChars5000ParallelOptionalRetrieval"
+    # "CodeAgentSystemGpt52",
+    "DataflowSystemGPT5MiniDeltaStatsOn",
+    "DataflowSystemGPT5MiniLatestStatsOn",
+    "DataflowSystemGPT52DeltaStatsOn",
+    "DataflowSystemGPT52LatestStatsOn",
 ]
 
 # SYSTEMS = [
