@@ -715,6 +715,19 @@ class DataflowSystemGPT52LatestStatsOnCap3(_GPT52LatestStatsOnCapVariant):
     _NAME = "DataflowSystemGPT52LatestStatsOnCap3"
 
 
+# Patch1 duplicates: same model / context / cap settings as Cap0 and Cap1
+# above, just under distinct _NAME slots so results land in their own
+# `results/{SUT}/...` directories during A/B testing.
+class DataflowSystemGPT52LatestStatsOnCap0Patch1(_GPT52LatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 0
+    _NAME = "DataflowSystemGPT52LatestStatsOnCap0Patch1"
+
+
+class DataflowSystemGPT52LatestStatsOnCap1Patch1(_GPT52LatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 1
+    _NAME = "DataflowSystemGPT52LatestStatsOnCap1Patch1"
+
+
 # ────────────────────────────────────────────────────────────────────────
 # GPT-5-mini × {Cap0, Cap1, Cap2} — Latest mode + stats on, mirroring the
 # GPT-5.2 cap sweep above so the two models can be compared directly on

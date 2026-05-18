@@ -23,6 +23,8 @@ from .dataflow_system import (
     DataflowSystemGPT52LatestStatsOnCap1,
     DataflowSystemGPT52LatestStatsOnCap2,
     DataflowSystemGPT52LatestStatsOnCap3,
+    DataflowSystemGPT52LatestStatsOnCap0Patch1,
+    DataflowSystemGPT52LatestStatsOnCap1Patch1,
     DataflowSystemGPT5MiniLatestStatsOnCap0,
     DataflowSystemGPT5MiniLatestStatsOnCap1,
     DataflowSystemGPT5MiniLatestStatsOnCap2,
