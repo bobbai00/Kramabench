@@ -713,3 +713,38 @@ class DataflowSystemGPT52LatestStatsOnCap2(_GPT52LatestStatsOnCapVariant):
 class DataflowSystemGPT52LatestStatsOnCap3(_GPT52LatestStatsOnCapVariant):
     _RECENT_EVENTS_CAP = 3
     _NAME = "DataflowSystemGPT52LatestStatsOnCap3"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# GPT-5-mini × {Cap0, Cap1, Cap2} — Latest mode + stats on, mirroring the
+# GPT-5.2 cap sweep above so the two models can be compared directly on
+# the same recent_events_cap grid.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPT5MiniLatestStatsOnCapVariant(_GPTStatsOnVariant):
+    """GPT-5-mini + Latest + stats=on, with a configurable recent_events_cap."""
+
+    _MODEL_TYPE = "gpt-5-mini"
+    _CONTEXT_MODE = "latest"
+    _RECENT_EVENTS_CAP: int = 0
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("recent_events_cap", self._RECENT_EVENTS_CAP)
+        kwargs.setdefault("include_code_in_recent_events", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT5MiniLatestStatsOnCap0(_GPT5MiniLatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 0
+    _NAME = "DataflowSystemGPT5MiniLatestStatsOnCap0"
+
+
+class DataflowSystemGPT5MiniLatestStatsOnCap1(_GPT5MiniLatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 1
+    _NAME = "DataflowSystemGPT5MiniLatestStatsOnCap1"
+
+
+class DataflowSystemGPT5MiniLatestStatsOnCap2(_GPT5MiniLatestStatsOnCapVariant):
+    _RECENT_EVENTS_CAP = 2
+    _NAME = "DataflowSystemGPT5MiniLatestStatsOnCap2"
