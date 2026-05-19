@@ -492,7 +492,7 @@ class DataflowSystemHaiku45(DataflowSystem):
         super().__init__(
             model_type="claude-haiku-4.5",
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
             name="DataflowSystemHaiku45",
             verbose=verbose,
             *args,
@@ -507,7 +507,7 @@ class DataflowSystemGPT5Mini(DataflowSystem):
         super().__init__(
             model_type="gpt-5-mini",
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5Mini",
             verbose=verbose,
             *args,
@@ -535,7 +535,7 @@ class _Haiku45Variant(DataflowSystem):
         super().__init__(
             model_type="claude-haiku-4.5",
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
             context_mode=self._CONTEXT_MODE,
             stats_enabled=self._STATS_ENABLED,
             name=self._NAME,
@@ -600,7 +600,7 @@ class _GPTStatsOnVariant(DataflowSystem):
         super().__init__(
             model_type=self._MODEL_TYPE,
             max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
             context_mode=self._CONTEXT_MODE,
             stats_enabled=True,
             name=self._NAME,
