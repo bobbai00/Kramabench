@@ -40,8 +40,6 @@ class DataflowSystem(System):
         allowed_operator_types: Optional[List[str]] = None,
         disabled_tools: Optional[List[str]] = None,
         stats_enabled: bool = False,
-        recent_events_cap: Optional[int] = None,
-        include_code_in_recent_events: Optional[bool] = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -86,8 +84,6 @@ class DataflowSystem(System):
         self.allowed_operator_types = allowed_operator_types
         self.disabled_tools = disabled_tools
         self.stats_enabled = stats_enabled
-        self.recent_events_cap = recent_events_cap
-        self.include_code_in_recent_events = include_code_in_recent_events
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -206,8 +202,6 @@ class DataflowSystem(System):
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
             stats_enabled=self.stats_enabled,
-            recent_events_cap=self.recent_events_cap,
-            include_code_in_recent_events=self.include_code_in_recent_events,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -319,8 +313,6 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
                 "stats_enabled": self.stats_enabled,
-                "recent_events_cap": self.recent_events_cap,
-                "include_code_in_recent_events": self.include_code_in_recent_events,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -640,124 +632,3 @@ class DataflowSystemGPT52DeltaStatsOn(_GPTStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _CONTEXT_MODE = "delta"
     _NAME = "DataflowSystemGPT52DeltaStatsOn"
-
-
-# ────────────────────────────────────────────────────────────────────────
-# Recent-events-cap variants for the GPT family. Each pins a small
-# `recent_events_cap` so the agent's prompt only sees the last N ReActStep
-# events at any turn; code is preserved for those kept events. Used to
-# probe the over-exploration / step-cap regression mode where many small
-# operators accumulate context cost across long traces.
-# ────────────────────────────────────────────────────────────────────────
-
-
-class _GPTStatsOnRecent5Variant(_GPTStatsOnVariant):
-    """Variant base that pins recent_events_cap=5 + code restoration."""
-
-    _RECENT_EVENTS_CAP: int = 5
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("recent_events_cap", self._RECENT_EVENTS_CAP)
-        kwargs.setdefault("include_code_in_recent_events", True)
-        super().__init__(verbose=verbose, *args, **kwargs)
-
-
-class DataflowSystemGPT5MiniLatestStatsOnRecent5(_GPTStatsOnRecent5Variant):
-    _MODEL_TYPE = "gpt-5-mini"
-    _CONTEXT_MODE = "latest"
-    _NAME = "DataflowSystemGPT5MiniLatestStatsOnRecent5"
-
-
-class DataflowSystemGPT52LatestStatsOnRecent5(_GPTStatsOnRecent5Variant):
-    _MODEL_TYPE = "gpt-5.2"
-    _CONTEXT_MODE = "latest"
-    _NAME = "DataflowSystemGPT52LatestStatsOnRecent5"
-
-
-# ────────────────────────────────────────────────────────────────────────
-# GPT 5.2 × {Cap0, Cap1, Cap2, Cap3} — Latest mode + stats on, varying the
-# recentEventsCap. Used to explore how aggressively bounding rendered
-# event history affects token cost vs. accuracy on the thrash workloads
-# (wildfire / environment / legal).
-# ────────────────────────────────────────────────────────────────────────
-
-
-class _GPT52LatestStatsOnCapVariant(_GPTStatsOnVariant):
-    """GPT 5.2 + Latest + stats=on, with a configurable recent_events_cap."""
-
-    _MODEL_TYPE = "gpt-5.2"
-    _CONTEXT_MODE = "latest"
-    _RECENT_EVENTS_CAP: int = 0
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("recent_events_cap", self._RECENT_EVENTS_CAP)
-        kwargs.setdefault("include_code_in_recent_events", True)
-        super().__init__(verbose=verbose, *args, **kwargs)
-
-
-class DataflowSystemGPT52LatestStatsOnCap0(_GPT52LatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 0
-    _NAME = "DataflowSystemGPT52LatestStatsOnCap0"
-
-
-class DataflowSystemGPT52LatestStatsOnCap1(_GPT52LatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 1
-    _NAME = "DataflowSystemGPT52LatestStatsOnCap1"
-
-
-class DataflowSystemGPT52LatestStatsOnCap2(_GPT52LatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 2
-    _NAME = "DataflowSystemGPT52LatestStatsOnCap2"
-
-
-class DataflowSystemGPT52LatestStatsOnCap3(_GPT52LatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 3
-    _NAME = "DataflowSystemGPT52LatestStatsOnCap3"
-
-
-# Patch1 duplicates: same model / context / cap settings as Cap0 and Cap1
-# above, just under distinct _NAME slots so results land in their own
-# `results/{SUT}/...` directories during A/B testing.
-class DataflowSystemGPT52LatestStatsOnCap0Patch1(_GPT52LatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 0
-    _NAME = "DataflowSystemGPT52LatestStatsOnCap0Patch1"
-
-
-class DataflowSystemGPT52LatestStatsOnCap1Patch1(_GPT52LatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 1
-    _NAME = "DataflowSystemGPT52LatestStatsOnCap1Patch1"
-
-
-# ────────────────────────────────────────────────────────────────────────
-# GPT-5-mini × {Cap0, Cap1, Cap2} — Latest mode + stats on, mirroring the
-# GPT-5.2 cap sweep above so the two models can be compared directly on
-# the same recent_events_cap grid.
-# ────────────────────────────────────────────────────────────────────────
-
-
-class _GPT5MiniLatestStatsOnCapVariant(_GPTStatsOnVariant):
-    """GPT-5-mini + Latest + stats=on, with a configurable recent_events_cap."""
-
-    _MODEL_TYPE = "gpt-5-mini"
-    _CONTEXT_MODE = "latest"
-    _RECENT_EVENTS_CAP: int = 0
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("recent_events_cap", self._RECENT_EVENTS_CAP)
-        kwargs.setdefault("include_code_in_recent_events", True)
-        super().__init__(verbose=verbose, *args, **kwargs)
-
-
-class DataflowSystemGPT5MiniLatestStatsOnCap0(_GPT5MiniLatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 0
-    _NAME = "DataflowSystemGPT5MiniLatestStatsOnCap0"
-
-
-class DataflowSystemGPT5MiniLatestStatsOnCap1(_GPT5MiniLatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 1
-    _NAME = "DataflowSystemGPT5MiniLatestStatsOnCap1"
-
-
-class DataflowSystemGPT5MiniLatestStatsOnCap2(_GPT5MiniLatestStatsOnCapVariant):
-    _RECENT_EVENTS_CAP = 2
-    _NAME = "DataflowSystemGPT5MiniLatestStatsOnCap2"
