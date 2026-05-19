@@ -622,6 +622,12 @@ class DataflowSystemGPT5MiniDeltaStatsOn(_GPTStatsOnVariant):
     _NAME = "DataflowSystemGPT5MiniDeltaStatsOn"
 
 
+class DataflowSystemGPT5MiniFullStatsOn(_GPTStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _CONTEXT_MODE = "full"
+    _NAME = "DataflowSystemGPT5MiniFullStatsOn"
+
+
 class DataflowSystemGPT52LatestStatsOn(_GPTStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _CONTEXT_MODE = "latest"
@@ -632,3 +638,9 @@ class DataflowSystemGPT52DeltaStatsOn(_GPTStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _CONTEXT_MODE = "delta"
     _NAME = "DataflowSystemGPT52DeltaStatsOn"
+
+
+class DataflowSystemGPT52FullStatsOn(_GPTStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _CONTEXT_MODE = "full"
+    _NAME = "DataflowSystemGPT52FullStatsOn"
