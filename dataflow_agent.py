@@ -61,6 +61,7 @@ AGENT_RAW_LOADER_PROVENANCE: Optional[bool] = None
 AGENT_BOUNDED_EXECUTION_GUIDANCE: Optional[bool] = None
 AGENT_CARDINALITY_PRESSURE_GUIDANCE: Optional[bool] = None
 AGENT_ENTITY_KEY_HYGIENE_GUIDANCE: Optional[bool] = None
+AGENT_COMPONENT_GRAIN_GUIDANCE: Optional[bool] = None
 AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
 # Workflow Configuration
@@ -103,6 +104,7 @@ class AgentSettings:
     bounded_execution_guidance: Optional[bool] = None
     cardinality_pressure_guidance: Optional[bool] = None
     entity_key_hygiene_guidance: Optional[bool] = None
+    component_grain_guidance: Optional[bool] = None
     fallback_contract_guidance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
@@ -146,6 +148,8 @@ class AgentSettings:
             payload["cardinalityPressureGuidance"] = self.cardinality_pressure_guidance
         if self.entity_key_hygiene_guidance is not None:
             payload["entityKeyHygieneGuidance"] = self.entity_key_hygiene_guidance
+        if self.component_grain_guidance is not None:
+            payload["componentGrainGuidance"] = self.component_grain_guidance
         if self.fallback_contract_guidance is not None:
             payload["fallbackContractGuidance"] = self.fallback_contract_guidance
         return payload
@@ -732,6 +736,7 @@ class DataflowAgent:
             bounded_execution_guidance: Optional[bool] = AGENT_BOUNDED_EXECUTION_GUIDANCE,
             cardinality_pressure_guidance: Optional[bool] = AGENT_CARDINALITY_PRESSURE_GUIDANCE,
             entity_key_hygiene_guidance: Optional[bool] = AGENT_ENTITY_KEY_HYGIENE_GUIDANCE,
+            component_grain_guidance: Optional[bool] = AGENT_COMPONENT_GRAIN_GUIDANCE,
             fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
@@ -785,6 +790,9 @@ class DataflowAgent:
             entity_key_hygiene_guidance: Ask the server to render general
                 high-cardinality string-key hygiene hints before entity-level
                 grouping, joining, deduplication, or distinct counts
+            component_grain_guidance: Ask the server to render general
+                component-grain hints for high-cardinality string labels whose
+                values may encode sub-entity or sampling-location components
             fallback_contract_guidance: Ask the server to append general
                 fallback-contract rules for dependency/runtime capability failures
             texera_api_endpoint: Texera backend API endpoint
@@ -823,6 +831,7 @@ class DataflowAgent:
             bounded_execution_guidance=bounded_execution_guidance,
             cardinality_pressure_guidance=cardinality_pressure_guidance,
             entity_key_hygiene_guidance=entity_key_hygiene_guidance,
+            component_grain_guidance=component_grain_guidance,
             fallback_contract_guidance=fallback_contract_guidance,
         )
         self.texera_api_endpoint = texera_api_endpoint

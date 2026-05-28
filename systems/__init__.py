@@ -43,6 +43,8 @@ from .dataflow_system import (
     DataflowSystemGPT52LatestCardinalityPressureStatsOn,
     DataflowSystemGPT5MiniLatestEntityKeyHygieneStatsOn,
     DataflowSystemGPT52LatestEntityKeyHygieneStatsOn,
+    DataflowSystemGPT5MiniLatestComponentGrainStatsOn,
+    DataflowSystemGPT52LatestComponentGrainStatsOn,
     DataflowSystemLocalLlm,
 )
 from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow
