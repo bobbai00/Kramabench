@@ -9,6 +9,7 @@ clear history, workflow & react-step retrieval) goes through REST. The chat turn
 """
 
 import time
+import os
 import json
 import requests
 import websocket
@@ -65,6 +66,9 @@ class AgentSettings:
     """Agent settings for API requests (matches agent-service AgentSettingsApi)."""
 
     max_steps: int = AGENT_MAX_STEPS
+    # Convergence guard: max consecutive edits to the same operator before the
+    # next same-operator modify is rejected. 0 = disabled (server no-op default).
+    max_operator_edits: int = 0
     max_operator_result_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CHAR_LIMIT
     max_operator_result_cell_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT
     operator_result_serialization_mode: str = AGENT_OPERATOR_RESULT_SERIALIZATION_MODE
@@ -79,11 +83,22 @@ class AgentSettings:
     # Render each operator's `Properties:` line in the assembled snapshot.
     # None -> server default (true); code operators are stripped regardless.
     include_operator_properties: Optional[bool] = None
+    # Render a compact `Schema:` line (col + type) per result — cheaper
+    # substitute for full column-stats (lever E). False = no-op default.
+    schema_in_result: bool = False
+    # Append a `Loader hint:` remediation line to a failed load-stage operator,
+    # keyed on the exception class (plan4, lever D). False = no-op default.
+    loader_hint: bool = False
+    # Global loader-proliferation budget: max distinct loader ids per source
+    # path before a new loader for that path is rejected (plan5, lever F).
+    # 0 = disabled (no-op default).
+    max_loaders_per_source: int = 0
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
         payload: dict[str, Any] = {
             "maxSteps": self.max_steps,
+            "maxOperatorEdits": self.max_operator_edits,
             "maxOperatorResultCharLimit": self.max_operator_result_char_limit,
             "maxOperatorResultCellCharLimit": self.max_operator_result_cell_char_limit,
             "operatorResultSerializationMode": self.operator_result_serialization_mode,
@@ -94,6 +109,9 @@ class AgentSettings:
             "contextMode": self.context_mode,
             "parallelToolCalls": self.parallel_tool_calls,
             "statsEnabled": self.stats_enabled,
+            "schemaInResult": self.schema_in_result,
+            "loaderHint": self.loader_hint,
+            "maxLoadersPerSource": self.max_loaders_per_source,
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
@@ -411,6 +429,7 @@ def send_message(
         message: str,
         agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
         receive_timeout: int = 600,
+        max_turn_seconds: Optional[float] = None,
 ) -> MessageResult:
     """
     Send a message to an agent via the WebSocket protocol and collect the response.
@@ -446,11 +465,42 @@ def send_message(
         stopped = False
         error: Optional[str] = None
         complete = False
+        turn_start = time.time()
 
         while not complete:
+            # Per-task wall-clock budget (opt-in via max_turn_seconds). On expiry
+            # we gracefully `stop` the turn server-side (so the agent-service
+            # finalizes the partial trace), then stop reading and return with a
+            # timeout marker. The caller (serve_query) still fetches the partial
+            # ReAct trace + workflow via REST and persists them for debugging,
+            # then moves to the next task. This bounds slow-but-streaming tasks
+            # (which emit steps periodically and so never trip the per-recv
+            # `receive_timeout`) and was the cause of multi-hour eval stalls.
+            if max_turn_seconds is not None:
+                remaining = max_turn_seconds - (time.time() - turn_start)
+                if remaining <= 0:
+                    try:
+                        ws.send(json.dumps({"type": "stop"}))
+                    except Exception:
+                        pass
+                    error = (
+                        f"turn budget exceeded ({max_turn_seconds:.0f}s); "
+                        f"partial trace preserved, task abandoned"
+                    )
+                    stopped = True
+                    break
+                try:
+                    ws.settimeout(min(receive_timeout, remaining))
+                except Exception:
+                    pass
             try:
                 raw = ws.recv()
             except websocket.WebSocketTimeoutException:
+                # In budget mode a recv timeout just means "re-check the budget"
+                # (tolerates long silent operator executions up to the budget);
+                # without a budget, keep the original hard-timeout behavior.
+                if max_turn_seconds is not None:
+                    continue
                 error = f"WebSocket recv timed out after {receive_timeout}s"
                 break
             if not raw:
@@ -660,6 +710,7 @@ class DataflowAgent:
             model_type: str = AGENT_MODEL_TYPE,
             driver: Optional[str] = AGENT_DRIVER,
             max_steps: int = AGENT_MAX_STEPS,
+            max_operator_edits: int = 0,
             max_operator_result_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CHAR_LIMIT,
             max_operator_result_cell_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT,
             operator_result_serialization_mode: str = AGENT_OPERATOR_RESULT_SERIALIZATION_MODE,
@@ -672,6 +723,9 @@ class DataflowAgent:
             allowed_operator_types: Optional[list[str]] = None,
             stats_enabled: bool = False,
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
+            schema_in_result: bool = False,
+            loader_hint: bool = False,
+            max_loaders_per_source: int = 0,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -680,6 +734,7 @@ class DataflowAgent:
             workflow_name: str = DEFAULT_WORKFLOW_NAME,
             agent_name: Optional[str] = None,
             verbosity_level: int = 1,
+            max_turn_seconds: Optional[float] = None,
     ):
         """
         Initialize the DataflowAgent.
@@ -714,6 +769,7 @@ class DataflowAgent:
         self.driver = driver
         self.settings = AgentSettings(
             max_steps=max_steps,
+            max_operator_edits=max_operator_edits,
             max_operator_result_char_limit=max_operator_result_char_limit,
             max_operator_result_cell_char_limit=max_operator_result_cell_char_limit,
             operator_result_serialization_mode=operator_result_serialization_mode,
@@ -726,6 +782,9 @@ class DataflowAgent:
             allowed_operator_types=allowed_operator_types,
             stats_enabled=stats_enabled,
             include_operator_properties=include_operator_properties,
+            schema_in_result=schema_in_result,
+            loader_hint=loader_hint,
+            max_loaders_per_source=max_loaders_per_source,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
@@ -735,6 +794,18 @@ class DataflowAgent:
         self.workflow_name = workflow_name
         self.agent_name = agent_name
         self.verbosity_level = verbosity_level
+        # Per-task wall-clock budget (seconds). None/0 = disabled (no-op default,
+        # so the baseline reproduces). Opt in via TEXERA_AGENT_MAX_TURN_SECONDS;
+        # on expiry the turn is gracefully stopped, the partial trace is still
+        # persisted by serve_query (via REST), and the run moves to the next
+        # task — bounds pathological slow/looping tasks without losing the trace.
+        if max_turn_seconds is None:
+            _mts = os.environ.get("TEXERA_AGENT_MAX_TURN_SECONDS")
+            try:
+                max_turn_seconds = float(_mts) if _mts and float(_mts) > 0 else None
+            except ValueError:
+                max_turn_seconds = None
+        self.max_turn_seconds = max_turn_seconds
 
         # State
         self._token: Optional[str] = None
@@ -840,6 +911,7 @@ class DataflowAgent:
             agent_id=self._agent_info.id,
             message=prompt,
             agent_endpoint=self.agent_service_endpoint,
+            max_turn_seconds=self.max_turn_seconds,
         )
 
         # Store the result for later access

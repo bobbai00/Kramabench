@@ -30,6 +30,7 @@ class DataflowSystem(System):
         model_type: str = None,
         driver: str = None,
         max_steps: int = None,
+        max_operator_edits: int = 0,
         max_operator_result_char_limit: int = None,
         max_operator_result_cell_char_limit: int = None,
         operator_result_serialization_mode: str = None,
@@ -42,6 +43,9 @@ class DataflowSystem(System):
         disabled_tools: Optional[List[str]] = None,
         stats_enabled: bool = False,
         include_operator_properties: bool = None,
+        schema_in_result: bool = False,
+        loader_hint: bool = False,
+        max_loaders_per_source: int = 0,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -77,6 +81,10 @@ class DataflowSystem(System):
         # None -> let agent-service auto-derive the driver from model_type.
         self.driver = driver
         self.max_steps = max_steps or 50
+        # Convergence guard: max consecutive same-operator edits before reject.
+        # 0 = disabled (no-op default; baseline reproduces). Kept as-is (not
+        # `or`) so an explicit 0 stays 0.
+        self.max_operator_edits = max_operator_edits
         self.max_operator_result_char_limit = max_operator_result_char_limit or 1000
         self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 2000
         self.operator_result_serialization_mode = operator_result_serialization_mode or "tsv"
@@ -90,6 +98,12 @@ class DataflowSystem(System):
         self.stats_enabled = stats_enabled
         # None -> server default (true).
         self.include_operator_properties = include_operator_properties
+        # Compact `Schema:` line per result (lever E); False = no-op default.
+        self.schema_in_result = schema_in_result
+        # Loader-remediation hint on failed load-stage ops (plan4); no-op default.
+        self.loader_hint = loader_hint
+        # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
+        self.max_loaders_per_source = max_loaders_per_source
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -198,6 +212,7 @@ class DataflowSystem(System):
             model_type=self.model_type,
             driver=self.driver,
             max_steps=self.max_steps,
+            max_operator_edits=self.max_operator_edits,
             max_operator_result_char_limit=self.max_operator_result_char_limit,
             max_operator_result_cell_char_limit=self.max_operator_result_cell_char_limit,
             operator_result_serialization_mode=self.operator_result_serialization_mode,
@@ -210,6 +225,9 @@ class DataflowSystem(System):
             disabled_tools=self.disabled_tools,
             stats_enabled=self.stats_enabled,
             include_operator_properties=self.include_operator_properties,
+            schema_in_result=self.schema_in_result,
+            loader_hint=self.loader_hint,
+            max_loaders_per_source=self.max_loaders_per_source,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -311,6 +329,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "subset_files": subset_files,
             "agent_settings": {
                 "max_steps": self.max_steps,
+                "max_operator_edits": self.max_operator_edits,
                 "max_operator_result_char_limit": self.max_operator_result_char_limit,
                 "max_operator_result_cell_char_limit": self.max_operator_result_cell_char_limit,
                 "operator_result_serialization_mode": self.operator_result_serialization_mode,
@@ -323,6 +342,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "disabled_tools": self.disabled_tools,
                 "stats_enabled": self.stats_enabled,
                 "include_operator_properties": self.include_operator_properties,
+                "schema_in_result": self.schema_in_result,
+                "loader_hint": self.loader_hint,
+                "max_loaders_per_source": self.max_loaders_per_source,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -654,6 +676,217 @@ class DataflowSystemGPT52FullStatsOn(_GPTStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _CONTEXT_MODE = "full"
     _NAME = "DataflowSystemGPT52FullStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan1 — convergence guard (goal.md lever C, limitation L1). Identical to
+# DataflowSystemGPT5MiniFullStatsOn (the gpt-5-mini *FullStatsOn baseline):
+# gpt-5-mini, context_mode=full, stats on, char limits 1000/3000, with the
+# DataflowSystem defaults parallel_tool_calls=True and max_steps=50. The ONLY
+# difference is max_operator_edits=5 — caps consecutive edits to the same
+# operator so the worst thrashing tails (baseline: one op edited 13–25× in a
+# row) are truncated. Isolates lever C as the single variable vs the baseline.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class DataflowSystemGPT5MiniFullStatsOnGuard(DataflowSystem):
+    """gpt-5-mini, full context, stats on, + convergence guard (cap 5)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="full",
+            stats_enabled=True,
+            max_operator_edits=5,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniFullStatsOnGuard",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan2 — schema-first CODE mode (goal.md lever E). Same as the baseline
+# DataflowSystemGPT5MiniFullStatsOn EXCEPT the per-column representation:
+# verbose `Column stats:` (stats_enabled) is OFF and replaced by a compact
+# typed `Schema:` line (schema_in_result). Tests whether name+type at ~1/4 the
+# token cost of full stats preserves accuracy — a cost/accuracy Pareto point.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class DataflowSystemGPT5MiniFullSchemaNoStats(DataflowSystem):
+    """gpt-5-mini, full context, stats OFF, compact typed Schema line ON."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniFullSchemaNoStats",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52FullSchemaNoStats(DataflowSystem):
+    """gpt-5.2, full context, stats OFF, compact typed Schema line ON.
+
+    The plan2 keeper (lever E, schema-first) on gpt-5.2 — the model where cost
+    is most severe (baseline $18 sum, 2.55M-token outlier). Confirms whether the
+    -53% schema win holds on the stronger model, comparing against the
+    DataflowSystemGPT52FullStatsOn baseline on the same 49 tasks.
+    """
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52FullSchemaNoStats",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan4 — stage-aware loader-remediation hint (lever D, accuracy). Stacks on
+# the plan2 schema keeper (full, stats off, schema on) + loader_hint=True. The
+# only delta vs DataflowSystem*FullSchemaNoStats is the `Loader hint:` line
+# appended to a failed DataLoading op (keyed on the exception class). Targets
+# the load-error cluster (UnicodeDecodeError/ParserError/FileNotFoundError).
+# plan5 — global loader-proliferation budget (lever F, cost). Same base +
+# max_loaders_per_source=2 (reject the 3rd distinct loader for one source path;
+# a well-formed flow needs ≤1 loader per file, 2 allows slack — a general
+# hygiene default, not fit to the benchmark). Robust to plan1's new-id evasion.
+# ────────────────────────────────────────────────────────────────────────
+class DataflowSystemGPT5MiniFullSchemaLoaderHint(DataflowSystem):
+    """gpt-5-mini, full, stats off, schema on, + loader-remediation hint (plan4)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniFullSchemaLoaderHint",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52FullSchemaLoaderHint(DataflowSystem):
+    """gpt-5.2, full, stats off, schema on, + loader-remediation hint (plan4)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52FullSchemaLoaderHint",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniFullSchemaLoaderBudget(DataflowSystem):
+    """gpt-5-mini, full, stats off, schema on, + loader-proliferation budget=2 (plan5)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            max_loaders_per_source=2,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniFullSchemaLoaderBudget",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52FullSchemaLoaderBudget(DataflowSystem):
+    """gpt-5.2, full, stats off, schema on, + loader-proliferation budget=2 (plan5)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            max_loaders_per_source=2,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52FullSchemaLoaderBudget",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52FullSchemaLoaderHintBudget(DataflowSystem):
+    """gpt-5.2 best stack: schema (plan2) + loader hint (plan4) + loader budget (plan5).
+
+    The candidate best dataflow config for the dataflow-vs-script thesis check.
+    """
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52FullSchemaLoaderHintBudget",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# plan2 control arm: NO per-column info block at all (stats off + schema off).
+# Triangulates the column-info representation {full-stats | compact-schema | none}
+# so we can attribute plan2's win to the schema vs to merely dropping stats.
+class DataflowSystemGPT5MiniFullNoStatsNoSchema(DataflowSystem):
+    """gpt-5-mini, full context, stats OFF, schema OFF (no per-column info)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniFullNoStatsNoSchema",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
 
 
 # ────────────────────────────────────────────────────────────────────────
