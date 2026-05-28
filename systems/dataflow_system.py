@@ -41,6 +41,7 @@ class DataflowSystem(System):
         execution_timeout_minutes: int = None,
         post_step_execution_timeout_seconds: Optional[int] = None,
         post_step_timeout_backoff: Optional[bool] = None,
+        post_step_timeout_action_contract: Optional[bool] = None,
         agent_mode: str = None,
         context_mode: str = None,
         parallel_tool_calls: bool = None,
@@ -105,6 +106,8 @@ class DataflowSystem(System):
             post_step_timeout_backoff: Enable timeout-only checkpoint notices
                 and skip repeated automatic materialization of timed-out
                 lineages
+            post_step_timeout_action_contract: Convert timeout backoff into a
+                bounded-recovery action contract for same-lineage edits
             agent_mode: Agent mode (default: code)
             context_mode: Context selection policy (default: latest)
             parallel_tool_calls: Allow parallel tool calls (default: True)
@@ -194,6 +197,7 @@ class DataflowSystem(System):
         self.execution_timeout_minutes = execution_timeout_minutes or 4
         self.post_step_execution_timeout_seconds = post_step_execution_timeout_seconds
         self.post_step_timeout_backoff = post_step_timeout_backoff
+        self.post_step_timeout_action_contract = post_step_timeout_action_contract
         self.agent_mode = agent_mode or "code"
         self.context_mode = context_mode or "latest"
         self.parallel_tool_calls = True if parallel_tool_calls is None else parallel_tool_calls
@@ -347,6 +351,7 @@ class DataflowSystem(System):
             execution_timeout_minutes=self.execution_timeout_minutes,
             post_step_execution_timeout_seconds=self.post_step_execution_timeout_seconds,
             post_step_timeout_backoff=self.post_step_timeout_backoff,
+            post_step_timeout_action_contract=self.post_step_timeout_action_contract,
             agent_mode=self.agent_mode,
             context_mode=self.context_mode,
             parallel_tool_calls=self.parallel_tool_calls,
@@ -694,6 +699,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "post_step_execution_timeout_seconds": self.post_step_execution_timeout_seconds,
                 "post_step_timeout_backoff": self.post_step_timeout_backoff,
+                "post_step_timeout_action_contract": self.post_step_timeout_action_contract,
                 "agent_mode": self.agent_mode,
                 "context_mode": self.context_mode,
                 "parallel_tool_calls": self.parallel_tool_calls,
@@ -2015,6 +2021,41 @@ class DataflowSystemGPT52LatestPostStepTimeoutBackoffStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestPostStepTimeoutBackoffStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan28: timeout backoff action contract. Keep plan27 timeout/backoff
+# mechanics, but make same-lineage recovery an enforceable bounded-action
+# contract instead of advisory context only.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestPostStepTimeoutActionContractStatsOnVariant(
+    _GPTLatestPostStepTimeoutBackoffStatsOnVariant
+):
+    _POST_STEP_TIMEOUT_ACTION_CONTRACT = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            post_step_timeout_action_contract=self._POST_STEP_TIMEOUT_ACTION_CONTRACT,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestPostStepTimeoutActionContractStatsOn(
+    _GPTLatestPostStepTimeoutActionContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestPostStepTimeoutActionContractStatsOn"
+
+
+class DataflowSystemGPT52LatestPostStepTimeoutActionContractStatsOn(
+    _GPTLatestPostStepTimeoutActionContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestPostStepTimeoutActionContractStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

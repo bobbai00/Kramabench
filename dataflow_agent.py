@@ -99,6 +99,7 @@ class AgentSettings:
     execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES
     post_step_execution_timeout_seconds: Optional[int] = None
     post_step_timeout_backoff: Optional[bool] = None
+    post_step_timeout_action_contract: Optional[bool] = None
     disabled_tools: list[str] = field(default_factory=list)
     agent_mode: str = AGENT_MODE
     context_mode: str = AGENT_CONTEXT_MODE  # "full", "delta", or "latest"
@@ -159,6 +160,8 @@ class AgentSettings:
             payload["postStepExecutionTimeoutSeconds"] = self.post_step_execution_timeout_seconds
         if self.post_step_timeout_backoff is not None:
             payload["postStepTimeoutBackoff"] = self.post_step_timeout_backoff
+        if self.post_step_timeout_action_contract is not None:
+            payload["postStepTimeoutActionContract"] = self.post_step_timeout_action_contract
         if self.include_operator_properties is not None:
             payload["includeOperatorProperties"] = self.include_operator_properties
         if self.max_operator_edits is not None:
@@ -777,6 +780,7 @@ class DataflowAgent:
             execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES,
             post_step_execution_timeout_seconds: Optional[int] = None,
             post_step_timeout_backoff: Optional[bool] = None,
+            post_step_timeout_action_contract: Optional[bool] = None,
             disabled_tools: Optional[list[str]] = None,
             agent_mode: str = AGENT_MODE,
             context_mode: str = AGENT_CONTEXT_MODE,
@@ -839,6 +843,8 @@ class DataflowAgent:
             post_step_timeout_backoff: Ask the server to skip repeated
                 automatic materialization of lineages that previously hit a
                 post-step client timeout
+            post_step_timeout_action_contract: Ask the server to block
+                unbounded same-lineage edits after a post-step timeout backoff
             disabled_tools: List of tool names to disable
             agent_mode: Agent mode ("code" or "general")
             context_mode: Snapshot-selection policy ("full", "delta", or "latest")
@@ -929,6 +935,7 @@ class DataflowAgent:
             execution_timeout_minutes=execution_timeout_minutes,
             post_step_execution_timeout_seconds=post_step_execution_timeout_seconds,
             post_step_timeout_backoff=post_step_timeout_backoff,
+            post_step_timeout_action_contract=post_step_timeout_action_contract,
             disabled_tools=disabled_tools or [],
             agent_mode=agent_mode,
             context_mode=context_mode,
