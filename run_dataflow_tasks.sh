@@ -74,16 +74,22 @@ if [ "$IS_LEGACY" = "true" ]; then
     echo ""
 else
     # New mode: parse workload from task IDs, group and run per workload
-    declare -A WORKLOAD_TASKS
+    TASK_ARGS=("$@")
+    WORKLOADS=""
     for task_id in "$@"; do
         # Parse workload: everything before -easy- or -hard-
         workload=$(echo "$task_id" | sed -E 's/-(easy|hard)-[0-9]+$//')
-        if [ -z "$workload" ]; then
+        if [ -z "$workload" ] || [ "$workload" = "$task_id" ]; then
             echo "ERROR: Cannot parse workload from task ID: $task_id"
             exit 1
         fi
-        WORKLOAD_TASKS[$workload]+="$task_id "
+        case " $WORKLOADS " in
+            *" $workload "*) ;;
+            *) WORKLOADS="$WORKLOADS $workload" ;;
+        esac
     done
+    SORTED_WORKLOADS=$(printf '%s\n' $WORKLOADS | sort -u)
+    WORKLOAD_COUNT=$(printf '%s\n' $SORTED_WORKLOADS | sed '/^$/d' | wc -l | tr -d ' ')
 
     # In auto-group mode, PARALLEL defaults to true (multiple workloads)
     if [ "$PARALLEL" = "auto" ]; then
@@ -95,13 +101,19 @@ else
     mkdir -p "$LOG_DIR"
 
     if [ "$PARALLEL" = "true" ]; then
-        echo "Running ${#WORKLOAD_TASKS[@]} workload groups in PARALLEL"
+        echo "Running $WORKLOAD_COUNT workload groups in PARALLEL"
         echo "Logs: $LOG_DIR/"
         echo "=========================================="
 
         PIDS=()
-        for workload in $(echo "${!WORKLOAD_TASKS[@]}" | tr ' ' '\n' | sort -u); do
-            read -ra TASK_IDS <<< "${WORKLOAD_TASKS[$workload]}"
+        for workload in $SORTED_WORKLOADS; do
+            TASK_IDS=()
+            for task_id in "${TASK_ARGS[@]}"; do
+                task_workload=$(echo "$task_id" | sed -E 's/-(easy|hard)-[0-9]+$//')
+                if [ "$task_workload" = "$workload" ]; then
+                    TASK_IDS+=("$task_id")
+                fi
+            done
             echo "Starting: $SUT | $workload | Tasks: ${TASK_IDS[*]} (log: $LOG_DIR/${workload}.log)"
             python evaluate.py --sut "$SUT" --workload "$workload" --no_pipeline_eval --verbose --task_id "${TASK_IDS[@]}" $EXTRA_ARGS \
                 > "$LOG_DIR/${workload}.log" 2>&1 &
@@ -128,15 +140,21 @@ else
 
         echo "=========================================="
         if [ $FAILED -eq 0 ]; then
-            echo "All ${#WORKLOAD_TASKS[@]} workloads completed successfully!"
+            echo "All $WORKLOAD_COUNT workloads completed successfully!"
         else
-            echo "$FAILED/${#WORKLOAD_TASKS[@]} workloads failed. Check logs in $LOG_DIR/"
+            echo "$FAILED/$WORKLOAD_COUNT workloads failed. Check logs in $LOG_DIR/"
         fi
         echo "=========================================="
     else
         # Sequential mode
-        for workload in $(echo "${!WORKLOAD_TASKS[@]}" | tr ' ' '\n' | sort -u); do
-            read -ra TASK_IDS <<< "${WORKLOAD_TASKS[$workload]}"
+        for workload in $SORTED_WORKLOADS; do
+            TASK_IDS=()
+            for task_id in "${TASK_ARGS[@]}"; do
+                task_workload=$(echo "$task_id" | sed -E 's/-(easy|hard)-[0-9]+$//')
+                if [ "$task_workload" = "$workload" ]; then
+                    TASK_IDS+=("$task_id")
+                fi
+            done
             echo "=========================================="
             echo "Running: $SUT | $workload | Tasks: ${TASK_IDS[*]}"
             echo "=========================================="
