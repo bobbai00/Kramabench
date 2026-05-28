@@ -66,6 +66,7 @@ class DataflowSystem(System):
         observed_component_inventory_contract_enabled: bool = False,
         data_discovered_component_inventory_contract_enabled: bool = False,
         boundary_token_inventory_contract_enabled: bool = False,
+        flow_progress_digest_enabled: bool = False,
         candidate_selection_impact_contract_enabled: bool = False,
         evidence_dependency_gate_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
@@ -148,6 +149,9 @@ class DataflowSystem(System):
                 inventory evidence to prove complete boundary-token enumeration
                 and downstream candidate coverage before it satisfies in LATEST
                 context
+            flow_progress_digest_enabled: Enable server-side LATEST context
+                digest of recent actions, repeated edits, current failures, and
+                unexecuted terminal operators
             candidate_selection_impact_contract_enabled: Enable server-side
                 LATEST context notices that require an executed impact table
                 comparing key candidates against the downstream entity measure
@@ -206,6 +210,7 @@ class DataflowSystem(System):
             data_discovered_component_inventory_contract_enabled
         )
         self.boundary_token_inventory_contract_enabled = boundary_token_inventory_contract_enabled
+        self.flow_progress_digest_enabled = flow_progress_digest_enabled
         self.candidate_selection_impact_contract_enabled = candidate_selection_impact_contract_enabled
         self.evidence_dependency_gate_enabled = evidence_dependency_gate_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
@@ -349,6 +354,7 @@ class DataflowSystem(System):
             observed_component_inventory_contract=self.observed_component_inventory_contract_enabled,
             data_discovered_component_inventory_contract=self.data_discovered_component_inventory_contract_enabled,
             boundary_token_inventory_contract=self.boundary_token_inventory_contract_enabled,
+            flow_progress_digest=self.flow_progress_digest_enabled,
             candidate_selection_impact_contract=self.candidate_selection_impact_contract_enabled,
             evidence_dependency_gate=self.evidence_dependency_gate_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
@@ -695,6 +701,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "observed_component_inventory_contract_enabled": self.observed_component_inventory_contract_enabled,
                 "data_discovered_component_inventory_contract_enabled": self.data_discovered_component_inventory_contract_enabled,
                 "boundary_token_inventory_contract_enabled": self.boundary_token_inventory_contract_enabled,
+                "flow_progress_digest_enabled": self.flow_progress_digest_enabled,
                 "candidate_selection_impact_contract_enabled": self.candidate_selection_impact_contract_enabled,
                 "evidence_dependency_gate_enabled": self.evidence_dependency_gate_enabled,
                 "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
@@ -1848,6 +1855,39 @@ class DataflowSystemGPT52LatestBoundaryTokenInventoryStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestBoundaryTokenInventoryStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan24: flow-progress digest in LATEST. These variants isolate compact
+# ReAct/dataflow progress memory without enabling FULL/DELTA history.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestFlowProgressDigestStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _FLOW_PROGRESS_DIGEST_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            flow_progress_digest_enabled=self._FLOW_PROGRESS_DIGEST_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestFlowProgressDigestStatsOn(
+    _GPTLatestFlowProgressDigestStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestFlowProgressDigestStatsOn"
+
+
+class DataflowSystemGPT52LatestFlowProgressDigestStatsOn(
+    _GPTLatestFlowProgressDigestStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestFlowProgressDigestStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
