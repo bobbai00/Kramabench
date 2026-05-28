@@ -49,6 +49,7 @@ class DataflowSystem(System):
         source_manifest_enabled: bool = False,
         source_manifest_max_files: int = 80,
         source_manifest_max_related_per_source: int = 40,
+        metric_evidence_guidance_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -80,6 +81,8 @@ class DataflowSystem(System):
             source_manifest_enabled: Add a compact source-planning manifest to the prompt
             source_manifest_max_files: Maximum files to list in each manifest section
             source_manifest_max_related_per_source: Maximum related siblings per listed file
+            metric_evidence_guidance_enabled: Enable server-side CODE-mode
+                guidance for provenance-preserving final metric evidence
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -107,6 +110,7 @@ class DataflowSystem(System):
         self.source_manifest_enabled = source_manifest_enabled
         self.source_manifest_max_files = source_manifest_max_files
         self.source_manifest_max_related_per_source = source_manifest_max_related_per_source
+        self.metric_evidence_guidance_enabled = metric_evidence_guidance_enabled
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -229,6 +233,7 @@ class DataflowSystem(System):
             include_operator_properties=self.include_operator_properties,
             max_operator_edits=self.max_operator_edits,
             lineage_hint_on_stall=self.lineage_hint_on_stall,
+            metric_evidence_guidance=self.metric_evidence_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -554,6 +559,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "source_manifest_enabled": self.source_manifest_enabled,
                 "source_manifest_max_files": self.source_manifest_max_files,
                 "source_manifest_max_related_per_source": self.source_manifest_max_related_per_source,
+                "metric_evidence_guidance_enabled": self.metric_evidence_guidance_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -954,6 +960,36 @@ class DataflowSystemGPT52LatestSourceManifestStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestSourceManifestStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan3: latest-mode metric evidence guidance. These variants isolate a
+# server-side CODE prompt rule against LatestStatsOn: preserve provenance keys
+# through the DAG and materialize final metric evidence before answering.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestSemanticStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _METRIC_EVIDENCE_GUIDANCE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            metric_evidence_guidance_enabled=self._METRIC_EVIDENCE_GUIDANCE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestSemanticStatsOn(_GPTLatestSemanticStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestSemanticStatsOn"
+
+
+class DataflowSystemGPT52LatestSemanticStatsOn(_GPTLatestSemanticStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestSemanticStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

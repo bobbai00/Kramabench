@@ -52,6 +52,7 @@ AGENT_DRIVER: Optional[str] = None
 AGENT_INCLUDE_OPERATOR_PROPERTIES: Optional[bool] = None
 AGENT_MAX_OPERATOR_EDITS: Optional[int] = None
 AGENT_LINEAGE_HINT_ON_STALL: Optional[bool] = None
+AGENT_METRIC_EVIDENCE_GUIDANCE: Optional[bool] = None
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -84,6 +85,7 @@ class AgentSettings:
     # 0 / None disables the convergence guard server-side.
     max_operator_edits: Optional[int] = None
     lineage_hint_on_stall: Optional[bool] = None
+    metric_evidence_guidance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -108,6 +110,8 @@ class AgentSettings:
             payload["maxOperatorEdits"] = self.max_operator_edits
         if self.lineage_hint_on_stall is not None:
             payload["lineageHintOnStall"] = self.lineage_hint_on_stall
+        if self.metric_evidence_guidance is not None:
+            payload["metricEvidenceGuidance"] = self.metric_evidence_guidance
         return payload
 
 
@@ -683,6 +687,7 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             max_operator_edits: Optional[int] = AGENT_MAX_OPERATOR_EDITS,
             lineage_hint_on_stall: Optional[bool] = AGENT_LINEAGE_HINT_ON_STALL,
+            metric_evidence_guidance: Optional[bool] = AGENT_METRIC_EVIDENCE_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -716,6 +721,8 @@ class DataflowAgent:
                 code operator before the server blocks another blind edit
             lineage_hint_on_stall: Ask the server to inject a compact lineage
                 hint when the convergence guard blocks an edit
+            metric_evidence_guidance: Ask the server to append general
+                provenance and metric-evidence rules to the CODE-mode prompt
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -743,6 +750,7 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             max_operator_edits=max_operator_edits,
             lineage_hint_on_stall=lineage_hint_on_stall,
+            metric_evidence_guidance=metric_evidence_guidance,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
