@@ -39,6 +39,7 @@ class DataflowSystem(System):
         context_scope: str = None,
         tool_timeout_seconds: int = None,
         execution_timeout_minutes: int = None,
+        post_step_execution_timeout_seconds: Optional[int] = None,
         agent_mode: str = None,
         context_mode: str = None,
         parallel_tool_calls: bool = None,
@@ -97,6 +98,9 @@ class DataflowSystem(System):
                 ("all" or "active-lineage"); None uses server default
             tool_timeout_seconds: Tool timeout (default: 240)
             execution_timeout_minutes: Execution timeout (default: 4)
+            post_step_execution_timeout_seconds: Optional timeout for automatic
+                post-step materialization after code edits. None preserves the
+                server default / legacy execution timeout.
             agent_mode: Agent mode (default: code)
             context_mode: Context selection policy (default: latest)
             parallel_tool_calls: Allow parallel tool calls (default: True)
@@ -184,6 +188,7 @@ class DataflowSystem(System):
         self.context_scope = context_scope
         self.tool_timeout_seconds = tool_timeout_seconds or 240
         self.execution_timeout_minutes = execution_timeout_minutes or 4
+        self.post_step_execution_timeout_seconds = post_step_execution_timeout_seconds
         self.agent_mode = agent_mode or "code"
         self.context_mode = context_mode or "latest"
         self.parallel_tool_calls = True if parallel_tool_calls is None else parallel_tool_calls
@@ -335,6 +340,7 @@ class DataflowSystem(System):
             context_scope=self.context_scope,
             tool_timeout_seconds=self.tool_timeout_seconds,
             execution_timeout_minutes=self.execution_timeout_minutes,
+            post_step_execution_timeout_seconds=self.post_step_execution_timeout_seconds,
             agent_mode=self.agent_mode,
             context_mode=self.context_mode,
             parallel_tool_calls=self.parallel_tool_calls,
@@ -680,6 +686,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "context_scope": self.context_scope,
                 "tool_timeout_seconds": self.tool_timeout_seconds,
                 "execution_timeout_minutes": self.execution_timeout_minutes,
+                "post_step_execution_timeout_seconds": self.post_step_execution_timeout_seconds,
                 "agent_mode": self.agent_mode,
                 "context_mode": self.context_mode,
                 "parallel_tool_calls": self.parallel_tool_calls,
@@ -1935,6 +1942,40 @@ class DataflowSystemGPT52LatestFlowStallRecoveryStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestFlowStallRecoveryStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan26: post-step execution checkpoint. Keep plan25's flow recovery
+# settings, but use a shorter timeout only for automatic post-edit
+# materialization so timeout symptoms reach the next LATEST context sooner.
+# Explicit executeOperator calls keep the normal execution timeout.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestPostStepCheckpointStatsOnVariant(_GPTLatestFlowStallRecoveryStatsOnVariant):
+    _POST_STEP_EXECUTION_TIMEOUT_SECONDS = 60
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            post_step_execution_timeout_seconds=self._POST_STEP_EXECUTION_TIMEOUT_SECONDS,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestPostStepCheckpointStatsOn(
+    _GPTLatestPostStepCheckpointStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestPostStepCheckpointStatsOn"
+
+
+class DataflowSystemGPT52LatestPostStepCheckpointStatsOn(
+    _GPTLatestPostStepCheckpointStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestPostStepCheckpointStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

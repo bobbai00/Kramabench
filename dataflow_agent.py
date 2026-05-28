@@ -97,6 +97,7 @@ class AgentSettings:
     context_scope: Optional[str] = AGENT_CONTEXT_SCOPE
     tool_timeout_seconds: int = AGENT_TOOL_TIMEOUT_SECONDS
     execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES
+    post_step_execution_timeout_seconds: Optional[int] = None
     disabled_tools: list[str] = field(default_factory=list)
     agent_mode: str = AGENT_MODE
     context_mode: str = AGENT_CONTEXT_MODE  # "full", "delta", or "latest"
@@ -153,6 +154,8 @@ class AgentSettings:
             payload["resultRendering"] = self.result_rendering
         if self.context_scope is not None:
             payload["contextScope"] = self.context_scope
+        if self.post_step_execution_timeout_seconds is not None:
+            payload["postStepExecutionTimeoutSeconds"] = self.post_step_execution_timeout_seconds
         if self.include_operator_properties is not None:
             payload["includeOperatorProperties"] = self.include_operator_properties
         if self.max_operator_edits is not None:
@@ -769,6 +772,7 @@ class DataflowAgent:
             context_scope: Optional[str] = AGENT_CONTEXT_SCOPE,
             tool_timeout_seconds: int = AGENT_TOOL_TIMEOUT_SECONDS,
             execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES,
+            post_step_execution_timeout_seconds: Optional[int] = None,
             disabled_tools: Optional[list[str]] = None,
             agent_mode: str = AGENT_MODE,
             context_mode: str = AGENT_CONTEXT_MODE,
@@ -825,6 +829,9 @@ class DataflowAgent:
                 ("all" or "active-lineage"); None uses server default
             tool_timeout_seconds: Tool execution timeout in seconds
             execution_timeout_minutes: Workflow execution timeout in minutes
+            post_step_execution_timeout_seconds: Optional timeout for automatic
+                post-step materialization after code edits. None uses server
+                default / legacy execution timeout.
             disabled_tools: List of tool names to disable
             agent_mode: Agent mode ("code" or "general")
             context_mode: Snapshot-selection policy ("full", "delta", or "latest")
@@ -913,6 +920,7 @@ class DataflowAgent:
             context_scope=context_scope,
             tool_timeout_seconds=tool_timeout_seconds,
             execution_timeout_minutes=execution_timeout_minutes,
+            post_step_execution_timeout_seconds=post_step_execution_timeout_seconds,
             disabled_tools=disabled_tools or [],
             agent_mode=agent_mode,
             context_mode=context_mode,
