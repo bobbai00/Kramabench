@@ -50,6 +50,7 @@ class DataflowSystem(System):
         source_manifest_max_files: int = 80,
         source_manifest_max_related_per_source: int = 40,
         metric_evidence_guidance_enabled: bool = False,
+        schema_first_code_mode_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -83,6 +84,8 @@ class DataflowSystem(System):
             source_manifest_max_related_per_source: Maximum related siblings per listed file
             metric_evidence_guidance_enabled: Enable server-side CODE-mode
                 guidance for provenance-preserving final metric evidence
+            schema_first_code_mode_enabled: Enable server-side compiled
+                schema rendering in CODE-mode context
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -111,6 +114,7 @@ class DataflowSystem(System):
         self.source_manifest_max_files = source_manifest_max_files
         self.source_manifest_max_related_per_source = source_manifest_max_related_per_source
         self.metric_evidence_guidance_enabled = metric_evidence_guidance_enabled
+        self.schema_first_code_mode_enabled = schema_first_code_mode_enabled
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -234,6 +238,7 @@ class DataflowSystem(System):
             max_operator_edits=self.max_operator_edits,
             lineage_hint_on_stall=self.lineage_hint_on_stall,
             metric_evidence_guidance=self.metric_evidence_guidance_enabled,
+            schema_first_code_mode=self.schema_first_code_mode_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -560,6 +565,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "source_manifest_max_files": self.source_manifest_max_files,
                 "source_manifest_max_related_per_source": self.source_manifest_max_related_per_source,
                 "metric_evidence_guidance_enabled": self.metric_evidence_guidance_enabled,
+                "schema_first_code_mode_enabled": self.schema_first_code_mode_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -990,6 +996,36 @@ class DataflowSystemGPT5MiniLatestSemanticStatsOn(_GPTLatestSemanticStatsOnVaria
 class DataflowSystemGPT52LatestSemanticStatsOn(_GPTLatestSemanticStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestSemanticStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan4: latest-mode schema-first CODE context. These variants isolate a
+# context-compiler rule against LatestStatsOn: render compiled current-snapshot
+# input/output schemas in CODE mode, not only GENERAL mode.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestSchemaStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _SCHEMA_FIRST_CODE_MODE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            schema_first_code_mode_enabled=self._SCHEMA_FIRST_CODE_MODE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestSchemaStatsOn(_GPTLatestSchemaStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestSchemaStatsOn"
+
+
+class DataflowSystemGPT52LatestSchemaStatsOn(_GPTLatestSchemaStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestSchemaStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
