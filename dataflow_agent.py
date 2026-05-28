@@ -93,6 +93,9 @@ class AgentSettings:
     # path before a new loader for that path is rejected (plan5, lever F).
     # 0 = disabled (no-op default).
     max_loaders_per_source: int = 0
+    # Inject an `Attempt reflection:` block on heavily-edited operators
+    # (plan3, progress reflection). False = no-op default.
+    attempt_reflection: bool = False
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -112,6 +115,7 @@ class AgentSettings:
             "schemaInResult": self.schema_in_result,
             "loaderHint": self.loader_hint,
             "maxLoadersPerSource": self.max_loaders_per_source,
+            "attemptReflection": self.attempt_reflection,
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
@@ -726,6 +730,7 @@ class DataflowAgent:
             schema_in_result: bool = False,
             loader_hint: bool = False,
             max_loaders_per_source: int = 0,
+            attempt_reflection: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -785,6 +790,7 @@ class DataflowAgent:
             schema_in_result=schema_in_result,
             loader_hint=loader_hint,
             max_loaders_per_source=max_loaders_per_source,
+            attempt_reflection=attempt_reflection,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint

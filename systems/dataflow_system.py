@@ -46,6 +46,7 @@ class DataflowSystem(System):
         schema_in_result: bool = False,
         loader_hint: bool = False,
         max_loaders_per_source: int = 0,
+        attempt_reflection: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -104,6 +105,8 @@ class DataflowSystem(System):
         self.loader_hint = loader_hint
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
+        # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
+        self.attempt_reflection = attempt_reflection
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -228,6 +231,7 @@ class DataflowSystem(System):
             schema_in_result=self.schema_in_result,
             loader_hint=self.loader_hint,
             max_loaders_per_source=self.max_loaders_per_source,
+            attempt_reflection=self.attempt_reflection,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -345,6 +349,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "schema_in_result": self.schema_in_result,
                 "loader_hint": self.loader_hint,
                 "max_loaders_per_source": self.max_loaders_per_source,
+                "attempt_reflection": self.attempt_reflection,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -862,6 +867,51 @@ class DataflowSystemGPT52FullSchemaLoaderHintBudget(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT52FullSchemaLoaderHintBudget",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan3 — per-operator attempt reflection (progress reflection / lever C-D).
+# Stacks on the plan2 schema keeper + attempt_reflection=True. Targets
+# same-operator thrashing — the agent re-deriving blind variants because CODE
+# mode strips its prior code (e.g. astronomy-easy-4 edited one op 38× / 1.5M tok
+# on gpt-5.2). The only delta vs *FullSchemaNoStats is the reflection block.
+# ────────────────────────────────────────────────────────────────────────
+class DataflowSystemGPT5MiniFullSchemaReflect(DataflowSystem):
+    """gpt-5-mini, full, stats off, schema on, + attempt reflection (plan3)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniFullSchemaReflect",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52FullSchemaReflect(DataflowSystem):
+    """gpt-5.2, full, stats off, schema on, + attempt reflection (plan3)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="full",
+            stats_enabled=False,
+            schema_in_result=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52FullSchemaReflect",
             verbose=verbose,
             *args,
             **kwargs,
