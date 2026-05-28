@@ -55,6 +55,7 @@ AGENT_LINEAGE_HINT_ON_STALL: Optional[bool] = None
 AGENT_METRIC_EVIDENCE_GUIDANCE: Optional[bool] = None
 AGENT_SCHEMA_FIRST_CODE_MODE: Optional[bool] = None
 AGENT_TABLE_STRUCTURE_HINTS: Optional[bool] = None
+AGENT_RAW_LOADER_PROVENANCE: Optional[bool] = None
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -90,6 +91,7 @@ class AgentSettings:
     metric_evidence_guidance: Optional[bool] = None
     schema_first_code_mode: Optional[bool] = None
     table_structure_hints: Optional[bool] = None
+    raw_loader_provenance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -120,6 +122,8 @@ class AgentSettings:
             payload["schemaFirstCodeMode"] = self.schema_first_code_mode
         if self.table_structure_hints is not None:
             payload["tableStructureHints"] = self.table_structure_hints
+        if self.raw_loader_provenance is not None:
+            payload["rawLoaderProvenance"] = self.raw_loader_provenance
         return payload
 
 
@@ -698,6 +702,7 @@ class DataflowAgent:
             metric_evidence_guidance: Optional[bool] = AGENT_METRIC_EVIDENCE_GUIDANCE,
             schema_first_code_mode: Optional[bool] = AGENT_SCHEMA_FIRST_CODE_MODE,
             table_structure_hints: Optional[bool] = AGENT_TABLE_STRUCTURE_HINTS,
+            raw_loader_provenance: Optional[bool] = AGENT_RAW_LOADER_PROVENANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -737,6 +742,8 @@ class DataflowAgent:
                 current-snapshot schemas in CODE-mode context
             table_structure_hints: Ask the server to render compact
                 DataLoading structure hints for likely metadata/header/footer rows
+            raw_loader_provenance: Ask the server to render compact raw-source
+                provenance for DataLoading operators with literal relative paths
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -767,6 +774,7 @@ class DataflowAgent:
             metric_evidence_guidance=metric_evidence_guidance,
             schema_first_code_mode=schema_first_code_mode,
             table_structure_hints=table_structure_hints,
+            raw_loader_provenance=raw_loader_provenance,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
