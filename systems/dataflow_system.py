@@ -57,6 +57,7 @@ class DataflowSystem(System):
         raw_loader_provenance_enabled: bool = False,
         bounded_execution_guidance_enabled: bool = False,
         cardinality_pressure_guidance_enabled: bool = False,
+        entity_key_hygiene_guidance_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -107,6 +108,9 @@ class DataflowSystem(System):
             cardinality_pressure_guidance_enabled: Enable server-side CODE-mode
                 guidance and context hints for large/wide intermediate outputs
                 so downstream execution uses the task-required row grain
+            entity_key_hygiene_guidance_enabled: Enable server-side CODE-mode
+                guidance and context hints for high-cardinality string entity
+                keys before grouping, joining, deduplicating, or distinct counts
             fallback_contract_guidance_enabled: Enable server-side CODE-mode
                 guidance and context hints for dependency/runtime capability
                 failures so fallback answers preserve the requested contract
@@ -145,6 +149,7 @@ class DataflowSystem(System):
         self.raw_loader_provenance_enabled = raw_loader_provenance_enabled
         self.bounded_execution_guidance_enabled = bounded_execution_guidance_enabled
         self.cardinality_pressure_guidance_enabled = cardinality_pressure_guidance_enabled
+        self.entity_key_hygiene_guidance_enabled = entity_key_hygiene_guidance_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
         self.agent: Optional[DataflowAgent] = None
@@ -276,6 +281,7 @@ class DataflowSystem(System):
             raw_loader_provenance=self.raw_loader_provenance_enabled,
             bounded_execution_guidance=self.bounded_execution_guidance_enabled,
             cardinality_pressure_guidance=self.cardinality_pressure_guidance_enabled,
+            entity_key_hygiene_guidance=self.entity_key_hygiene_guidance_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
@@ -610,6 +616,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "raw_loader_provenance_enabled": self.raw_loader_provenance_enabled,
                 "bounded_execution_guidance_enabled": self.bounded_execution_guidance_enabled,
                 "cardinality_pressure_guidance_enabled": self.cardinality_pressure_guidance_enabled,
+                "entity_key_hygiene_guidance_enabled": self.entity_key_hygiene_guidance_enabled,
                 "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
             }
         }
@@ -1300,6 +1307,41 @@ class DataflowSystemGPT52LatestCardinalityPressureStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestCardinalityPressureStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan12: latest-mode entity-key hygiene guidance. These variants isolate a
+# general context-compiler rule against LatestStatsOn: when typed column stats
+# expose high-cardinality string fields, surface them as candidate entity-key
+# evidence before grouping, joining, deduplicating, or distinct counting.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestEntityKeyHygieneStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _ENTITY_KEY_HYGIENE_GUIDANCE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            entity_key_hygiene_guidance_enabled=self._ENTITY_KEY_HYGIENE_GUIDANCE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestEntityKeyHygieneStatsOn(
+    _GPTLatestEntityKeyHygieneStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestEntityKeyHygieneStatsOn"
+
+
+class DataflowSystemGPT52LatestEntityKeyHygieneStatsOn(
+    _GPTLatestEntityKeyHygieneStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestEntityKeyHygieneStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

@@ -60,6 +60,7 @@ AGENT_TABLE_STRUCTURE_HINTS: Optional[bool] = None
 AGENT_RAW_LOADER_PROVENANCE: Optional[bool] = None
 AGENT_BOUNDED_EXECUTION_GUIDANCE: Optional[bool] = None
 AGENT_CARDINALITY_PRESSURE_GUIDANCE: Optional[bool] = None
+AGENT_ENTITY_KEY_HYGIENE_GUIDANCE: Optional[bool] = None
 AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
 # Workflow Configuration
@@ -101,6 +102,7 @@ class AgentSettings:
     raw_loader_provenance: Optional[bool] = None
     bounded_execution_guidance: Optional[bool] = None
     cardinality_pressure_guidance: Optional[bool] = None
+    entity_key_hygiene_guidance: Optional[bool] = None
     fallback_contract_guidance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
@@ -142,6 +144,8 @@ class AgentSettings:
             payload["boundedExecutionGuidance"] = self.bounded_execution_guidance
         if self.cardinality_pressure_guidance is not None:
             payload["cardinalityPressureGuidance"] = self.cardinality_pressure_guidance
+        if self.entity_key_hygiene_guidance is not None:
+            payload["entityKeyHygieneGuidance"] = self.entity_key_hygiene_guidance
         if self.fallback_contract_guidance is not None:
             payload["fallbackContractGuidance"] = self.fallback_contract_guidance
         return payload
@@ -727,6 +731,7 @@ class DataflowAgent:
             raw_loader_provenance: Optional[bool] = AGENT_RAW_LOADER_PROVENANCE,
             bounded_execution_guidance: Optional[bool] = AGENT_BOUNDED_EXECUTION_GUIDANCE,
             cardinality_pressure_guidance: Optional[bool] = AGENT_CARDINALITY_PRESSURE_GUIDANCE,
+            entity_key_hygiene_guidance: Optional[bool] = AGENT_ENTITY_KEY_HYGIENE_GUIDANCE,
             fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
@@ -777,6 +782,9 @@ class DataflowAgent:
                 bounded-probe rules before expensive full-table execution
             cardinality_pressure_guidance: Ask the server to render general
                 cardinality-pressure hints for large/wide intermediate outputs
+            entity_key_hygiene_guidance: Ask the server to render general
+                high-cardinality string-key hygiene hints before entity-level
+                grouping, joining, deduplication, or distinct counts
             fallback_contract_guidance: Ask the server to append general
                 fallback-contract rules for dependency/runtime capability failures
             texera_api_endpoint: Texera backend API endpoint
@@ -814,6 +822,7 @@ class DataflowAgent:
             raw_loader_provenance=raw_loader_provenance,
             bounded_execution_guidance=bounded_execution_guidance,
             cardinality_pressure_guidance=cardinality_pressure_guidance,
+            entity_key_hygiene_guidance=entity_key_hygiene_guidance,
             fallback_contract_guidance=fallback_contract_guidance,
         )
         self.texera_api_endpoint = texera_api_endpoint
