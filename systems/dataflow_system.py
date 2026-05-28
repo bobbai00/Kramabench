@@ -36,6 +36,7 @@ class DataflowSystem(System):
         max_operator_result_cell_char_limit: int = None,
         operator_result_serialization_mode: str = None,
         result_rendering: str = None,
+        context_scope: str = None,
         tool_timeout_seconds: int = None,
         execution_timeout_minutes: int = None,
         agent_mode: str = None,
@@ -75,6 +76,8 @@ class DataflowSystem(System):
             operator_result_serialization_mode: Result format (default: tsv)
             result_rendering: Successful result context rendering
                 ("rows", "digest", or "adaptive"); None uses server default
+            context_scope: Operator detail scope
+                ("all" or "active-lineage"); None uses server default
             tool_timeout_seconds: Tool timeout (default: 240)
             execution_timeout_minutes: Execution timeout (default: 4)
             agent_mode: Agent mode (default: code)
@@ -108,6 +111,7 @@ class DataflowSystem(System):
         self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 2000
         self.operator_result_serialization_mode = operator_result_serialization_mode or "tsv"
         self.result_rendering = result_rendering
+        self.context_scope = context_scope
         self.tool_timeout_seconds = tool_timeout_seconds or 240
         self.execution_timeout_minutes = execution_timeout_minutes or 4
         self.agent_mode = agent_mode or "code"
@@ -239,6 +243,7 @@ class DataflowSystem(System):
             max_operator_result_cell_char_limit=self.max_operator_result_cell_char_limit,
             operator_result_serialization_mode=self.operator_result_serialization_mode,
             result_rendering=self.result_rendering,
+            context_scope=self.context_scope,
             tool_timeout_seconds=self.tool_timeout_seconds,
             execution_timeout_minutes=self.execution_timeout_minutes,
             agent_mode=self.agent_mode,
@@ -566,6 +571,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "max_operator_result_cell_char_limit": self.max_operator_result_cell_char_limit,
                 "operator_result_serialization_mode": self.operator_result_serialization_mode,
                 "result_rendering": self.result_rendering,
+                "context_scope": self.context_scope,
                 "tool_timeout_seconds": self.tool_timeout_seconds,
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "agent_mode": self.agent_mode,
@@ -1136,6 +1142,37 @@ class DataflowSystemGPT5MiniLatestAdaptiveDigestStatsOn(_GPTLatestAdaptiveDigest
 class DataflowSystemGPT52LatestAdaptiveDigestStatsOn(_GPTLatestAdaptiveDigestStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestAdaptiveDigestStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan8: latest-mode active-lineage context scope. These variants isolate a
+# dataflow-lineage context rule against LatestStatsOn: keep the latest
+# frontier and its transitive upstream operators detailed, while unrelated
+# branches render as concise operator digests.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestActiveLineageScopeStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _CONTEXT_SCOPE = "active-lineage"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            context_scope=self._CONTEXT_SCOPE,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestActiveLineageScopeStatsOn(_GPTLatestActiveLineageScopeStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestActiveLineageScopeStatsOn"
+
+
+class DataflowSystemGPT52LatestActiveLineageScopeStatsOn(_GPTLatestActiveLineageScopeStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestActiveLineageScopeStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

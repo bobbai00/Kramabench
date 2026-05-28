@@ -37,6 +37,7 @@ AGENT_MAX_OPERATOR_RESULT_CHAR_LIMIT = 2000
 AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT = 2000
 AGENT_OPERATOR_RESULT_SERIALIZATION_MODE = "tsv"  # only "tsv" is supported
 AGENT_RESULT_RENDERING: Optional[str] = None
+AGENT_CONTEXT_SCOPE: Optional[str] = None
 AGENT_TOOL_TIMEOUT_SECONDS = 240
 AGENT_EXECUTION_TIMEOUT_MINUTES = 4
 AGENT_DISABLED_TOOLS: list[str] = []
@@ -76,6 +77,7 @@ class AgentSettings:
     max_operator_result_cell_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT
     operator_result_serialization_mode: str = AGENT_OPERATOR_RESULT_SERIALIZATION_MODE
     result_rendering: Optional[str] = AGENT_RESULT_RENDERING
+    context_scope: Optional[str] = AGENT_CONTEXT_SCOPE
     tool_timeout_seconds: int = AGENT_TOOL_TIMEOUT_SECONDS
     execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES
     disabled_tools: list[str] = field(default_factory=list)
@@ -114,6 +116,8 @@ class AgentSettings:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
         if self.result_rendering is not None:
             payload["resultRendering"] = self.result_rendering
+        if self.context_scope is not None:
+            payload["contextScope"] = self.context_scope
         if self.include_operator_properties is not None:
             payload["includeOperatorProperties"] = self.include_operator_properties
         if self.max_operator_edits is not None:
@@ -693,6 +697,7 @@ class DataflowAgent:
             max_operator_result_cell_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT,
             operator_result_serialization_mode: str = AGENT_OPERATOR_RESULT_SERIALIZATION_MODE,
             result_rendering: Optional[str] = AGENT_RESULT_RENDERING,
+            context_scope: Optional[str] = AGENT_CONTEXT_SCOPE,
             tool_timeout_seconds: int = AGENT_TOOL_TIMEOUT_SECONDS,
             execution_timeout_minutes: int = AGENT_EXECUTION_TIMEOUT_MINUTES,
             disabled_tools: Optional[list[str]] = None,
@@ -730,6 +735,8 @@ class DataflowAgent:
             operator_result_serialization_mode: Result format (only "tsv" is supported)
             result_rendering: Successful result context rendering
                 ("rows", "digest", or "adaptive"); None uses server default
+            context_scope: Operator detail scope
+                ("all" or "active-lineage"); None uses server default
             tool_timeout_seconds: Tool execution timeout in seconds
             execution_timeout_minutes: Workflow execution timeout in minutes
             disabled_tools: List of tool names to disable
@@ -768,6 +775,7 @@ class DataflowAgent:
             max_operator_result_cell_char_limit=max_operator_result_cell_char_limit,
             operator_result_serialization_mode=operator_result_serialization_mode,
             result_rendering=result_rendering,
+            context_scope=context_scope,
             tool_timeout_seconds=tool_timeout_seconds,
             execution_timeout_minutes=execution_timeout_minutes,
             disabled_tools=disabled_tools or [],
