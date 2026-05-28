@@ -54,6 +54,7 @@ AGENT_DRIVER: Optional[str] = None
 AGENT_INCLUDE_OPERATOR_PROPERTIES: Optional[bool] = None
 AGENT_MAX_OPERATOR_EDITS: Optional[int] = None
 AGENT_LINEAGE_HINT_ON_STALL: Optional[bool] = None
+AGENT_MAX_UNEXECUTED_CODE_EDITS: Optional[int] = None
 AGENT_METRIC_EVIDENCE_GUIDANCE: Optional[bool] = None
 AGENT_SCHEMA_FIRST_CODE_MODE: Optional[bool] = None
 AGENT_TABLE_STRUCTURE_HINTS: Optional[bool] = None
@@ -99,6 +100,8 @@ class AgentSettings:
     # 0 / None disables the convergence guard server-side.
     max_operator_edits: Optional[int] = None
     lineage_hint_on_stall: Optional[bool] = None
+    # 0 / None disables the execution-evidence cadence guard server-side.
+    max_unexecuted_code_edits: Optional[int] = None
     metric_evidence_guidance: Optional[bool] = None
     schema_first_code_mode: Optional[bool] = None
     table_structure_hints: Optional[bool] = None
@@ -138,6 +141,8 @@ class AgentSettings:
             payload["maxOperatorEdits"] = self.max_operator_edits
         if self.lineage_hint_on_stall is not None:
             payload["lineageHintOnStall"] = self.lineage_hint_on_stall
+        if self.max_unexecuted_code_edits is not None:
+            payload["maxUnexecutedCodeEdits"] = self.max_unexecuted_code_edits
         if self.metric_evidence_guidance is not None:
             payload["metricEvidenceGuidance"] = self.metric_evidence_guidance
         if self.schema_first_code_mode is not None:
@@ -737,6 +742,7 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             max_operator_edits: Optional[int] = AGENT_MAX_OPERATOR_EDITS,
             lineage_hint_on_stall: Optional[bool] = AGENT_LINEAGE_HINT_ON_STALL,
+            max_unexecuted_code_edits: Optional[int] = AGENT_MAX_UNEXECUTED_CODE_EDITS,
             metric_evidence_guidance: Optional[bool] = AGENT_METRIC_EVIDENCE_GUIDANCE,
             schema_first_code_mode: Optional[bool] = AGENT_SCHEMA_FIRST_CODE_MODE,
             table_structure_hints: Optional[bool] = AGENT_TABLE_STRUCTURE_HINTS,
@@ -785,6 +791,9 @@ class DataflowAgent:
                 code operator before the server blocks another blind edit
             lineage_hint_on_stall: Ask the server to inject a compact lineage
                 hint when the convergence guard blocks an edit
+            max_unexecuted_code_edits: Maximum successful CODE-mode create/modify
+                calls allowed before the server blocks more code edits until an
+                explicit operator-result inspection
             metric_evidence_guidance: Ask the server to append general
                 provenance and metric-evidence rules to the CODE-mode prompt
             schema_first_code_mode: Ask the server to render compiled
@@ -839,6 +848,7 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             max_operator_edits=max_operator_edits,
             lineage_hint_on_stall=lineage_hint_on_stall,
+            max_unexecuted_code_edits=max_unexecuted_code_edits,
             metric_evidence_guidance=metric_evidence_guidance,
             schema_first_code_mode=schema_first_code_mode,
             table_structure_hints=table_structure_hints,

@@ -48,6 +48,7 @@ class DataflowSystem(System):
         include_operator_properties: bool = None,
         max_operator_edits: Optional[int] = None,
         lineage_hint_on_stall: Optional[bool] = None,
+        max_unexecuted_code_edits: Optional[int] = None,
         source_manifest_enabled: bool = False,
         source_manifest_max_files: int = 80,
         source_manifest_max_related_per_source: int = 40,
@@ -94,6 +95,8 @@ class DataflowSystem(System):
             disabled_tools: Optional list of tool names to disable
             max_operator_edits: Optional convergence guard cap; None uses server default
             lineage_hint_on_stall: Optional lineage hint toggle for convergence guard stalls
+            max_unexecuted_code_edits: Optional CODE-mode execution-evidence
+                cadence cap; None uses server default
             source_manifest_enabled: Add a compact source-planning manifest to the prompt
             source_manifest_max_files: Maximum files to list in each manifest section
             source_manifest_max_related_per_source: Maximum related siblings per listed file
@@ -153,6 +156,7 @@ class DataflowSystem(System):
         self.include_operator_properties = include_operator_properties
         self.max_operator_edits = max_operator_edits
         self.lineage_hint_on_stall = lineage_hint_on_stall
+        self.max_unexecuted_code_edits = max_unexecuted_code_edits
         self.source_manifest_enabled = source_manifest_enabled
         self.source_manifest_max_files = source_manifest_max_files
         self.source_manifest_max_related_per_source = source_manifest_max_related_per_source
@@ -291,6 +295,7 @@ class DataflowSystem(System):
             include_operator_properties=self.include_operator_properties,
             max_operator_edits=self.max_operator_edits,
             lineage_hint_on_stall=self.lineage_hint_on_stall,
+            max_unexecuted_code_edits=self.max_unexecuted_code_edits,
             metric_evidence_guidance=self.metric_evidence_guidance_enabled,
             schema_first_code_mode=self.schema_first_code_mode_enabled,
             table_structure_hints=self.table_structure_hints_enabled,
@@ -626,6 +631,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "include_operator_properties": self.include_operator_properties,
                 "max_operator_edits": self.max_operator_edits,
                 "lineage_hint_on_stall": self.lineage_hint_on_stall,
+                "max_unexecuted_code_edits": self.max_unexecuted_code_edits,
                 "source_manifest_enabled": self.source_manifest_enabled,
                 "source_manifest_max_files": self.source_manifest_max_files,
                 "source_manifest_max_related_per_source": self.source_manifest_max_related_per_source,
@@ -1471,6 +1477,40 @@ class DataflowSystemGPT52LatestExecutionSafeIdsStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestExecutionSafeIdsStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan16: execution-evidence cadence guard. These variants isolate a general
+# harness rule: CODE-mode edits should be followed by explicit result
+# inspection before the agent creates more parallel/final variants.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestExecutionCadenceStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _MAX_UNEXECUTED_CODE_EDITS = 3
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            max_unexecuted_code_edits=self._MAX_UNEXECUTED_CODE_EDITS,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestExecutionCadenceStatsOn(
+    _GPTLatestExecutionCadenceStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestExecutionCadenceStatsOn"
+
+
+class DataflowSystemGPT52LatestExecutionCadenceStatsOn(
+    _GPTLatestExecutionCadenceStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestExecutionCadenceStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
