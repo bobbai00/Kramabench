@@ -64,6 +64,7 @@ AGENT_CARDINALITY_PRESSURE_GUIDANCE: Optional[bool] = None
 AGENT_ENTITY_KEY_HYGIENE_GUIDANCE: Optional[bool] = None
 AGENT_COMPONENT_GRAIN_GUIDANCE: Optional[bool] = None
 AGENT_KEY_GRAIN_COMPARISON_GUIDANCE: Optional[bool] = None
+AGENT_KEY_GRAIN_EVIDENCE_CONTRACT: Optional[bool] = None
 AGENT_EXECUTION_SAFE_OPERATOR_IDS: Optional[bool] = None
 AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
@@ -111,6 +112,7 @@ class AgentSettings:
     entity_key_hygiene_guidance: Optional[bool] = None
     component_grain_guidance: Optional[bool] = None
     key_grain_comparison_guidance: Optional[bool] = None
+    key_grain_evidence_contract: Optional[bool] = None
     execution_safe_operator_ids: Optional[bool] = None
     fallback_contract_guidance: Optional[bool] = None
 
@@ -161,6 +163,8 @@ class AgentSettings:
             payload["componentGrainGuidance"] = self.component_grain_guidance
         if self.key_grain_comparison_guidance is not None:
             payload["keyGrainComparisonGuidance"] = self.key_grain_comparison_guidance
+        if self.key_grain_evidence_contract is not None:
+            payload["keyGrainEvidenceContract"] = self.key_grain_evidence_contract
         if self.execution_safe_operator_ids is not None:
             payload["executionSafeOperatorIds"] = self.execution_safe_operator_ids
         if self.fallback_contract_guidance is not None:
@@ -752,6 +756,7 @@ class DataflowAgent:
             entity_key_hygiene_guidance: Optional[bool] = AGENT_ENTITY_KEY_HYGIENE_GUIDANCE,
             component_grain_guidance: Optional[bool] = AGENT_COMPONENT_GRAIN_GUIDANCE,
             key_grain_comparison_guidance: Optional[bool] = AGENT_KEY_GRAIN_COMPARISON_GUIDANCE,
+            key_grain_evidence_contract: Optional[bool] = AGENT_KEY_GRAIN_EVIDENCE_CONTRACT,
             execution_safe_operator_ids: Optional[bool] = AGENT_EXECUTION_SAFE_OPERATOR_IDS,
             fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -815,6 +820,9 @@ class DataflowAgent:
             key_grain_comparison_guidance: Ask the server to render general
                 candidate key-grain comparison hints before final entity-level
                 grouping, joining, deduplication, or distinct counts
+            key_grain_evidence_contract: Ask the server to treat candidate
+                key-grain comparison as an explicit executed-table evidence
+                contract in LATEST context
             execution_safe_operator_ids: Ask the server to guide and enforce
                 execution-compatible operator IDs without underscores
             fallback_contract_guidance: Ask the server to append general
@@ -858,6 +866,7 @@ class DataflowAgent:
             entity_key_hygiene_guidance=entity_key_hygiene_guidance,
             component_grain_guidance=component_grain_guidance,
             key_grain_comparison_guidance=key_grain_comparison_guidance,
+            key_grain_evidence_contract=key_grain_evidence_contract,
             execution_safe_operator_ids=execution_safe_operator_ids,
             fallback_contract_guidance=fallback_contract_guidance,
         )

@@ -61,6 +61,7 @@ class DataflowSystem(System):
         entity_key_hygiene_guidance_enabled: bool = False,
         component_grain_guidance_enabled: bool = False,
         key_grain_comparison_guidance_enabled: bool = False,
+        key_grain_evidence_contract_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
@@ -124,6 +125,9 @@ class DataflowSystem(System):
             key_grain_comparison_guidance_enabled: Enable server-side CODE-mode
                 guidance and context hints that require a candidate key-grain
                 comparison table before final entity-level counts
+            key_grain_evidence_contract_enabled: Enable server-side LATEST
+                context notices that treat candidate key-grain comparison as
+                an explicit executed-table evidence contract
             execution_safe_operator_ids_enabled: Enable server-side CODE-mode
                 guidance and tool-boundary validation for operator IDs that
                 are compatible with workflow execution persistence
@@ -169,6 +173,7 @@ class DataflowSystem(System):
         self.entity_key_hygiene_guidance_enabled = entity_key_hygiene_guidance_enabled
         self.component_grain_guidance_enabled = component_grain_guidance_enabled
         self.key_grain_comparison_guidance_enabled = key_grain_comparison_guidance_enabled
+        self.key_grain_evidence_contract_enabled = key_grain_evidence_contract_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
@@ -305,6 +310,7 @@ class DataflowSystem(System):
             entity_key_hygiene_guidance=self.entity_key_hygiene_guidance_enabled,
             component_grain_guidance=self.component_grain_guidance_enabled,
             key_grain_comparison_guidance=self.key_grain_comparison_guidance_enabled,
+            key_grain_evidence_contract=self.key_grain_evidence_contract_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
@@ -1511,6 +1517,41 @@ class DataflowSystemGPT52LatestExecutionCadenceStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestExecutionCadenceStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan17: key-grain evidence contract in LATEST. These variants isolate a
+# general context-compiler rule: ambiguous high-cardinality entity labels are
+# not just a prompt hint; they create an auditable evidence contract that is
+# satisfied only by an executed candidate-key table with the required schema.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestKeyGrainEvidenceContractStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            key_grain_evidence_contract_enabled=self._KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestKeyGrainEvidenceContractStatsOn(
+    _GPTLatestKeyGrainEvidenceContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestKeyGrainEvidenceContractStatsOn"
+
+
+class DataflowSystemGPT52LatestKeyGrainEvidenceContractStatsOn(
+    _GPTLatestKeyGrainEvidenceContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestKeyGrainEvidenceContractStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
