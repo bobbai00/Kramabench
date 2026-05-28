@@ -29,6 +29,7 @@ from .dataflow_system import (
     DataflowSystemGPT52FullSchemaLoaderHintBudget,
     DataflowSystemGPT5MiniFullSchemaReflect,
     DataflowSystemGPT52FullSchemaReflect,
+    DataflowSystemGPT52LatestSchemaConverge,
     DataflowSystemGPT5MiniFullNoStatsNoSchema,
     DataflowSystemLocalLlm,
 )

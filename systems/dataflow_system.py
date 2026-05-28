@@ -918,6 +918,37 @@ class DataflowSystemGPT52FullSchemaReflect(DataflowSystem):
         )
 
 
+# ────────────────────────────────────────────────────────────────────────
+# Cost-minimized stack vs the script agent. The gpt-5.2 thesis showed DataFlow
+# is MORE accurate (12 vs 8 pass) but ~2.85x MORE EXPENSIVE than CodeAgent
+# ($13.05 vs $4.58) — driven by FULL-mode per-step DAG/result re-rendering, more
+# steps, and the spiral tail (1.53M tok max vs CodeAgent's 197K). This config
+# drops to LATEST context (no per-step FULL re-render) + keeps the cheap compact
+# schema + turns on ALL convergence levers (loader hint + budget + reflection)
+# to cap the tail. Goal: close the cost gap to the script agent while keeping
+# DataFlow's accuracy edge.
+# ────────────────────────────────────────────────────────────────────────
+class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
+    """gpt-5.2, LATEST context, schema on, + loader hint + loader budget + reflection."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestSchemaConverge",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
 # plan2 control arm: NO per-column info block at all (stats off + schema off).
 # Triangulates the column-info representation {full-stats | compact-schema | none}
 # so we can attribute plan2's win to the schema vs to merely dropping stats.
