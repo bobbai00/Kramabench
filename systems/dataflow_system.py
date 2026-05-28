@@ -67,6 +67,7 @@ class DataflowSystem(System):
         data_discovered_component_inventory_contract_enabled: bool = False,
         boundary_token_inventory_contract_enabled: bool = False,
         flow_progress_digest_enabled: bool = False,
+        flow_stall_recovery_contract_enabled: bool = False,
         candidate_selection_impact_contract_enabled: bool = False,
         evidence_dependency_gate_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
@@ -152,6 +153,9 @@ class DataflowSystem(System):
             flow_progress_digest_enabled: Enable server-side LATEST context
                 digest of recent actions, repeated edits, current failures, and
                 unexecuted terminal operators
+            flow_stall_recovery_contract_enabled: Escalate unresolved
+                failures/repeated edits into a general LATEST recovery contract
+                requiring upstream repair or typed diagnostic evidence
             candidate_selection_impact_contract_enabled: Enable server-side
                 LATEST context notices that require an executed impact table
                 comparing key candidates against the downstream entity measure
@@ -211,6 +215,7 @@ class DataflowSystem(System):
         )
         self.boundary_token_inventory_contract_enabled = boundary_token_inventory_contract_enabled
         self.flow_progress_digest_enabled = flow_progress_digest_enabled
+        self.flow_stall_recovery_contract_enabled = flow_stall_recovery_contract_enabled
         self.candidate_selection_impact_contract_enabled = candidate_selection_impact_contract_enabled
         self.evidence_dependency_gate_enabled = evidence_dependency_gate_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
@@ -355,6 +360,7 @@ class DataflowSystem(System):
             data_discovered_component_inventory_contract=self.data_discovered_component_inventory_contract_enabled,
             boundary_token_inventory_contract=self.boundary_token_inventory_contract_enabled,
             flow_progress_digest=self.flow_progress_digest_enabled,
+            flow_stall_recovery_contract=self.flow_stall_recovery_contract_enabled,
             candidate_selection_impact_contract=self.candidate_selection_impact_contract_enabled,
             evidence_dependency_gate=self.evidence_dependency_gate_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
@@ -702,6 +708,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "data_discovered_component_inventory_contract_enabled": self.data_discovered_component_inventory_contract_enabled,
                 "boundary_token_inventory_contract_enabled": self.boundary_token_inventory_contract_enabled,
                 "flow_progress_digest_enabled": self.flow_progress_digest_enabled,
+                "flow_stall_recovery_contract_enabled": self.flow_stall_recovery_contract_enabled,
                 "candidate_selection_impact_contract_enabled": self.candidate_selection_impact_contract_enabled,
                 "evidence_dependency_gate_enabled": self.evidence_dependency_gate_enabled,
                 "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
@@ -1888,6 +1895,46 @@ class DataflowSystemGPT52LatestFlowProgressDigestStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestFlowProgressDigestStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan25: LATEST flow-stall recovery contract. This combines compact progress
+# memory with an explicit recovery rule and the existing same-operator
+# convergence guard, without enabling FULL/DELTA history.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestFlowStallRecoveryStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _FLOW_PROGRESS_DIGEST_ENABLED = True
+    _FLOW_STALL_RECOVERY_CONTRACT_ENABLED = True
+    _MAX_OPERATOR_EDITS = 2
+    _LINEAGE_HINT_ON_STALL = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            flow_progress_digest_enabled=self._FLOW_PROGRESS_DIGEST_ENABLED,
+            flow_stall_recovery_contract_enabled=self._FLOW_STALL_RECOVERY_CONTRACT_ENABLED,
+            max_operator_edits=self._MAX_OPERATOR_EDITS,
+            lineage_hint_on_stall=self._LINEAGE_HINT_ON_STALL,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestFlowStallRecoveryStatsOn(
+    _GPTLatestFlowStallRecoveryStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestFlowStallRecoveryStatsOn"
+
+
+class DataflowSystemGPT52LatestFlowStallRecoveryStatsOn(
+    _GPTLatestFlowStallRecoveryStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestFlowStallRecoveryStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
