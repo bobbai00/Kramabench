@@ -55,6 +55,7 @@ class DataflowSystem(System):
         schema_first_code_mode_enabled: bool = False,
         table_structure_hints_enabled: bool = False,
         raw_loader_provenance_enabled: bool = False,
+        bounded_execution_guidance_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -98,6 +99,9 @@ class DataflowSystem(System):
                 structure hints for likely metadata/header/footer rows
             raw_loader_provenance_enabled: Enable server-side compact raw-source
                 provenance for DataLoading operators with literal relative paths
+            bounded_execution_guidance_enabled: Enable server-side CODE-mode
+                guidance to validate expensive full-table operators on bounded
+                probes before scaling execution
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -131,6 +135,7 @@ class DataflowSystem(System):
         self.schema_first_code_mode_enabled = schema_first_code_mode_enabled
         self.table_structure_hints_enabled = table_structure_hints_enabled
         self.raw_loader_provenance_enabled = raw_loader_provenance_enabled
+        self.bounded_execution_guidance_enabled = bounded_execution_guidance_enabled
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -259,6 +264,7 @@ class DataflowSystem(System):
             schema_first_code_mode=self.schema_first_code_mode_enabled,
             table_structure_hints=self.table_structure_hints_enabled,
             raw_loader_provenance=self.raw_loader_provenance_enabled,
+            bounded_execution_guidance=self.bounded_execution_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -590,6 +596,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "schema_first_code_mode_enabled": self.schema_first_code_mode_enabled,
                 "table_structure_hints_enabled": self.table_structure_hints_enabled,
                 "raw_loader_provenance_enabled": self.raw_loader_provenance_enabled,
+                "bounded_execution_guidance_enabled": self.bounded_execution_guidance_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -1173,6 +1180,41 @@ class DataflowSystemGPT5MiniLatestActiveLineageScopeStatsOn(_GPTLatestActiveLine
 class DataflowSystemGPT52LatestActiveLineageScopeStatsOn(_GPTLatestActiveLineageScopeStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestActiveLineageScopeStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan9: latest-mode bounded execution probe guidance. These variants isolate
+# a general execution-planning rule against LatestStatsOn: validate expensive
+# row-wise, external-model, or broad-join operators on bounded probes before
+# scaling to full-table execution.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestBoundedExecutionProbeStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _BOUNDED_EXECUTION_GUIDANCE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            bounded_execution_guidance_enabled=self._BOUNDED_EXECUTION_GUIDANCE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestBoundedExecutionProbeStatsOn(
+    _GPTLatestBoundedExecutionProbeStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestBoundedExecutionProbeStatsOn"
+
+
+class DataflowSystemGPT52LatestBoundedExecutionProbeStatsOn(
+    _GPTLatestBoundedExecutionProbeStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestBoundedExecutionProbeStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

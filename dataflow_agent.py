@@ -58,6 +58,7 @@ AGENT_METRIC_EVIDENCE_GUIDANCE: Optional[bool] = None
 AGENT_SCHEMA_FIRST_CODE_MODE: Optional[bool] = None
 AGENT_TABLE_STRUCTURE_HINTS: Optional[bool] = None
 AGENT_RAW_LOADER_PROVENANCE: Optional[bool] = None
+AGENT_BOUNDED_EXECUTION_GUIDANCE: Optional[bool] = None
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -96,6 +97,7 @@ class AgentSettings:
     schema_first_code_mode: Optional[bool] = None
     table_structure_hints: Optional[bool] = None
     raw_loader_provenance: Optional[bool] = None
+    bounded_execution_guidance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -132,6 +134,8 @@ class AgentSettings:
             payload["tableStructureHints"] = self.table_structure_hints
         if self.raw_loader_provenance is not None:
             payload["rawLoaderProvenance"] = self.raw_loader_provenance
+        if self.bounded_execution_guidance is not None:
+            payload["boundedExecutionGuidance"] = self.bounded_execution_guidance
         return payload
 
 
@@ -713,6 +717,7 @@ class DataflowAgent:
             schema_first_code_mode: Optional[bool] = AGENT_SCHEMA_FIRST_CODE_MODE,
             table_structure_hints: Optional[bool] = AGENT_TABLE_STRUCTURE_HINTS,
             raw_loader_provenance: Optional[bool] = AGENT_RAW_LOADER_PROVENANCE,
+            bounded_execution_guidance: Optional[bool] = AGENT_BOUNDED_EXECUTION_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -758,6 +763,8 @@ class DataflowAgent:
                 DataLoading structure hints for likely metadata/header/footer rows
             raw_loader_provenance: Ask the server to render compact raw-source
                 provenance for DataLoading operators with literal relative paths
+            bounded_execution_guidance: Ask the server to append general
+                bounded-probe rules before expensive full-table execution
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -791,6 +798,7 @@ class DataflowAgent:
             schema_first_code_mode=schema_first_code_mode,
             table_structure_hints=table_structure_hints,
             raw_loader_provenance=raw_loader_provenance,
+            bounded_execution_guidance=bounded_execution_guidance,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
