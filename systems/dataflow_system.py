@@ -65,6 +65,7 @@ class DataflowSystem(System):
         label_component_profile_contract_enabled: bool = False,
         observed_component_inventory_contract_enabled: bool = False,
         data_discovered_component_inventory_contract_enabled: bool = False,
+        boundary_token_inventory_contract_enabled: bool = False,
         candidate_selection_impact_contract_enabled: bool = False,
         evidence_dependency_gate_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
@@ -143,6 +144,10 @@ class DataflowSystem(System):
             data_discovered_component_inventory_contract_enabled: Require
                 observed inventory evidence to include data-discovered
                 token/transform columns before it satisfies in LATEST context
+            boundary_token_inventory_contract_enabled: Require observed
+                inventory evidence to prove complete boundary-token enumeration
+                and downstream candidate coverage before it satisfies in LATEST
+                context
             candidate_selection_impact_contract_enabled: Enable server-side
                 LATEST context notices that require an executed impact table
                 comparing key candidates against the downstream entity measure
@@ -200,6 +205,7 @@ class DataflowSystem(System):
         self.data_discovered_component_inventory_contract_enabled = (
             data_discovered_component_inventory_contract_enabled
         )
+        self.boundary_token_inventory_contract_enabled = boundary_token_inventory_contract_enabled
         self.candidate_selection_impact_contract_enabled = candidate_selection_impact_contract_enabled
         self.evidence_dependency_gate_enabled = evidence_dependency_gate_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
@@ -342,6 +348,7 @@ class DataflowSystem(System):
             label_component_profile_contract=self.label_component_profile_contract_enabled,
             observed_component_inventory_contract=self.observed_component_inventory_contract_enabled,
             data_discovered_component_inventory_contract=self.data_discovered_component_inventory_contract_enabled,
+            boundary_token_inventory_contract=self.boundary_token_inventory_contract_enabled,
             candidate_selection_impact_contract=self.candidate_selection_impact_contract_enabled,
             evidence_dependency_gate=self.evidence_dependency_gate_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
@@ -687,6 +694,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "label_component_profile_contract_enabled": self.label_component_profile_contract_enabled,
                 "observed_component_inventory_contract_enabled": self.observed_component_inventory_contract_enabled,
                 "data_discovered_component_inventory_contract_enabled": self.data_discovered_component_inventory_contract_enabled,
+                "boundary_token_inventory_contract_enabled": self.boundary_token_inventory_contract_enabled,
                 "candidate_selection_impact_contract_enabled": self.candidate_selection_impact_contract_enabled,
                 "evidence_dependency_gate_enabled": self.evidence_dependency_gate_enabled,
                 "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
@@ -1794,6 +1802,52 @@ class DataflowSystemGPT52LatestDataDiscoveredComponentInventoryStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestDataDiscoveredComponentInventoryStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan23: boundary-token inventory completeness in LATEST. These variants
+# keep the typed Plan22 dependency chain, but require observed inventory to
+# prove broad boundary-token enumeration and downstream candidate coverage.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestBoundaryTokenInventoryStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _OBSERVED_COMPONENT_INVENTORY_CONTRACT_ENABLED = True
+    _DATA_DISCOVERED_COMPONENT_INVENTORY_CONTRACT_ENABLED = True
+    _BOUNDARY_TOKEN_INVENTORY_CONTRACT_ENABLED = True
+    _KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED = True
+    _LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED = True
+    _CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED = True
+    _EVIDENCE_DEPENDENCY_GATE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            observed_component_inventory_contract_enabled=self._OBSERVED_COMPONENT_INVENTORY_CONTRACT_ENABLED,
+            data_discovered_component_inventory_contract_enabled=self._DATA_DISCOVERED_COMPONENT_INVENTORY_CONTRACT_ENABLED,
+            boundary_token_inventory_contract_enabled=self._BOUNDARY_TOKEN_INVENTORY_CONTRACT_ENABLED,
+            key_grain_evidence_contract_enabled=self._KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED,
+            label_component_profile_contract_enabled=self._LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED,
+            candidate_selection_impact_contract_enabled=self._CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED,
+            evidence_dependency_gate_enabled=self._EVIDENCE_DEPENDENCY_GATE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestBoundaryTokenInventoryStatsOn(
+    _GPTLatestBoundaryTokenInventoryStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestBoundaryTokenInventoryStatsOn"
+
+
+class DataflowSystemGPT52LatestBoundaryTokenInventoryStatsOn(
+    _GPTLatestBoundaryTokenInventoryStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestBoundaryTokenInventoryStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
