@@ -51,6 +51,7 @@ class DataflowSystem(System):
         source_manifest_max_related_per_source: int = 40,
         metric_evidence_guidance_enabled: bool = False,
         schema_first_code_mode_enabled: bool = False,
+        table_structure_hints_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -86,6 +87,8 @@ class DataflowSystem(System):
                 guidance for provenance-preserving final metric evidence
             schema_first_code_mode_enabled: Enable server-side compiled
                 schema rendering in CODE-mode context
+            table_structure_hints_enabled: Enable server-side DataLoading
+                structure hints for likely metadata/header/footer rows
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -115,6 +118,7 @@ class DataflowSystem(System):
         self.source_manifest_max_related_per_source = source_manifest_max_related_per_source
         self.metric_evidence_guidance_enabled = metric_evidence_guidance_enabled
         self.schema_first_code_mode_enabled = schema_first_code_mode_enabled
+        self.table_structure_hints_enabled = table_structure_hints_enabled
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -239,6 +243,7 @@ class DataflowSystem(System):
             lineage_hint_on_stall=self.lineage_hint_on_stall,
             metric_evidence_guidance=self.metric_evidence_guidance_enabled,
             schema_first_code_mode=self.schema_first_code_mode_enabled,
+            table_structure_hints=self.table_structure_hints_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -566,6 +571,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "source_manifest_max_related_per_source": self.source_manifest_max_related_per_source,
                 "metric_evidence_guidance_enabled": self.metric_evidence_guidance_enabled,
                 "schema_first_code_mode_enabled": self.schema_first_code_mode_enabled,
+                "table_structure_hints_enabled": self.table_structure_hints_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -1026,6 +1032,37 @@ class DataflowSystemGPT5MiniLatestSchemaStatsOn(_GPTLatestSchemaStatsOnVariant):
 class DataflowSystemGPT52LatestSchemaStatsOn(_GPTLatestSchemaStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestSchemaStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan5: latest-mode table-structure hints for suspicious DataLoading
+# results. These variants isolate a context-compiler rule against
+# LatestStatsOn: render compact generic evidence when a loader appears to
+# contain metadata/header/footer rows rather than one clean table.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestTableHintsStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _TABLE_STRUCTURE_HINTS_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            table_structure_hints_enabled=self._TABLE_STRUCTURE_HINTS_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestTableHintsStatsOn(_GPTLatestTableHintsStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestTableHintsStatsOn"
+
+
+class DataflowSystemGPT52LatestTableHintsStatsOn(_GPTLatestTableHintsStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestTableHintsStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

@@ -54,6 +54,7 @@ AGENT_MAX_OPERATOR_EDITS: Optional[int] = None
 AGENT_LINEAGE_HINT_ON_STALL: Optional[bool] = None
 AGENT_METRIC_EVIDENCE_GUIDANCE: Optional[bool] = None
 AGENT_SCHEMA_FIRST_CODE_MODE: Optional[bool] = None
+AGENT_TABLE_STRUCTURE_HINTS: Optional[bool] = None
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -88,6 +89,7 @@ class AgentSettings:
     lineage_hint_on_stall: Optional[bool] = None
     metric_evidence_guidance: Optional[bool] = None
     schema_first_code_mode: Optional[bool] = None
+    table_structure_hints: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -116,6 +118,8 @@ class AgentSettings:
             payload["metricEvidenceGuidance"] = self.metric_evidence_guidance
         if self.schema_first_code_mode is not None:
             payload["schemaFirstCodeMode"] = self.schema_first_code_mode
+        if self.table_structure_hints is not None:
+            payload["tableStructureHints"] = self.table_structure_hints
         return payload
 
 
@@ -693,6 +697,7 @@ class DataflowAgent:
             lineage_hint_on_stall: Optional[bool] = AGENT_LINEAGE_HINT_ON_STALL,
             metric_evidence_guidance: Optional[bool] = AGENT_METRIC_EVIDENCE_GUIDANCE,
             schema_first_code_mode: Optional[bool] = AGENT_SCHEMA_FIRST_CODE_MODE,
+            table_structure_hints: Optional[bool] = AGENT_TABLE_STRUCTURE_HINTS,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -730,6 +735,8 @@ class DataflowAgent:
                 provenance and metric-evidence rules to the CODE-mode prompt
             schema_first_code_mode: Ask the server to render compiled
                 current-snapshot schemas in CODE-mode context
+            table_structure_hints: Ask the server to render compact
+                DataLoading structure hints for likely metadata/header/footer rows
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -759,6 +766,7 @@ class DataflowAgent:
             lineage_hint_on_stall=lineage_hint_on_stall,
             metric_evidence_guidance=metric_evidence_guidance,
             schema_first_code_mode=schema_first_code_mode,
+            table_structure_hints=table_structure_hints,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
