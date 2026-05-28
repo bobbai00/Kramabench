@@ -7,7 +7,9 @@ to solve benchmark tasks via dataflow-based agents.
 """
 
 import os
+import fnmatch
 import json
+import re
 import time
 from typing import Dict, List, Optional
 
@@ -44,6 +46,9 @@ class DataflowSystem(System):
         include_operator_properties: bool = None,
         max_operator_edits: Optional[int] = None,
         lineage_hint_on_stall: Optional[bool] = None,
+        source_manifest_enabled: bool = False,
+        source_manifest_max_files: int = 80,
+        source_manifest_max_related_per_source: int = 40,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -72,6 +77,9 @@ class DataflowSystem(System):
             disabled_tools: Optional list of tool names to disable
             max_operator_edits: Optional convergence guard cap; None uses server default
             lineage_hint_on_stall: Optional lineage hint toggle for convergence guard stalls
+            source_manifest_enabled: Add a compact source-planning manifest to the prompt
+            source_manifest_max_files: Maximum files to list in each manifest section
+            source_manifest_max_related_per_source: Maximum related siblings per listed file
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -96,6 +104,9 @@ class DataflowSystem(System):
         self.include_operator_properties = include_operator_properties
         self.max_operator_edits = max_operator_edits
         self.lineage_hint_on_stall = lineage_hint_on_stall
+        self.source_manifest_enabled = source_manifest_enabled
+        self.source_manifest_max_files = source_manifest_max_files
+        self.source_manifest_max_related_per_source = source_manifest_max_related_per_source
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -222,7 +233,13 @@ class DataflowSystem(System):
         )
         self.agent.setup()
 
-    def _build_prompt(self, query: str, file_paths: List[str], format_hint: str = "") -> str:
+    def _build_prompt(
+        self,
+        query: str,
+        file_paths: List[str],
+        format_hint: str = "",
+        source_manifest: str = "",
+    ) -> str:
         """
         Build the prompt for the agent.
 
@@ -230,16 +247,32 @@ class DataflowSystem(System):
             query: The natural language query
             file_paths: List of file paths available for the query
             format_hint: Optional format hint for the expected answer format
+            source_manifest: Optional compact manifest of related dataset sources
 
         Returns:
             Formatted prompt string
         """
+        manifest_block = ""
+        if source_manifest:
+            manifest_block = f"""
+
+Source manifest (related dataset files discovered from the paths above):
+{source_manifest}
+
+Source planning rules:
+- Treat the listed data files as starting points, not proof that sibling files are irrelevant.
+- If the task or an intermediate result derives a key such as a year, state, month, satellite id, or entity, and a listed filename/path carries a different key, inspect the manifest and load the matching sibling file or pattern.
+- Preserve filename/path-derived metadata when it identifies an entity, state, year, or other grouping key.
+- If a filter on a derived target value returns zero rows, re-check source selection before falling back to another value. Do not silently substitute another year/entity.
+"""
+
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
 
 Data files available (use these paths to read the data):
 {json.dumps(file_paths, indent=2)}
 
 Note: All paths are relative. Some paths may contain wildcards (e.g., "folder/*" or "file-*.csv"). Use glob patterns to match and read those files.
+{manifest_block}
 
 Question: {query}
 
@@ -248,6 +281,178 @@ Answer format: {format_hint}
 Your last line MUST BE: **Final Answer: <value>**"""
 
         return prompt
+
+    def _to_dataset_relative(self, path: str) -> str:
+        """Convert a prompt path back to a path relative to dataset_directory."""
+        normalized = os.path.normpath(path)
+        dataset_rel = os.path.normpath(os.path.relpath(self.dataset_directory))
+        if normalized == dataset_rel:
+            return ""
+        prefix = dataset_rel + os.sep
+        if normalized.startswith(prefix):
+            return normalized[len(prefix):]
+        return normalized
+
+    def _format_manifest_file_list(self, files: List[str], limit: int) -> str:
+        """Format dataset-relative file paths as prompt-relative paths with a cap."""
+        if not files:
+            return "(none)"
+        shown = files[:limit]
+        paths = [
+            os.path.relpath(os.path.join(self.dataset_directory, file_path))
+            for file_path in shown
+        ]
+        rendered = json.dumps(paths, indent=2)
+        remaining = len(files) - len(shown)
+        if remaining > 0:
+            rendered += f"\n  ... {remaining} more not shown"
+        return rendered
+
+    def _match_dataset_pattern(self, pattern: str) -> List[str]:
+        """Match a dataset-relative glob pattern against known dataset files."""
+        normalized = pattern.replace(os.sep, "/")
+        return sorted(
+            file_path
+            for file_path in self.dataset.keys()
+            if fnmatch.fnmatch(file_path.replace(os.sep, "/"), normalized)
+        )
+
+    def _numeric_family_pattern(self, file_path: str) -> Optional[str]:
+        """Return a sibling glob by replacing numeric runs in the basename."""
+        directory = os.path.dirname(file_path)
+        basename = os.path.basename(file_path)
+        if not re.search(r"\d", basename):
+            return None
+        family_basename = re.sub(r"\d+", "*", basename)
+        if family_basename == basename:
+            return None
+        return os.path.join(directory, family_basename) if directory else family_basename
+
+    def _build_source_manifest(self, file_paths: List[str]) -> str:
+        """
+        Build a compact manifest from listed sources and nearby dataset siblings.
+
+        This is intentionally mechanical and domain-agnostic: it exposes wildcard
+        expansions and numeric filename families, which covers source-selection
+        tasks without hard-coding task ids or answer-specific filenames.
+        """
+        if not file_paths:
+            return ""
+
+        listed_files: set[str] = set()
+        wildcard_sections: List[tuple[str, List[str]]] = []
+
+        for path in file_paths:
+            dataset_path = self._to_dataset_relative(path)
+            if not dataset_path:
+                continue
+            if "*" in dataset_path or "?" in dataset_path:
+                matches = self._match_dataset_pattern(dataset_path)
+                if matches:
+                    wildcard_sections.append((path, matches))
+                    listed_files.update(matches)
+            elif dataset_path in self.dataset:
+                listed_files.add(dataset_path)
+
+        sections: List[str] = []
+
+        if wildcard_sections:
+            sections.append("Wildcard expansions:")
+            for pattern, matches in wildcard_sections:
+                sections.append(f"- {pattern} -> {len(matches)} files:")
+                sections.append(
+                    self._format_manifest_file_list(
+                        matches,
+                        min(self.source_manifest_max_files, len(matches)),
+                    )
+                )
+
+        related_sections: List[tuple[str, str, List[str]]] = []
+        seen_patterns: set[str] = set()
+        for file_path in sorted(listed_files):
+            family_pattern = self._numeric_family_pattern(file_path)
+            if not family_pattern or family_pattern in seen_patterns:
+                continue
+            seen_patterns.add(family_pattern)
+            family_matches = self._match_dataset_pattern(family_pattern)
+            if len(family_matches) <= 1:
+                continue
+            related_sections.append((file_path, family_pattern, family_matches))
+
+        if related_sections:
+            sections.append("Related sibling file families:")
+            for source_file, pattern, matches in related_sections:
+                prompt_source = os.path.relpath(os.path.join(self.dataset_directory, source_file))
+                prompt_pattern = os.path.relpath(os.path.join(self.dataset_directory, pattern))
+                sections.append(f"- From {prompt_source}: {prompt_pattern} -> {len(matches)} files:")
+                sections.append(
+                    self._format_manifest_file_list(
+                        matches,
+                        min(self.source_manifest_max_related_per_source, len(matches)),
+                    )
+                )
+
+        if not sections:
+            return ""
+
+        return "\n".join(sections)
+
+    def _normalized_path_part(self, value: str) -> str:
+        return value.lower().replace(" ", "_").replace("-", "_")
+
+    def _find_same_named_dataset_dirs(self, dir_part: str, wildcard_part: str) -> List[str]:
+        """Find dataset directories with the same basename and matching files."""
+        dir_basename = os.path.basename(dir_part)
+        if not dir_basename:
+            return []
+        normalized_basename = self._normalized_path_part(dir_basename)
+        found_dirs: set[str] = set()
+        for file_path in self.dataset.keys():
+            file_dir = os.path.dirname(file_path)
+            if not file_dir:
+                continue
+            if self._normalized_path_part(os.path.basename(file_dir)) != normalized_basename:
+                continue
+            if fnmatch.fnmatch(os.path.basename(file_path), wildcard_part):
+                found_dirs.add(file_dir)
+        return sorted(found_dirs)
+
+    def _augment_file_paths_with_manifest_resolutions(self, file_paths: List[str]) -> List[str]:
+        """
+        Add resolved wildcard alternatives when a prompt path matches no files.
+
+        This is enabled only for source-manifest systems. It handles cases where
+        the truth subset names a directory by basename while the actual files live
+        under a nested vendor/export directory.
+        """
+        augmented: List[str] = []
+        seen: set[str] = set()
+
+        def add(path: str) -> None:
+            if path not in seen:
+                seen.add(path)
+                augmented.append(path)
+
+        for path in file_paths:
+            add(path)
+            dataset_path = self._to_dataset_relative(path)
+            if not dataset_path or ("*" not in dataset_path and "?" not in dataset_path):
+                continue
+            if self._match_dataset_pattern(dataset_path):
+                continue
+            parts = dataset_path.rsplit(os.sep, 1)
+            if len(parts) == 1:
+                parts = dataset_path.rsplit("/", 1)
+            if len(parts) != 2:
+                continue
+            dir_part, wildcard_part = parts
+            for found_dir in self._find_same_named_dataset_dirs(dir_part, wildcard_part):
+                resolved = os.path.relpath(
+                    os.path.join(self.dataset_directory, found_dir, wildcard_part)
+                )
+                add(resolved)
+
+        return augmented
 
     def _expand_data_sources(self, data_sources: List[str]) -> List[str]:
         """
@@ -293,13 +498,26 @@ Your last line MUST BE: **Final Answer: <value>**"""
             # Use a recursive wildcard instead of listing every file
             file_paths = [os.path.relpath(self.dataset_directory) + "/**/*"]
 
+        if self.source_manifest_enabled:
+            file_paths = self._augment_file_paths_with_manifest_resolutions(file_paths)
+
         if self.verbose:
             print(f"[DataflowSystem] Processing query: {query_id}")
             print(f"[DataflowSystem] Using {len(file_paths)} files")
 
         # Build prompt with file paths and format hint
         format_hint = self.format_hints.get(query_id, "")
-        prompt = self._build_prompt(query, file_paths, format_hint=format_hint)
+        source_manifest = (
+            self._build_source_manifest(file_paths)
+            if self.source_manifest_enabled
+            else ""
+        )
+        prompt = self._build_prompt(
+            query,
+            file_paths,
+            format_hint=format_hint,
+            source_manifest=source_manifest,
+        )
 
         # Save prompt for debugging
         query_output_dir = os.path.join(self.output_dir, query_id)
@@ -333,6 +551,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "include_operator_properties": self.include_operator_properties,
                 "max_operator_edits": self.max_operator_edits,
                 "lineage_hint_on_stall": self.lineage_hint_on_stall,
+                "source_manifest_enabled": self.source_manifest_enabled,
+                "source_manifest_max_files": self.source_manifest_max_files,
+                "source_manifest_max_related_per_source": self.source_manifest_max_related_per_source,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -696,6 +917,43 @@ class DataflowSystemGPT5MiniLatestGuardStatsOn(_GPTLatestGuardStatsOnVariant):
 class DataflowSystemGPT52LatestGuardStatsOn(_GPTLatestGuardStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestGuardStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan2: latest-mode source manifest. These variants isolate prompt-level
+# source planning against the existing LatestStatsOn systems. The manifest
+# lists wildcard expansions and numeric sibling file families so the agent
+# can load a derived source file instead of silently falling back.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestSourceManifestStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _SOURCE_MANIFEST_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            source_manifest_enabled=self._SOURCE_MANIFEST_ENABLED,
+            source_manifest_max_files=80,
+            source_manifest_max_related_per_source=40,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestSourceManifestStatsOn(
+    _GPTLatestSourceManifestStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestSourceManifestStatsOn"
+
+
+class DataflowSystemGPT52LatestSourceManifestStatsOn(
+    _GPTLatestSourceManifestStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestSourceManifestStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
