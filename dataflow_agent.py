@@ -63,6 +63,7 @@ AGENT_CARDINALITY_PRESSURE_GUIDANCE: Optional[bool] = None
 AGENT_ENTITY_KEY_HYGIENE_GUIDANCE: Optional[bool] = None
 AGENT_COMPONENT_GRAIN_GUIDANCE: Optional[bool] = None
 AGENT_KEY_GRAIN_COMPARISON_GUIDANCE: Optional[bool] = None
+AGENT_EXECUTION_SAFE_OPERATOR_IDS: Optional[bool] = None
 AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
 # Workflow Configuration
@@ -107,6 +108,7 @@ class AgentSettings:
     entity_key_hygiene_guidance: Optional[bool] = None
     component_grain_guidance: Optional[bool] = None
     key_grain_comparison_guidance: Optional[bool] = None
+    execution_safe_operator_ids: Optional[bool] = None
     fallback_contract_guidance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
@@ -154,6 +156,8 @@ class AgentSettings:
             payload["componentGrainGuidance"] = self.component_grain_guidance
         if self.key_grain_comparison_guidance is not None:
             payload["keyGrainComparisonGuidance"] = self.key_grain_comparison_guidance
+        if self.execution_safe_operator_ids is not None:
+            payload["executionSafeOperatorIds"] = self.execution_safe_operator_ids
         if self.fallback_contract_guidance is not None:
             payload["fallbackContractGuidance"] = self.fallback_contract_guidance
         return payload
@@ -742,6 +746,7 @@ class DataflowAgent:
             entity_key_hygiene_guidance: Optional[bool] = AGENT_ENTITY_KEY_HYGIENE_GUIDANCE,
             component_grain_guidance: Optional[bool] = AGENT_COMPONENT_GRAIN_GUIDANCE,
             key_grain_comparison_guidance: Optional[bool] = AGENT_KEY_GRAIN_COMPARISON_GUIDANCE,
+            execution_safe_operator_ids: Optional[bool] = AGENT_EXECUTION_SAFE_OPERATOR_IDS,
             fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
@@ -801,6 +806,8 @@ class DataflowAgent:
             key_grain_comparison_guidance: Ask the server to render general
                 candidate key-grain comparison hints before final entity-level
                 grouping, joining, deduplication, or distinct counts
+            execution_safe_operator_ids: Ask the server to guide and enforce
+                execution-compatible operator IDs without underscores
             fallback_contract_guidance: Ask the server to append general
                 fallback-contract rules for dependency/runtime capability failures
             texera_api_endpoint: Texera backend API endpoint
@@ -841,6 +848,7 @@ class DataflowAgent:
             entity_key_hygiene_guidance=entity_key_hygiene_guidance,
             component_grain_guidance=component_grain_guidance,
             key_grain_comparison_guidance=key_grain_comparison_guidance,
+            execution_safe_operator_ids=execution_safe_operator_ids,
             fallback_contract_guidance=fallback_contract_guidance,
         )
         self.texera_api_endpoint = texera_api_endpoint

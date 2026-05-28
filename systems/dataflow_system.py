@@ -60,6 +60,7 @@ class DataflowSystem(System):
         entity_key_hygiene_guidance_enabled: bool = False,
         component_grain_guidance_enabled: bool = False,
         key_grain_comparison_guidance_enabled: bool = False,
+        execution_safe_operator_ids_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -120,6 +121,9 @@ class DataflowSystem(System):
             key_grain_comparison_guidance_enabled: Enable server-side CODE-mode
                 guidance and context hints that require a candidate key-grain
                 comparison table before final entity-level counts
+            execution_safe_operator_ids_enabled: Enable server-side CODE-mode
+                guidance and tool-boundary validation for operator IDs that
+                are compatible with workflow execution persistence
             fallback_contract_guidance_enabled: Enable server-side CODE-mode
                 guidance and context hints for dependency/runtime capability
                 failures so fallback answers preserve the requested contract
@@ -161,6 +165,7 @@ class DataflowSystem(System):
         self.entity_key_hygiene_guidance_enabled = entity_key_hygiene_guidance_enabled
         self.component_grain_guidance_enabled = component_grain_guidance_enabled
         self.key_grain_comparison_guidance_enabled = key_grain_comparison_guidance_enabled
+        self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
         self.agent: Optional[DataflowAgent] = None
@@ -295,6 +300,7 @@ class DataflowSystem(System):
             entity_key_hygiene_guidance=self.entity_key_hygiene_guidance_enabled,
             component_grain_guidance=self.component_grain_guidance_enabled,
             key_grain_comparison_guidance=self.key_grain_comparison_guidance_enabled,
+            execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
@@ -632,6 +638,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "entity_key_hygiene_guidance_enabled": self.entity_key_hygiene_guidance_enabled,
                 "component_grain_guidance_enabled": self.component_grain_guidance_enabled,
                 "key_grain_comparison_guidance_enabled": self.key_grain_comparison_guidance_enabled,
+                "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
                 "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
             }
         }
@@ -1429,6 +1436,41 @@ class DataflowSystemGPT52LatestKeyGrainComparisonStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestKeyGrainComparisonStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan15: execution-safe operator ID guidance. These variants isolate a
+# general harness contract fix: CODE-mode operator IDs must remain valid
+# Python parameters while also avoiding logicalOpId characters that workflow
+# execution persistence rejects.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestExecutionSafeIdsStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _EXECUTION_SAFE_OPERATOR_IDS_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            execution_safe_operator_ids_enabled=self._EXECUTION_SAFE_OPERATOR_IDS_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestExecutionSafeIdsStatsOn(
+    _GPTLatestExecutionSafeIdsStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestExecutionSafeIdsStatsOn"
+
+
+class DataflowSystemGPT52LatestExecutionSafeIdsStatsOn(
+    _GPTLatestExecutionSafeIdsStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestExecutionSafeIdsStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
