@@ -40,6 +40,7 @@ class DataflowSystem(System):
         tool_timeout_seconds: int = None,
         execution_timeout_minutes: int = None,
         post_step_execution_timeout_seconds: Optional[int] = None,
+        post_step_timeout_backoff: Optional[bool] = None,
         agent_mode: str = None,
         context_mode: str = None,
         parallel_tool_calls: bool = None,
@@ -101,6 +102,9 @@ class DataflowSystem(System):
             post_step_execution_timeout_seconds: Optional timeout for automatic
                 post-step materialization after code edits. None preserves the
                 server default / legacy execution timeout.
+            post_step_timeout_backoff: Enable timeout-only checkpoint notices
+                and skip repeated automatic materialization of timed-out
+                lineages
             agent_mode: Agent mode (default: code)
             context_mode: Context selection policy (default: latest)
             parallel_tool_calls: Allow parallel tool calls (default: True)
@@ -189,6 +193,7 @@ class DataflowSystem(System):
         self.tool_timeout_seconds = tool_timeout_seconds or 240
         self.execution_timeout_minutes = execution_timeout_minutes or 4
         self.post_step_execution_timeout_seconds = post_step_execution_timeout_seconds
+        self.post_step_timeout_backoff = post_step_timeout_backoff
         self.agent_mode = agent_mode or "code"
         self.context_mode = context_mode or "latest"
         self.parallel_tool_calls = True if parallel_tool_calls is None else parallel_tool_calls
@@ -341,6 +346,7 @@ class DataflowSystem(System):
             tool_timeout_seconds=self.tool_timeout_seconds,
             execution_timeout_minutes=self.execution_timeout_minutes,
             post_step_execution_timeout_seconds=self.post_step_execution_timeout_seconds,
+            post_step_timeout_backoff=self.post_step_timeout_backoff,
             agent_mode=self.agent_mode,
             context_mode=self.context_mode,
             parallel_tool_calls=self.parallel_tool_calls,
@@ -687,6 +693,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "tool_timeout_seconds": self.tool_timeout_seconds,
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "post_step_execution_timeout_seconds": self.post_step_execution_timeout_seconds,
+                "post_step_timeout_backoff": self.post_step_timeout_backoff,
                 "agent_mode": self.agent_mode,
                 "context_mode": self.context_mode,
                 "parallel_tool_calls": self.parallel_tool_calls,
@@ -1976,6 +1983,38 @@ class DataflowSystemGPT52LatestPostStepCheckpointStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestPostStepCheckpointStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan27: timeout-only post-step checkpointing plus automatic execution
+# backoff for lineages that already hit a post-step client timeout.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestPostStepTimeoutBackoffStatsOnVariant(_GPTLatestPostStepCheckpointStatsOnVariant):
+    _POST_STEP_TIMEOUT_BACKOFF = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            post_step_timeout_backoff=self._POST_STEP_TIMEOUT_BACKOFF,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestPostStepTimeoutBackoffStatsOn(
+    _GPTLatestPostStepTimeoutBackoffStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestPostStepTimeoutBackoffStatsOn"
+
+
+class DataflowSystemGPT52LatestPostStepTimeoutBackoffStatsOn(
+    _GPTLatestPostStepTimeoutBackoffStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestPostStepTimeoutBackoffStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
