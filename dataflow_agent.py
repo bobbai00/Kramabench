@@ -66,6 +66,7 @@ AGENT_COMPONENT_GRAIN_GUIDANCE: Optional[bool] = None
 AGENT_KEY_GRAIN_COMPARISON_GUIDANCE: Optional[bool] = None
 AGENT_KEY_GRAIN_EVIDENCE_CONTRACT: Optional[bool] = None
 AGENT_LABEL_COMPONENT_PROFILE_CONTRACT: Optional[bool] = None
+AGENT_CANDIDATE_SELECTION_IMPACT_CONTRACT: Optional[bool] = None
 AGENT_EXECUTION_SAFE_OPERATOR_IDS: Optional[bool] = None
 AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
@@ -115,6 +116,7 @@ class AgentSettings:
     key_grain_comparison_guidance: Optional[bool] = None
     key_grain_evidence_contract: Optional[bool] = None
     label_component_profile_contract: Optional[bool] = None
+    candidate_selection_impact_contract: Optional[bool] = None
     execution_safe_operator_ids: Optional[bool] = None
     fallback_contract_guidance: Optional[bool] = None
 
@@ -169,6 +171,8 @@ class AgentSettings:
             payload["keyGrainEvidenceContract"] = self.key_grain_evidence_contract
         if self.label_component_profile_contract is not None:
             payload["labelComponentProfileContract"] = self.label_component_profile_contract
+        if self.candidate_selection_impact_contract is not None:
+            payload["candidateSelectionImpactContract"] = self.candidate_selection_impact_contract
         if self.execution_safe_operator_ids is not None:
             payload["executionSafeOperatorIds"] = self.execution_safe_operator_ids
         if self.fallback_contract_guidance is not None:
@@ -762,6 +766,7 @@ class DataflowAgent:
             key_grain_comparison_guidance: Optional[bool] = AGENT_KEY_GRAIN_COMPARISON_GUIDANCE,
             key_grain_evidence_contract: Optional[bool] = AGENT_KEY_GRAIN_EVIDENCE_CONTRACT,
             label_component_profile_contract: Optional[bool] = AGENT_LABEL_COMPONENT_PROFILE_CONTRACT,
+            candidate_selection_impact_contract: Optional[bool] = AGENT_CANDIDATE_SELECTION_IMPACT_CONTRACT,
             execution_safe_operator_ids: Optional[bool] = AGENT_EXECUTION_SAFE_OPERATOR_IDS,
             fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -831,6 +836,9 @@ class DataflowAgent:
             label_component_profile_contract: Ask the server to require an
                 executed all-value label-component profile before final key
                 selection in LATEST context
+            candidate_selection_impact_contract: Ask the server to require an
+                executed candidate-impact table before final entity-level
+                aggregation in LATEST context
             execution_safe_operator_ids: Ask the server to guide and enforce
                 execution-compatible operator IDs without underscores
             fallback_contract_guidance: Ask the server to append general
@@ -876,6 +884,7 @@ class DataflowAgent:
             key_grain_comparison_guidance=key_grain_comparison_guidance,
             key_grain_evidence_contract=key_grain_evidence_contract,
             label_component_profile_contract=label_component_profile_contract,
+            candidate_selection_impact_contract=candidate_selection_impact_contract,
             execution_safe_operator_ids=execution_safe_operator_ids,
             fallback_contract_guidance=fallback_contract_guidance,
         )

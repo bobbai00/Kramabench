@@ -63,6 +63,7 @@ class DataflowSystem(System):
         key_grain_comparison_guidance_enabled: bool = False,
         key_grain_evidence_contract_enabled: bool = False,
         label_component_profile_contract_enabled: bool = False,
+        candidate_selection_impact_contract_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
@@ -132,6 +133,9 @@ class DataflowSystem(System):
             label_component_profile_contract_enabled: Enable server-side
                 LATEST context notices that require an all-value
                 label-component profile before final entity-key selection
+            candidate_selection_impact_contract_enabled: Enable server-side
+                LATEST context notices that require an executed impact table
+                comparing key candidates against the downstream entity measure
             execution_safe_operator_ids_enabled: Enable server-side CODE-mode
                 guidance and tool-boundary validation for operator IDs that
                 are compatible with workflow execution persistence
@@ -179,6 +183,7 @@ class DataflowSystem(System):
         self.key_grain_comparison_guidance_enabled = key_grain_comparison_guidance_enabled
         self.key_grain_evidence_contract_enabled = key_grain_evidence_contract_enabled
         self.label_component_profile_contract_enabled = label_component_profile_contract_enabled
+        self.candidate_selection_impact_contract_enabled = candidate_selection_impact_contract_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
@@ -317,6 +322,7 @@ class DataflowSystem(System):
             key_grain_comparison_guidance=self.key_grain_comparison_guidance_enabled,
             key_grain_evidence_contract=self.key_grain_evidence_contract_enabled,
             label_component_profile_contract=self.label_component_profile_contract_enabled,
+            candidate_selection_impact_contract=self.candidate_selection_impact_contract_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
@@ -656,6 +662,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "entity_key_hygiene_guidance_enabled": self.entity_key_hygiene_guidance_enabled,
                 "component_grain_guidance_enabled": self.component_grain_guidance_enabled,
                 "key_grain_comparison_guidance_enabled": self.key_grain_comparison_guidance_enabled,
+                "key_grain_evidence_contract_enabled": self.key_grain_evidence_contract_enabled,
+                "label_component_profile_contract_enabled": self.label_component_profile_contract_enabled,
+                "candidate_selection_impact_contract_enabled": self.candidate_selection_impact_contract_enabled,
                 "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
                 "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
             }
@@ -1595,6 +1604,45 @@ class DataflowSystemGPT52LatestLabelComponentProfileContractStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestLabelComponentProfileContractStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan19: candidate-selection impact contract in LATEST. These variants build
+# on Plan17/18 evidence artifacts with a general dataflow rule: the selected
+# entity key remains provisional until candidate keys are compared against the
+# downstream entity-level predicate or final measure in an executed table.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestCandidateSelectionImpactContractStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED = True
+    _LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED = True
+    _CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            key_grain_evidence_contract_enabled=self._KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED,
+            label_component_profile_contract_enabled=self._LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED,
+            candidate_selection_impact_contract_enabled=self._CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestCandidateSelectionImpactContractStatsOn(
+    _GPTLatestCandidateSelectionImpactContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestCandidateSelectionImpactContractStatsOn"
+
+
+class DataflowSystemGPT52LatestCandidateSelectionImpactContractStatsOn(
+    _GPTLatestCandidateSelectionImpactContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestCandidateSelectionImpactContractStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
