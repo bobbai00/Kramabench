@@ -67,6 +67,7 @@ AGENT_KEY_GRAIN_COMPARISON_GUIDANCE: Optional[bool] = None
 AGENT_KEY_GRAIN_EVIDENCE_CONTRACT: Optional[bool] = None
 AGENT_LABEL_COMPONENT_PROFILE_CONTRACT: Optional[bool] = None
 AGENT_OBSERVED_COMPONENT_INVENTORY_CONTRACT: Optional[bool] = None
+AGENT_DATA_DISCOVERED_COMPONENT_INVENTORY_CONTRACT: Optional[bool] = None
 AGENT_CANDIDATE_SELECTION_IMPACT_CONTRACT: Optional[bool] = None
 AGENT_EVIDENCE_DEPENDENCY_GATE: Optional[bool] = None
 AGENT_EXECUTION_SAFE_OPERATOR_IDS: Optional[bool] = None
@@ -119,6 +120,7 @@ class AgentSettings:
     key_grain_evidence_contract: Optional[bool] = None
     label_component_profile_contract: Optional[bool] = None
     observed_component_inventory_contract: Optional[bool] = None
+    data_discovered_component_inventory_contract: Optional[bool] = None
     candidate_selection_impact_contract: Optional[bool] = None
     evidence_dependency_gate: Optional[bool] = None
     execution_safe_operator_ids: Optional[bool] = None
@@ -177,6 +179,8 @@ class AgentSettings:
             payload["labelComponentProfileContract"] = self.label_component_profile_contract
         if self.observed_component_inventory_contract is not None:
             payload["observedComponentInventoryContract"] = self.observed_component_inventory_contract
+        if self.data_discovered_component_inventory_contract is not None:
+            payload["dataDiscoveredComponentInventoryContract"] = self.data_discovered_component_inventory_contract
         if self.candidate_selection_impact_contract is not None:
             payload["candidateSelectionImpactContract"] = self.candidate_selection_impact_contract
         if self.evidence_dependency_gate is not None:
@@ -775,6 +779,7 @@ class DataflowAgent:
             key_grain_evidence_contract: Optional[bool] = AGENT_KEY_GRAIN_EVIDENCE_CONTRACT,
             label_component_profile_contract: Optional[bool] = AGENT_LABEL_COMPONENT_PROFILE_CONTRACT,
             observed_component_inventory_contract: Optional[bool] = AGENT_OBSERVED_COMPONENT_INVENTORY_CONTRACT,
+            data_discovered_component_inventory_contract: Optional[bool] = AGENT_DATA_DISCOVERED_COMPONENT_INVENTORY_CONTRACT,
             candidate_selection_impact_contract: Optional[bool] = AGENT_CANDIDATE_SELECTION_IMPACT_CONTRACT,
             evidence_dependency_gate: Optional[bool] = AGENT_EVIDENCE_DEPENDENCY_GATE,
             execution_safe_operator_ids: Optional[bool] = AGENT_EXECUTION_SAFE_OPERATOR_IDS,
@@ -850,6 +855,9 @@ class DataflowAgent:
                 an executed data-driven observed component/separator inventory
                 before component profiling or candidate-key evidence in LATEST
                 context
+            data_discovered_component_inventory_contract: Ask the server to
+                strengthen observed inventory evidence with discovered-token
+                columns before accepting it in LATEST context
             candidate_selection_impact_contract: Ask the server to require an
                 executed candidate-impact table before final entity-level
                 aggregation in LATEST context
@@ -902,6 +910,7 @@ class DataflowAgent:
             key_grain_evidence_contract=key_grain_evidence_contract,
             label_component_profile_contract=label_component_profile_contract,
             observed_component_inventory_contract=observed_component_inventory_contract,
+            data_discovered_component_inventory_contract=data_discovered_component_inventory_contract,
             candidate_selection_impact_contract=candidate_selection_impact_contract,
             evidence_dependency_gate=evidence_dependency_gate,
             execution_safe_operator_ids=execution_safe_operator_ids,
