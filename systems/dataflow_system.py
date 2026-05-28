@@ -59,6 +59,7 @@ class DataflowSystem(System):
         cardinality_pressure_guidance_enabled: bool = False,
         entity_key_hygiene_guidance_enabled: bool = False,
         component_grain_guidance_enabled: bool = False,
+        key_grain_comparison_guidance_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -116,6 +117,9 @@ class DataflowSystem(System):
                 guidance and context hints for high-cardinality string labels
                 whose values may encode sub-entity or sampling-location
                 component grains before entity-level counts
+            key_grain_comparison_guidance_enabled: Enable server-side CODE-mode
+                guidance and context hints that require a candidate key-grain
+                comparison table before final entity-level counts
             fallback_contract_guidance_enabled: Enable server-side CODE-mode
                 guidance and context hints for dependency/runtime capability
                 failures so fallback answers preserve the requested contract
@@ -156,6 +160,7 @@ class DataflowSystem(System):
         self.cardinality_pressure_guidance_enabled = cardinality_pressure_guidance_enabled
         self.entity_key_hygiene_guidance_enabled = entity_key_hygiene_guidance_enabled
         self.component_grain_guidance_enabled = component_grain_guidance_enabled
+        self.key_grain_comparison_guidance_enabled = key_grain_comparison_guidance_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
         self.agent: Optional[DataflowAgent] = None
@@ -289,6 +294,7 @@ class DataflowSystem(System):
             cardinality_pressure_guidance=self.cardinality_pressure_guidance_enabled,
             entity_key_hygiene_guidance=self.entity_key_hygiene_guidance_enabled,
             component_grain_guidance=self.component_grain_guidance_enabled,
+            key_grain_comparison_guidance=self.key_grain_comparison_guidance_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
@@ -625,6 +631,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "cardinality_pressure_guidance_enabled": self.cardinality_pressure_guidance_enabled,
                 "entity_key_hygiene_guidance_enabled": self.entity_key_hygiene_guidance_enabled,
                 "component_grain_guidance_enabled": self.component_grain_guidance_enabled,
+                "key_grain_comparison_guidance_enabled": self.key_grain_comparison_guidance_enabled,
                 "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
             }
         }
@@ -1386,6 +1393,42 @@ class DataflowSystemGPT52LatestComponentGrainStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestComponentGrainStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan14: latest-mode key-grain comparison guidance. These variants isolate a
+# stricter general context-compiler rule against LatestStatsOn: when
+# high-cardinality string labels expose multiple plausible entity grains, final
+# entity counts should be preceded by an explicit candidate-key comparison
+# table rather than a single un-audited normalization choice.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestKeyGrainComparisonStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _KEY_GRAIN_COMPARISON_GUIDANCE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            key_grain_comparison_guidance_enabled=self._KEY_GRAIN_COMPARISON_GUIDANCE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestKeyGrainComparisonStatsOn(
+    _GPTLatestKeyGrainComparisonStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestKeyGrainComparisonStatsOn"
+
+
+class DataflowSystemGPT52LatestKeyGrainComparisonStatsOn(
+    _GPTLatestKeyGrainComparisonStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestKeyGrainComparisonStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
