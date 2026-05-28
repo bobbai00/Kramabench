@@ -68,6 +68,7 @@ AGENT_KEY_GRAIN_EVIDENCE_CONTRACT: Optional[bool] = None
 AGENT_LABEL_COMPONENT_PROFILE_CONTRACT: Optional[bool] = None
 AGENT_OBSERVED_COMPONENT_INVENTORY_CONTRACT: Optional[bool] = None
 AGENT_CANDIDATE_SELECTION_IMPACT_CONTRACT: Optional[bool] = None
+AGENT_EVIDENCE_DEPENDENCY_GATE: Optional[bool] = None
 AGENT_EXECUTION_SAFE_OPERATOR_IDS: Optional[bool] = None
 AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
@@ -119,6 +120,7 @@ class AgentSettings:
     label_component_profile_contract: Optional[bool] = None
     observed_component_inventory_contract: Optional[bool] = None
     candidate_selection_impact_contract: Optional[bool] = None
+    evidence_dependency_gate: Optional[bool] = None
     execution_safe_operator_ids: Optional[bool] = None
     fallback_contract_guidance: Optional[bool] = None
 
@@ -177,6 +179,8 @@ class AgentSettings:
             payload["observedComponentInventoryContract"] = self.observed_component_inventory_contract
         if self.candidate_selection_impact_contract is not None:
             payload["candidateSelectionImpactContract"] = self.candidate_selection_impact_contract
+        if self.evidence_dependency_gate is not None:
+            payload["evidenceDependencyGate"] = self.evidence_dependency_gate
         if self.execution_safe_operator_ids is not None:
             payload["executionSafeOperatorIds"] = self.execution_safe_operator_ids
         if self.fallback_contract_guidance is not None:
@@ -772,6 +776,7 @@ class DataflowAgent:
             label_component_profile_contract: Optional[bool] = AGENT_LABEL_COMPONENT_PROFILE_CONTRACT,
             observed_component_inventory_contract: Optional[bool] = AGENT_OBSERVED_COMPONENT_INVENTORY_CONTRACT,
             candidate_selection_impact_contract: Optional[bool] = AGENT_CANDIDATE_SELECTION_IMPACT_CONTRACT,
+            evidence_dependency_gate: Optional[bool] = AGENT_EVIDENCE_DEPENDENCY_GATE,
             execution_safe_operator_ids: Optional[bool] = AGENT_EXECUTION_SAFE_OPERATOR_IDS,
             fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -848,6 +853,9 @@ class DataflowAgent:
             candidate_selection_impact_contract: Ask the server to require an
                 executed candidate-impact table before final entity-level
                 aggregation in LATEST context
+            evidence_dependency_gate: Ask the server to validate evidence
+                contracts through DAG links to prerequisite typed artifacts in
+                LATEST context
             execution_safe_operator_ids: Ask the server to guide and enforce
                 execution-compatible operator IDs without underscores
             fallback_contract_guidance: Ask the server to append general
@@ -895,6 +903,7 @@ class DataflowAgent:
             label_component_profile_contract=label_component_profile_contract,
             observed_component_inventory_contract=observed_component_inventory_contract,
             candidate_selection_impact_contract=candidate_selection_impact_contract,
+            evidence_dependency_gate=evidence_dependency_gate,
             execution_safe_operator_ids=execution_safe_operator_ids,
             fallback_contract_guidance=fallback_contract_guidance,
         )

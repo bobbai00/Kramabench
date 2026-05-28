@@ -65,6 +65,7 @@ class DataflowSystem(System):
         label_component_profile_contract_enabled: bool = False,
         observed_component_inventory_contract_enabled: bool = False,
         candidate_selection_impact_contract_enabled: bool = False,
+        evidence_dependency_gate_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
@@ -141,6 +142,9 @@ class DataflowSystem(System):
             candidate_selection_impact_contract_enabled: Enable server-side
                 LATEST context notices that require an executed impact table
                 comparing key candidates against the downstream entity measure
+            evidence_dependency_gate_enabled: Enable server-side LATEST
+                dependency checks that validate typed evidence artifacts through
+                workflow links to their prerequisite artifacts
             execution_safe_operator_ids_enabled: Enable server-side CODE-mode
                 guidance and tool-boundary validation for operator IDs that
                 are compatible with workflow execution persistence
@@ -190,6 +194,7 @@ class DataflowSystem(System):
         self.label_component_profile_contract_enabled = label_component_profile_contract_enabled
         self.observed_component_inventory_contract_enabled = observed_component_inventory_contract_enabled
         self.candidate_selection_impact_contract_enabled = candidate_selection_impact_contract_enabled
+        self.evidence_dependency_gate_enabled = evidence_dependency_gate_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
@@ -330,6 +335,7 @@ class DataflowSystem(System):
             label_component_profile_contract=self.label_component_profile_contract_enabled,
             observed_component_inventory_contract=self.observed_component_inventory_contract_enabled,
             candidate_selection_impact_contract=self.candidate_selection_impact_contract_enabled,
+            evidence_dependency_gate=self.evidence_dependency_gate_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
@@ -673,6 +679,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "label_component_profile_contract_enabled": self.label_component_profile_contract_enabled,
                 "observed_component_inventory_contract_enabled": self.observed_component_inventory_contract_enabled,
                 "candidate_selection_impact_contract_enabled": self.candidate_selection_impact_contract_enabled,
+                "evidence_dependency_gate_enabled": self.evidence_dependency_gate_enabled,
                 "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
                 "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
             }
@@ -1692,6 +1699,48 @@ class DataflowSystemGPT52LatestObservedComponentInventoryContractStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestObservedComponentInventoryContractStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan21: evidence dependency gate in LATEST. These variants build on the
+# typed evidence contracts and require the workflow DAG to prove each evidence
+# artifact consumes its prerequisite artifact through dataflow links.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestEvidenceDependencyGateStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _OBSERVED_COMPONENT_INVENTORY_CONTRACT_ENABLED = True
+    _KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED = True
+    _LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED = True
+    _CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED = True
+    _EVIDENCE_DEPENDENCY_GATE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            observed_component_inventory_contract_enabled=self._OBSERVED_COMPONENT_INVENTORY_CONTRACT_ENABLED,
+            key_grain_evidence_contract_enabled=self._KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED,
+            label_component_profile_contract_enabled=self._LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED,
+            candidate_selection_impact_contract_enabled=self._CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED,
+            evidence_dependency_gate_enabled=self._EVIDENCE_DEPENDENCY_GATE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestEvidenceDependencyGateStatsOn(
+    _GPTLatestEvidenceDependencyGateStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestEvidenceDependencyGateStatsOn"
+
+
+class DataflowSystemGPT52LatestEvidenceDependencyGateStatsOn(
+    _GPTLatestEvidenceDependencyGateStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestEvidenceDependencyGateStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
