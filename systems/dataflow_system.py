@@ -42,6 +42,8 @@ class DataflowSystem(System):
         disabled_tools: Optional[List[str]] = None,
         stats_enabled: bool = False,
         include_operator_properties: bool = None,
+        max_operator_edits: Optional[int] = None,
+        lineage_hint_on_stall: Optional[bool] = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -68,6 +70,8 @@ class DataflowSystem(System):
             parallel_tool_calls: Allow parallel tool calls (default: True)
             allowed_operator_types: Optional whitelist of operator types; None uses server default
             disabled_tools: Optional list of tool names to disable
+            max_operator_edits: Optional convergence guard cap; None uses server default
+            lineage_hint_on_stall: Optional lineage hint toggle for convergence guard stalls
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -90,6 +94,8 @@ class DataflowSystem(System):
         self.stats_enabled = stats_enabled
         # None -> server default (true).
         self.include_operator_properties = include_operator_properties
+        self.max_operator_edits = max_operator_edits
+        self.lineage_hint_on_stall = lineage_hint_on_stall
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -210,6 +216,8 @@ class DataflowSystem(System):
             disabled_tools=self.disabled_tools,
             stats_enabled=self.stats_enabled,
             include_operator_properties=self.include_operator_properties,
+            max_operator_edits=self.max_operator_edits,
+            lineage_hint_on_stall=self.lineage_hint_on_stall,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -323,6 +331,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "disabled_tools": self.disabled_tools,
                 "stats_enabled": self.stats_enabled,
                 "include_operator_properties": self.include_operator_properties,
+                "max_operator_edits": self.max_operator_edits,
+                "lineage_hint_on_stall": self.lineage_hint_on_stall,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -654,6 +664,38 @@ class DataflowSystemGPT52FullStatsOn(_GPTStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _CONTEXT_MODE = "full"
     _NAME = "DataflowSystemGPT52FullStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan1: latest-mode convergence guard + lineage stall hint. These variants
+# isolate the guard against the existing LatestStatsOn systems and keep the
+# near-term focus on LATEST context rather than FULL/DELTA.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestGuardStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _MAX_OPERATOR_EDITS = 2
+    _LINEAGE_HINT_ON_STALL = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            max_operator_edits=self._MAX_OPERATOR_EDITS,
+            lineage_hint_on_stall=self._LINEAGE_HINT_ON_STALL,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestGuardStatsOn(_GPTLatestGuardStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestGuardStatsOn"
+
+
+class DataflowSystemGPT52LatestGuardStatsOn(_GPTLatestGuardStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestGuardStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
