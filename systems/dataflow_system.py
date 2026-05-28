@@ -63,6 +63,7 @@ class DataflowSystem(System):
         key_grain_comparison_guidance_enabled: bool = False,
         key_grain_evidence_contract_enabled: bool = False,
         label_component_profile_contract_enabled: bool = False,
+        observed_component_inventory_contract_enabled: bool = False,
         candidate_selection_impact_contract_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
@@ -133,6 +134,10 @@ class DataflowSystem(System):
             label_component_profile_contract_enabled: Enable server-side
                 LATEST context notices that require an all-value
                 label-component profile before final entity-key selection
+            observed_component_inventory_contract_enabled: Enable server-side
+                LATEST context notices that require a data-driven inventory of
+                observed label component/separator structure before component
+                profiling or candidate-key evidence
             candidate_selection_impact_contract_enabled: Enable server-side
                 LATEST context notices that require an executed impact table
                 comparing key candidates against the downstream entity measure
@@ -183,6 +188,7 @@ class DataflowSystem(System):
         self.key_grain_comparison_guidance_enabled = key_grain_comparison_guidance_enabled
         self.key_grain_evidence_contract_enabled = key_grain_evidence_contract_enabled
         self.label_component_profile_contract_enabled = label_component_profile_contract_enabled
+        self.observed_component_inventory_contract_enabled = observed_component_inventory_contract_enabled
         self.candidate_selection_impact_contract_enabled = candidate_selection_impact_contract_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
@@ -322,6 +328,7 @@ class DataflowSystem(System):
             key_grain_comparison_guidance=self.key_grain_comparison_guidance_enabled,
             key_grain_evidence_contract=self.key_grain_evidence_contract_enabled,
             label_component_profile_contract=self.label_component_profile_contract_enabled,
+            observed_component_inventory_contract=self.observed_component_inventory_contract_enabled,
             candidate_selection_impact_contract=self.candidate_selection_impact_contract_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
@@ -664,6 +671,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "key_grain_comparison_guidance_enabled": self.key_grain_comparison_guidance_enabled,
                 "key_grain_evidence_contract_enabled": self.key_grain_evidence_contract_enabled,
                 "label_component_profile_contract_enabled": self.label_component_profile_contract_enabled,
+                "observed_component_inventory_contract_enabled": self.observed_component_inventory_contract_enabled,
                 "candidate_selection_impact_contract_enabled": self.candidate_selection_impact_contract_enabled,
                 "execution_safe_operator_ids_enabled": self.execution_safe_operator_ids_enabled,
                 "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
@@ -1643,6 +1651,47 @@ class DataflowSystemGPT52LatestCandidateSelectionImpactContractStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestCandidateSelectionImpactContractStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan20: observed component inventory contract in LATEST. These variants
+# require candidate generation to begin from a data-driven inventory of
+# observed label component/separator structure before Plan18/17/19 evidence
+# artifacts use or compare component-derived keys.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestObservedComponentInventoryContractStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _OBSERVED_COMPONENT_INVENTORY_CONTRACT_ENABLED = True
+    _KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED = True
+    _LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED = True
+    _CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            observed_component_inventory_contract_enabled=self._OBSERVED_COMPONENT_INVENTORY_CONTRACT_ENABLED,
+            key_grain_evidence_contract_enabled=self._KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED,
+            label_component_profile_contract_enabled=self._LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED,
+            candidate_selection_impact_contract_enabled=self._CANDIDATE_SELECTION_IMPACT_CONTRACT_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestObservedComponentInventoryContractStatsOn(
+    _GPTLatestObservedComponentInventoryContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestObservedComponentInventoryContractStatsOn"
+
+
+class DataflowSystemGPT52LatestObservedComponentInventoryContractStatsOn(
+    _GPTLatestObservedComponentInventoryContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestObservedComponentInventoryContractStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
