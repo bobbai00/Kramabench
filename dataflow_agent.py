@@ -42,6 +42,14 @@ AGENT_DISABLED_TOOLS: list[str] = []
 AGENT_MODE = "code"  # "code" or "general"
 AGENT_CONTEXT_MODE = "latest"  # "full", "delta", or "latest"
 AGENT_PARALLEL_TOOL_CALLS = True
+# Explicit LLM driver. None -> server auto-derives from modelType
+# (local-llm -> "local-react", everything else -> "vercel-tool-use").
+# Set to "local-react" or "vercel-tool-use" to force a driver, e.g. to
+# benchmark a non-local model under the text-mode ReAct loop.
+AGENT_DRIVER: Optional[str] = None
+# Render each operator's `Properties:` line in the assembled snapshot
+# (code operators' `code` blob is always stripped). None -> server default (true).
+AGENT_INCLUDE_OPERATOR_PROPERTIES: Optional[bool] = None
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -68,13 +76,9 @@ class AgentSettings:
     parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS
     allowed_operator_types: Optional[list[str]] = None  # None -> server default
     stats_enabled: bool = False  # Render `Column stats:` block per non-error result.
-    # Hard cap on how many of the most-recent ReActStep events are rendered
-    # into the assembled context. None -> server default (10000 = effectively off).
-    # A small finite value (e.g. 5) bounds context size for long traces.
-    recent_events_cap: Optional[int] = None
-    # When the cap is in effect, include the full `code` parameter of each
-    # kept createOrModifyOperator action in the rendered context. None -> server default (true).
-    include_code_in_recent_events: Optional[bool] = None
+    # Render each operator's `Properties:` line in the assembled snapshot.
+    # None -> server default (true); code operators are stripped regardless.
+    include_operator_properties: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -93,10 +97,8 @@ class AgentSettings:
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
-        if self.recent_events_cap is not None:
-            payload["recentEventsCap"] = self.recent_events_cap
-        if self.include_code_in_recent_events is not None:
-            payload["includeCodeInRecentEvents"] = self.include_code_in_recent_events
+        if self.include_operator_properties is not None:
+            payload["includeOperatorProperties"] = self.include_operator_properties
         return payload
 
 
@@ -111,6 +113,9 @@ class AgentInfo:
     created_at: str
     settings: Optional[dict] = None
     delegate: Optional[dict] = None
+    # Driver the server actually constructed the agent with
+    # ("vercel-tool-use" | "local-react"), echoed back on create.
+    driver: Optional[str] = None
 
 
 @dataclass
@@ -309,6 +314,7 @@ def create_agent(
         computing_unit_id: int,
         settings: Optional[AgentSettings] = None,
         name: Optional[str] = None,
+        driver: Optional[str] = None,
         agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
 ) -> AgentInfo:
     """
@@ -344,6 +350,12 @@ def create_agent(
     if name:
         payload["name"] = name
 
+    # `driver` is a top-level create-request field, NOT part of the settings
+    # object (it's bound at construction and not mutable via UpdateAgentSettings).
+    # When omitted, the server auto-derives it from modelType.
+    if driver is not None:
+        payload["driver"] = driver
+
     if settings:
         payload["settings"] = settings.to_api_dict()
 
@@ -359,6 +371,7 @@ def create_agent(
         created_at=data["createdAt"],
         settings=data.get("settings"),
         delegate=data.get("delegate"),
+        driver=data.get("driver"),
     )
 
 
@@ -645,6 +658,7 @@ class DataflowAgent:
     def __init__(
             self,
             model_type: str = AGENT_MODEL_TYPE,
+            driver: Optional[str] = AGENT_DRIVER,
             max_steps: int = AGENT_MAX_STEPS,
             max_operator_result_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CHAR_LIMIT,
             max_operator_result_cell_char_limit: int = AGENT_MAX_OPERATOR_RESULT_CELL_CHAR_LIMIT,
@@ -657,8 +671,7 @@ class DataflowAgent:
             parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS,
             allowed_operator_types: Optional[list[str]] = None,
             stats_enabled: bool = False,
-            recent_events_cap: Optional[int] = None,
-            include_code_in_recent_events: Optional[bool] = None,
+            include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -673,6 +686,8 @@ class DataflowAgent:
 
         Args:
             model_type: LLM model type to use
+            driver: Explicit LLM driver ("vercel-tool-use" or "local-react");
+                None lets the server auto-derive it from model_type
             max_steps: Maximum number of steps per message
             max_operator_result_char_limit: Max characters for operator results
             max_operator_result_cell_char_limit: Max characters per cell in results
@@ -684,6 +699,8 @@ class DataflowAgent:
             context_mode: Snapshot-selection policy ("full", "delta", or "latest")
             parallel_tool_calls: Allow the model to emit multiple tool calls per turn
             allowed_operator_types: Optional whitelist of operator type names; None uses server default
+            include_operator_properties: Render each operator's `Properties:` line in
+                the assembled context; None uses server default (true)
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -693,6 +710,8 @@ class DataflowAgent:
             verbosity_level: Logging verbosity (0=quiet, 1=normal, 2=verbose)
         """
         self.model_type = model_type
+        # Explicit driver override; None lets the server auto-derive from model_type.
+        self.driver = driver
         self.settings = AgentSettings(
             max_steps=max_steps,
             max_operator_result_char_limit=max_operator_result_char_limit,
@@ -706,8 +725,7 @@ class DataflowAgent:
             parallel_tool_calls=parallel_tool_calls,
             allowed_operator_types=allowed_operator_types,
             stats_enabled=stats_enabled,
-            recent_events_cap=recent_events_cap,
-            include_code_in_recent_events=include_code_in_recent_events,
+            include_operator_properties=include_operator_properties,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
@@ -787,6 +805,7 @@ class DataflowAgent:
             computing_unit_id=self._computing_unit_id,
             settings=self.settings,
             name=self.agent_name,
+            driver=self.driver,
             agent_endpoint=self.agent_service_endpoint,
         )
         self._log(

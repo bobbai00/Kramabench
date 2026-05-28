@@ -28,6 +28,7 @@ class DataflowSystem(System):
     def __init__(
         self,
         model_type: str = None,
+        driver: str = None,
         max_steps: int = None,
         max_operator_result_char_limit: int = None,
         max_operator_result_cell_char_limit: int = None,
@@ -40,6 +41,7 @@ class DataflowSystem(System):
         allowed_operator_types: Optional[List[str]] = None,
         disabled_tools: Optional[List[str]] = None,
         stats_enabled: bool = False,
+        include_operator_properties: bool = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -72,6 +74,8 @@ class DataflowSystem(System):
         super().__init__(name, verbose=verbose, *args, **kwargs)
 
         self.model_type = model_type or "claude-haiku-4.5"
+        # None -> let agent-service auto-derive the driver from model_type.
+        self.driver = driver
         self.max_steps = max_steps or 50
         self.max_operator_result_char_limit = max_operator_result_char_limit or 1000
         self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 2000
@@ -84,6 +88,8 @@ class DataflowSystem(System):
         self.allowed_operator_types = allowed_operator_types
         self.disabled_tools = disabled_tools
         self.stats_enabled = stats_enabled
+        # None -> server default (true).
+        self.include_operator_properties = include_operator_properties
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -190,6 +196,7 @@ class DataflowSystem(System):
 
         self.agent = DataflowAgent(
             model_type=self.model_type,
+            driver=self.driver,
             max_steps=self.max_steps,
             max_operator_result_char_limit=self.max_operator_result_char_limit,
             max_operator_result_cell_char_limit=self.max_operator_result_cell_char_limit,
@@ -202,6 +209,7 @@ class DataflowSystem(System):
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
             stats_enabled=self.stats_enabled,
+            include_operator_properties=self.include_operator_properties,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -296,6 +304,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
         config = {
             "system_name": self.name,
             "model_type": self.model_type,
+            "driver": self.driver,
             "query_id": query_id,
             "dataset_directory": str(self.dataset_directory),
             "num_files": len(file_paths),
@@ -313,6 +322,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
                 "stats_enabled": self.stats_enabled,
+                "include_operator_properties": self.include_operator_properties,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -644,3 +654,32 @@ class DataflowSystemGPT52FullStatsOn(_GPTStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _CONTEXT_MODE = "full"
     _NAME = "DataflowSystemGPT52FullStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# In-house local model under the text-mode `local-react` driver. Forces
+# the local driver explicitly (model_type="local-llm" would auto-derive it
+# server-side, but we pin it for clarity). Stats off; operator properties
+# off — note the local-react context assembler ignores
+# includeOperatorProperties regardless (server.ts:62-66), so this only
+# documents intent. max_steps capped at 20.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class DataflowSystemLocalLlm(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=20,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )

@@ -7,6 +7,20 @@ trap 'echo ""; echo "Interrupted! Killing all subprocesses..."; kill 0; exit 1' 
 # To override settings for a run, define a subclass there (e.g. DataflowSystemHaiku45)
 # rather than exporting env vars.
 
+# Resolve the Python interpreter: prefer the project venv (the pinned 3.11
+# env documented in CLAUDE.md), then python3, then bare python. Override with
+# PYTHON=... if needed. macOS has no bare `python`, so hardcoding it breaks.
+PYTHON=${PYTHON:-}
+if [ -z "$PYTHON" ]; then
+    if [ -x ".venv/bin/python" ]; then
+        PYTHON=".venv/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYTHON="python3"
+    else
+        PYTHON="python"
+    fi
+fi
+
 # Configuration
 SUT=${SUT:-DataflowSystemHaiku45}
 # Set ORACLE_MODE=true to use ground truth subset files (--use_truth_subset)
@@ -19,8 +33,8 @@ PARALLEL=${PARALLEL:-false}
 # WORKLOADS=("environment" "wildfire" "legal")
 # WORKLOADS=("legal")
 # WORKLOADS=("environment")
-# WORKLOADS=("legal" "archeology")
-WORKLOADS=("legal" "environment" "wildfire" "astronomy" "archeology" "biomedical")
+WORKLOADS=("biomedical")
+# WORKLOADS=("legal" "environment" "wildfire" "astronomy" "archeology" "biomedical")
 # WORKLOADS=("environment" "wildfire" "astronomy" "biomedical")
 
 # Allow ad-hoc override of the workload list via env (space-separated names)
@@ -50,7 +64,7 @@ if [ "$PARALLEL" = "true" ]; then
     PIDS=()
     for workload in "${WORKLOADS[@]}"; do
         echo "Starting: $workload (log: $LOG_DIR/${workload}.log)"
-        python evaluate.py --sut $SUT --workload "$workload" --no_pipeline_eval --verbose $EXTRA_ARGS \
+        "$PYTHON" evaluate.py --sut $SUT --workload "$workload" --no_pipeline_eval --verbose $EXTRA_ARGS \
             > "$LOG_DIR/${workload}.log" 2>&1 &
         PIDS+=("$!:$workload")
     done
@@ -88,7 +102,7 @@ else
         echo "=========================================="
         echo "Running: $workload"
         echo "=========================================="
-        python evaluate.py --sut $SUT --workload "$workload" --no_pipeline_eval --verbose $EXTRA_ARGS \
+        "$PYTHON" evaluate.py --sut $SUT --workload "$workload" --no_pipeline_eval --verbose $EXTRA_ARGS \
             | tee "$LOG_DIR/${workload}.log"
         echo ""
     done
