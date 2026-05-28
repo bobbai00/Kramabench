@@ -62,6 +62,7 @@ class DataflowSystem(System):
         component_grain_guidance_enabled: bool = False,
         key_grain_comparison_guidance_enabled: bool = False,
         key_grain_evidence_contract_enabled: bool = False,
+        label_component_profile_contract_enabled: bool = False,
         execution_safe_operator_ids_enabled: bool = False,
         fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
@@ -128,6 +129,9 @@ class DataflowSystem(System):
             key_grain_evidence_contract_enabled: Enable server-side LATEST
                 context notices that treat candidate key-grain comparison as
                 an explicit executed-table evidence contract
+            label_component_profile_contract_enabled: Enable server-side
+                LATEST context notices that require an all-value
+                label-component profile before final entity-key selection
             execution_safe_operator_ids_enabled: Enable server-side CODE-mode
                 guidance and tool-boundary validation for operator IDs that
                 are compatible with workflow execution persistence
@@ -174,6 +178,7 @@ class DataflowSystem(System):
         self.component_grain_guidance_enabled = component_grain_guidance_enabled
         self.key_grain_comparison_guidance_enabled = key_grain_comparison_guidance_enabled
         self.key_grain_evidence_contract_enabled = key_grain_evidence_contract_enabled
+        self.label_component_profile_contract_enabled = label_component_profile_contract_enabled
         self.execution_safe_operator_ids_enabled = execution_safe_operator_ids_enabled
         self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
@@ -311,6 +316,7 @@ class DataflowSystem(System):
             component_grain_guidance=self.component_grain_guidance_enabled,
             key_grain_comparison_guidance=self.key_grain_comparison_guidance_enabled,
             key_grain_evidence_contract=self.key_grain_evidence_contract_enabled,
+            label_component_profile_contract=self.label_component_profile_contract_enabled,
             execution_safe_operator_ids=self.execution_safe_operator_ids_enabled,
             fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
@@ -1552,6 +1558,43 @@ class DataflowSystemGPT52LatestKeyGrainEvidenceContractStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestKeyGrainEvidenceContractStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan18: label-component profile contract in LATEST. These variants build on
+# the Plan17 key-grain evidence contract with a general context-compiler rule:
+# high-cardinality labels need an all-value profile of observed component
+# structure before the model selects which candidate key grains to compare.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestLabelComponentProfileContractStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED = True
+    _LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            key_grain_evidence_contract_enabled=self._KEY_GRAIN_EVIDENCE_CONTRACT_ENABLED,
+            label_component_profile_contract_enabled=self._LABEL_COMPONENT_PROFILE_CONTRACT_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestLabelComponentProfileContractStatsOn(
+    _GPTLatestLabelComponentProfileContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestLabelComponentProfileContractStatsOn"
+
+
+class DataflowSystemGPT52LatestLabelComponentProfileContractStatsOn(
+    _GPTLatestLabelComponentProfileContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestLabelComponentProfileContractStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
