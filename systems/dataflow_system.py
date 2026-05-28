@@ -56,6 +56,7 @@ class DataflowSystem(System):
         table_structure_hints_enabled: bool = False,
         raw_loader_provenance_enabled: bool = False,
         bounded_execution_guidance_enabled: bool = False,
+        fallback_contract_guidance_enabled: bool = False,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -102,6 +103,9 @@ class DataflowSystem(System):
             bounded_execution_guidance_enabled: Enable server-side CODE-mode
                 guidance to validate expensive full-table operators on bounded
                 probes before scaling execution
+            fallback_contract_guidance_enabled: Enable server-side CODE-mode
+                guidance and context hints for dependency/runtime capability
+                failures so fallback answers preserve the requested contract
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
@@ -136,6 +140,7 @@ class DataflowSystem(System):
         self.table_structure_hints_enabled = table_structure_hints_enabled
         self.raw_loader_provenance_enabled = raw_loader_provenance_enabled
         self.bounded_execution_guidance_enabled = bounded_execution_guidance_enabled
+        self.fallback_contract_guidance_enabled = fallback_contract_guidance_enabled
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -265,6 +270,7 @@ class DataflowSystem(System):
             table_structure_hints=self.table_structure_hints_enabled,
             raw_loader_provenance=self.raw_loader_provenance_enabled,
             bounded_execution_guidance=self.bounded_execution_guidance_enabled,
+            fallback_contract_guidance=self.fallback_contract_guidance_enabled,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -597,6 +603,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "table_structure_hints_enabled": self.table_structure_hints_enabled,
                 "raw_loader_provenance_enabled": self.raw_loader_provenance_enabled,
                 "bounded_execution_guidance_enabled": self.bounded_execution_guidance_enabled,
+                "fallback_contract_guidance_enabled": self.fallback_contract_guidance_enabled,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -1215,6 +1222,42 @@ class DataflowSystemGPT52LatestBoundedExecutionProbeStatsOn(
 ):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestBoundedExecutionProbeStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan10: latest-mode fallback contract guidance. These variants isolate a
+# general runtime-capability rule against LatestStatsOn: dependency/import/
+# package failures should either be repaired with an exact equivalent and
+# validation evidence, or surfaced as a diagnostic DataFrame rather than
+# answered through an unvalidated proxy.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestFallbackContractStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _FALLBACK_CONTRACT_GUIDANCE_ENABLED = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            fallback_contract_guidance_enabled=self._FALLBACK_CONTRACT_GUIDANCE_ENABLED,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestFallbackContractStatsOn(
+    _GPTLatestFallbackContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestFallbackContractStatsOn"
+
+
+class DataflowSystemGPT52LatestFallbackContractStatsOn(
+    _GPTLatestFallbackContractStatsOnVariant
+):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestFallbackContractStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────

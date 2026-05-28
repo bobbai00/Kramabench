@@ -59,6 +59,7 @@ AGENT_SCHEMA_FIRST_CODE_MODE: Optional[bool] = None
 AGENT_TABLE_STRUCTURE_HINTS: Optional[bool] = None
 AGENT_RAW_LOADER_PROVENANCE: Optional[bool] = None
 AGENT_BOUNDED_EXECUTION_GUIDANCE: Optional[bool] = None
+AGENT_FALLBACK_CONTRACT_GUIDANCE: Optional[bool] = None
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -98,6 +99,7 @@ class AgentSettings:
     table_structure_hints: Optional[bool] = None
     raw_loader_provenance: Optional[bool] = None
     bounded_execution_guidance: Optional[bool] = None
+    fallback_contract_guidance: Optional[bool] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -136,6 +138,8 @@ class AgentSettings:
             payload["rawLoaderProvenance"] = self.raw_loader_provenance
         if self.bounded_execution_guidance is not None:
             payload["boundedExecutionGuidance"] = self.bounded_execution_guidance
+        if self.fallback_contract_guidance is not None:
+            payload["fallbackContractGuidance"] = self.fallback_contract_guidance
         return payload
 
 
@@ -718,6 +722,7 @@ class DataflowAgent:
             table_structure_hints: Optional[bool] = AGENT_TABLE_STRUCTURE_HINTS,
             raw_loader_provenance: Optional[bool] = AGENT_RAW_LOADER_PROVENANCE,
             bounded_execution_guidance: Optional[bool] = AGENT_BOUNDED_EXECUTION_GUIDANCE,
+            fallback_contract_guidance: Optional[bool] = AGENT_FALLBACK_CONTRACT_GUIDANCE,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -765,6 +770,8 @@ class DataflowAgent:
                 provenance for DataLoading operators with literal relative paths
             bounded_execution_guidance: Ask the server to append general
                 bounded-probe rules before expensive full-table execution
+            fallback_contract_guidance: Ask the server to append general
+                fallback-contract rules for dependency/runtime capability failures
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -799,6 +806,7 @@ class DataflowAgent:
             table_structure_hints=table_structure_hints,
             raw_loader_provenance=raw_loader_provenance,
             bounded_execution_guidance=bounded_execution_guidance,
+            fallback_contract_guidance=fallback_contract_guidance,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
