@@ -35,6 +35,7 @@ class DataflowSystem(System):
         max_operator_result_char_limit: int = None,
         max_operator_result_cell_char_limit: int = None,
         operator_result_serialization_mode: str = None,
+        result_rendering: str = None,
         tool_timeout_seconds: int = None,
         execution_timeout_minutes: int = None,
         agent_mode: str = None,
@@ -72,6 +73,8 @@ class DataflowSystem(System):
             max_operator_result_char_limit: Max chars for operator results (default: 1000)
             max_operator_result_cell_char_limit: Max chars per cell (default: 2000)
             operator_result_serialization_mode: Result format (default: tsv)
+            result_rendering: Successful result context rendering
+                ("rows", "digest", or "adaptive"); None uses server default
             tool_timeout_seconds: Tool timeout (default: 240)
             execution_timeout_minutes: Execution timeout (default: 4)
             agent_mode: Agent mode (default: code)
@@ -104,6 +107,7 @@ class DataflowSystem(System):
         self.max_operator_result_char_limit = max_operator_result_char_limit or 1000
         self.max_operator_result_cell_char_limit = max_operator_result_cell_char_limit or 2000
         self.operator_result_serialization_mode = operator_result_serialization_mode or "tsv"
+        self.result_rendering = result_rendering
         self.tool_timeout_seconds = tool_timeout_seconds or 240
         self.execution_timeout_minutes = execution_timeout_minutes or 4
         self.agent_mode = agent_mode or "code"
@@ -234,6 +238,7 @@ class DataflowSystem(System):
             max_operator_result_char_limit=self.max_operator_result_char_limit,
             max_operator_result_cell_char_limit=self.max_operator_result_cell_char_limit,
             operator_result_serialization_mode=self.operator_result_serialization_mode,
+            result_rendering=self.result_rendering,
             tool_timeout_seconds=self.tool_timeout_seconds,
             execution_timeout_minutes=self.execution_timeout_minutes,
             agent_mode=self.agent_mode,
@@ -560,6 +565,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "max_operator_result_char_limit": self.max_operator_result_char_limit,
                 "max_operator_result_cell_char_limit": self.max_operator_result_cell_char_limit,
                 "operator_result_serialization_mode": self.operator_result_serialization_mode,
+                "result_rendering": self.result_rendering,
                 "tool_timeout_seconds": self.tool_timeout_seconds,
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "agent_mode": self.agent_mode,
@@ -1099,6 +1105,37 @@ class DataflowSystemGPT5MiniLatestRawProvenanceStatsOn(_GPTLatestRawProvenanceSt
 class DataflowSystemGPT52LatestRawProvenanceStatsOn(_GPTLatestRawProvenanceStatsOnVariant):
     _MODEL_TYPE = "gpt-5.2"
     _NAME = "DataflowSystemGPT52LatestRawProvenanceStatsOn"
+
+
+# ────────────────────────────────────────────────────────────────────────
+# plan7: latest-mode adaptive result digests. These variants isolate a
+# result-rendering context rule against LatestStatsOn: keep row previews for
+# the latest frontier operators and render stable successful operators as
+# shape/column/stat digests.
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _GPTLatestAdaptiveDigestStatsOnVariant(_GPTStatsOnVariant):
+    _CONTEXT_MODE = "latest"
+    _RESULT_RENDERING = "adaptive"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            verbose=verbose,
+            result_rendering=self._RESULT_RENDERING,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestAdaptiveDigestStatsOn(_GPTLatestAdaptiveDigestStatsOnVariant):
+    _MODEL_TYPE = "gpt-5-mini"
+    _NAME = "DataflowSystemGPT5MiniLatestAdaptiveDigestStatsOn"
+
+
+class DataflowSystemGPT52LatestAdaptiveDigestStatsOn(_GPTLatestAdaptiveDigestStatsOnVariant):
+    _MODEL_TYPE = "gpt-5.2"
+    _NAME = "DataflowSystemGPT52LatestAdaptiveDigestStatsOn"
 
 
 # ────────────────────────────────────────────────────────────────────────
