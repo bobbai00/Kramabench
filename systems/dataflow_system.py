@@ -1237,6 +1237,24 @@ class DataflowSystemGPT52LatestSchemaConvergeCoerce(DataflowSystem):
         )
 
 
+# Serialization study: converge stack but a TIGHT result char cap (~3 sample rows
+# vs ~6) to test the fewer-records token/accuracy trade-off. Config-only delta
+# (max_operator_result_char_limit). TSV stays (offline study: JSON/TOML cost
+# 1.5-2.2x MORE tokens, so format is not the lever; rows are).
+class DataflowSystemGPT5MiniLatestSchemaConvergeFewRows(DataflowSystem):
+    """gpt-5-mini converge stack + tight result char cap (~3 sample rows)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, max_operator_result_char_limit=250,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeFewRows",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
 # plan2 control arm: NO per-column info block at all (stats off + schema off).
 # Triangulates the column-info representation {full-stats | compact-schema | none}
 # so we can attribute plan2's win to the schema vs to merely dropping stats.
