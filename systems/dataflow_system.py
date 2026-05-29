@@ -949,6 +949,31 @@ class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
         )
 
 
+class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
+    """gpt-5-mini, LATEST context, schema on, + loader hint + budget + reflection.
+
+    The gpt-5-mini peer of the cost-minimized stack, for the symmetric fair-set
+    thesis (DataFlow vs CodeAgent on both models).
+    """
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConverge",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
 # plan2 control arm: NO per-column info block at all (stats off + schema off).
 # Triangulates the column-info representation {full-stats | compact-schema | none}
 # so we can attribute plan2's win to the schema vs to merely dropping stats.
