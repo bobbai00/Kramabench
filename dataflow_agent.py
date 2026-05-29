@@ -95,6 +95,9 @@ class AgentSettings:
     # Per-operator cardinality lineage line (rows in→out, kept %) + alarms on
     # empty-output / fan-out explosion (lever 1). False = no-op default.
     lineage_stats: bool = False
+    # Surface worker-flagged degenerate joins (near-zero key match w/ unmatched-key
+    # sample, or many-to-many fan-out) as a `Join check` line (lever 2). No-op default.
+    join_telemetry: bool = False
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
     # 0 = disabled (no-op default).
@@ -122,6 +125,7 @@ class AgentSettings:
             "loaderHint": self.loader_hint,
             "valueFormatFlags": self.value_format_flags,
             "lineageStats": self.lineage_stats,
+            "joinTelemetry": self.join_telemetry,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
         }
@@ -739,6 +743,7 @@ class DataflowAgent:
             loader_hint: bool = False,
             value_format_flags: bool = False,
             lineage_stats: bool = False,
+            join_telemetry: bool = False,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -801,6 +806,7 @@ class DataflowAgent:
             loader_hint=loader_hint,
             value_format_flags=value_format_flags,
             lineage_stats=lineage_stats,
+            join_telemetry=join_telemetry,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
         )

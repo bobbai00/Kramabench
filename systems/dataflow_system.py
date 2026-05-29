@@ -47,6 +47,7 @@ class DataflowSystem(System):
         loader_hint: bool = False,
         value_format_flags: bool = False,
         lineage_stats: bool = False,
+        join_telemetry: bool = False,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
         verbose: bool = False,
@@ -109,6 +110,8 @@ class DataflowSystem(System):
         self.value_format_flags = value_format_flags
         # Cardinality lineage line + degenerate-transition alarms (lever 1); no-op default.
         self.lineage_stats = lineage_stats
+        # Degenerate-join telemetry (lever 2); no-op default.
+        self.join_telemetry = join_telemetry
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
@@ -238,6 +241,7 @@ class DataflowSystem(System):
             loader_hint=self.loader_hint,
             value_format_flags=self.value_format_flags,
             lineage_stats=self.lineage_stats,
+            join_telemetry=self.join_telemetry,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
             verbosity_level=2 if self.verbose else 1,
@@ -358,6 +362,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "loader_hint": self.loader_hint,
                 "value_format_flags": self.value_format_flags,
                 "lineage_stats": self.lineage_stats,
+                "join_telemetry": self.join_telemetry,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
             }
@@ -1074,6 +1079,54 @@ class DataflowSystemGPT52LatestSchemaConvergeLineage(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT52LatestSchemaConvergeLineage",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# Lever 2 A/B: converge stack + degenerate-join telemetry. Only delta vs
+# *LatestSchemaConverge is join_telemetry=True. Tests whether ACTIONABLE
+# surfacing (the unmatched-key sample showing WHY a join failed) crosses the
+# acting threshold that lever 1's passive cardinality alarm did not.
+class DataflowSystemGPT5MiniLatestSchemaConvergeJoin(DataflowSystem):
+    """gpt-5-mini converge stack + degenerate-join telemetry."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            join_telemetry=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeJoin",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestSchemaConvergeJoin(DataflowSystem):
+    """gpt-5.2 converge stack + degenerate-join telemetry."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            join_telemetry=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestSchemaConvergeJoin",
             verbose=verbose,
             *args,
             **kwargs,
