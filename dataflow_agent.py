@@ -104,6 +104,7 @@ class AgentSettings:
     # Surface coerce-to-NaN dataloss from to_numeric/to_datetime(errors="coerce")
     # with a sample of dropped values (lever 4). No-op default.
     coercion_telemetry: bool = False
+    max_result_rows: int = 0
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
     # 0 = disabled (no-op default).
@@ -134,6 +135,7 @@ class AgentSettings:
             "joinTelemetry": self.join_telemetry,
             "graphAudit": self.graph_audit,
             "coercionTelemetry": self.coercion_telemetry,
+            "maxResultRows": self.max_result_rows,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
         }
@@ -754,6 +756,7 @@ class DataflowAgent:
             join_telemetry: bool = False,
             graph_audit: bool = False,
             coercion_telemetry: bool = False,
+            max_result_rows: int = 0,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -819,6 +822,7 @@ class DataflowAgent:
             join_telemetry=join_telemetry,
             graph_audit=graph_audit,
             coercion_telemetry=coercion_telemetry,
+            max_result_rows=max_result_rows,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
         )
