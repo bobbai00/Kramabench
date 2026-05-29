@@ -89,6 +89,9 @@ class AgentSettings:
     # Append a `Loader hint:` remediation line to a failed load-stage operator,
     # keyed on the exception class (plan4, lever D). False = no-op default.
     loader_hint: bool = False
+    # Flag currency/percent/thousands string columns with cleaning hints
+    # (value-format flags). False = no-op default.
+    value_format_flags: bool = False
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
     # 0 = disabled (no-op default).
@@ -114,6 +117,7 @@ class AgentSettings:
             "statsEnabled": self.stats_enabled,
             "schemaInResult": self.schema_in_result,
             "loaderHint": self.loader_hint,
+            "valueFormatFlags": self.value_format_flags,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
         }
@@ -729,6 +733,7 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             schema_in_result: bool = False,
             loader_hint: bool = False,
+            value_format_flags: bool = False,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -789,6 +794,7 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             schema_in_result=schema_in_result,
             loader_hint=loader_hint,
+            value_format_flags=value_format_flags,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
         )

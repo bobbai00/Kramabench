@@ -45,6 +45,7 @@ class DataflowSystem(System):
         include_operator_properties: bool = None,
         schema_in_result: bool = False,
         loader_hint: bool = False,
+        value_format_flags: bool = False,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
         verbose: bool = False,
@@ -103,6 +104,8 @@ class DataflowSystem(System):
         self.schema_in_result = schema_in_result
         # Loader-remediation hint on failed load-stage ops (plan4); no-op default.
         self.loader_hint = loader_hint
+        # Value-format flags (currency/percent/thousands cleaning hints); no-op default.
+        self.value_format_flags = value_format_flags
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
@@ -230,6 +233,7 @@ class DataflowSystem(System):
             include_operator_properties=self.include_operator_properties,
             schema_in_result=self.schema_in_result,
             loader_hint=self.loader_hint,
+            value_format_flags=self.value_format_flags,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
             verbosity_level=2 if self.verbose else 1,
@@ -348,6 +352,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "include_operator_properties": self.include_operator_properties,
                 "schema_in_result": self.schema_in_result,
                 "loader_hint": self.loader_hint,
+                "value_format_flags": self.value_format_flags,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
             }
@@ -968,6 +973,54 @@ class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConverge",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# Accuracy lever: converge stack + value-format flags (currency/percent/thousands
+# cleaning hints). Only delta vs *LatestSchemaConverge is value_format_flags=True,
+# so an A/B on the persistent-failure set isolates the lever. Targets the silent
+# to_numeric(coerce) dataloss class (legal-hard-15 etc.).
+class DataflowSystemGPT5MiniLatestSchemaConvergeFmt(DataflowSystem):
+    """gpt-5-mini converge stack + value-format flags."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            value_format_flags=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeFmt",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestSchemaConvergeFmt(DataflowSystem):
+    """gpt-5.2 converge stack + value-format flags."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            value_format_flags=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestSchemaConvergeFmt",
             verbose=verbose,
             *args,
             **kwargs,
