@@ -50,6 +50,7 @@ class DataflowSystem(System):
         join_telemetry: bool = False,
         graph_audit: bool = False,
         coercion_telemetry: bool = False,
+        compact_stats: bool = False,
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
@@ -119,6 +120,7 @@ class DataflowSystem(System):
         self.graph_audit = graph_audit
         # Coerce-to-NaN dataloss telemetry (lever 4); no-op default.
         self.coercion_telemetry = coercion_telemetry
+        self.compact_stats = compact_stats
         self.max_result_rows = max_result_rows
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
@@ -252,6 +254,7 @@ class DataflowSystem(System):
             join_telemetry=self.join_telemetry,
             graph_audit=self.graph_audit,
             coercion_telemetry=self.coercion_telemetry,
+            compact_stats=self.compact_stats,
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
@@ -376,6 +379,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "join_telemetry": self.join_telemetry,
                 "graph_audit": self.graph_audit,
                 "coercion_telemetry": self.coercion_telemetry,
+                "compact_stats": self.compact_stats,
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
@@ -1283,6 +1287,22 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeRows5(DataflowSystem):
             attempt_reflection=True, max_result_rows=5,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConvergeRows5",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W4: converge + COMPACT per-column stats (numeric null/min/max; categorical
+# distinct/top-5) on top of the schema line. Tests whether the high-signal stats
+# subset helps accuracy at a fraction of the full-stats token cost.
+class DataflowSystemGPT5MiniLatestSchemaConvergeCompactStats(DataflowSystem):
+    """gpt-5-mini converge + compact dataflow-aware stats."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, compact_stats=True,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeCompactStats",
             verbose=verbose, *args, **kwargs,
         )
 
