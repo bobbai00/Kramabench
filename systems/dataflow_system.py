@@ -51,6 +51,8 @@ class DataflowSystem(System):
         graph_audit: bool = False,
         coercion_telemetry: bool = False,
         compact_stats: bool = False,
+        lineage_timeline: bool = False,
+        few_shot_prompt: bool = False,
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
@@ -121,6 +123,8 @@ class DataflowSystem(System):
         # Coerce-to-NaN dataloss telemetry (lever 4); no-op default.
         self.coercion_telemetry = coercion_telemetry
         self.compact_stats = compact_stats
+        self.lineage_timeline = lineage_timeline
+        self.few_shot_prompt = few_shot_prompt
         self.max_result_rows = max_result_rows
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
@@ -255,6 +259,8 @@ class DataflowSystem(System):
             graph_audit=self.graph_audit,
             coercion_telemetry=self.coercion_telemetry,
             compact_stats=self.compact_stats,
+            lineage_timeline=self.lineage_timeline,
+            few_shot_prompt=self.few_shot_prompt,
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
@@ -380,6 +386,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "graph_audit": self.graph_audit,
                 "coercion_telemetry": self.coercion_telemetry,
                 "compact_stats": self.compact_stats,
+                "lineage_timeline": self.lineage_timeline,
+                "few_shot_prompt": self.few_shot_prompt,
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
@@ -1303,6 +1311,34 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeCompactStats(DataflowSystem):
             attempt_reflection=True, compact_stats=True,
             max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConvergeCompactStats",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
+class DataflowSystemGPT5MiniLatestSchemaConvergeTimeline(DataflowSystem):
+    """gpt-5-mini converge + recent-steps construction timeline."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, lineage_timeline=True,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeTimeline",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W2: converge + few-shot best-practices appended to the system prompt.
+class DataflowSystemGPT5MiniLatestSchemaConvergeFewShot(DataflowSystem):
+    """gpt-5-mini converge + few-shot best-practices prompt."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, few_shot_prompt=True,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeFewShot",
             verbose=verbose, *args, **kwargs,
         )
 
