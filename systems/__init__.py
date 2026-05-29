@@ -39,6 +39,8 @@ from .dataflow_system import (
     DataflowSystemGPT52LatestSchemaConvergeJoin,
     DataflowSystemGPT5MiniLatestSchemaConvergeGraph,
     DataflowSystemGPT52LatestSchemaConvergeGraph,
+    DataflowSystemGPT5MiniLatestSchemaConvergeCoerce,
+    DataflowSystemGPT52LatestSchemaConvergeCoerce,
     DataflowSystemGPT5MiniFullNoStatsNoSchema,
     DataflowSystemLocalLlm,
 )

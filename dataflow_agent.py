@@ -101,6 +101,9 @@ class AgentSettings:
     # Flag dead/disconnected DataLoading operators via typed-DAG reachability
     # (lever 3, `Graph check`). No-op default.
     graph_audit: bool = False
+    # Surface coerce-to-NaN dataloss from to_numeric/to_datetime(errors="coerce")
+    # with a sample of dropped values (lever 4). No-op default.
+    coercion_telemetry: bool = False
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
     # 0 = disabled (no-op default).
@@ -130,6 +133,7 @@ class AgentSettings:
             "lineageStats": self.lineage_stats,
             "joinTelemetry": self.join_telemetry,
             "graphAudit": self.graph_audit,
+            "coercionTelemetry": self.coercion_telemetry,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
         }
@@ -749,6 +753,7 @@ class DataflowAgent:
             lineage_stats: bool = False,
             join_telemetry: bool = False,
             graph_audit: bool = False,
+            coercion_telemetry: bool = False,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -813,6 +818,7 @@ class DataflowAgent:
             lineage_stats=lineage_stats,
             join_telemetry=join_telemetry,
             graph_audit=graph_audit,
+            coercion_telemetry=coercion_telemetry,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
         )
