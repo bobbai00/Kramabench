@@ -48,6 +48,7 @@ class DataflowSystem(System):
         value_format_flags: bool = False,
         lineage_stats: bool = False,
         join_telemetry: bool = False,
+        graph_audit: bool = False,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
         verbose: bool = False,
@@ -112,6 +113,8 @@ class DataflowSystem(System):
         self.lineage_stats = lineage_stats
         # Degenerate-join telemetry (lever 2); no-op default.
         self.join_telemetry = join_telemetry
+        # Graph-reachability audit / dead-load detection (lever 3); no-op default.
+        self.graph_audit = graph_audit
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
@@ -242,6 +245,7 @@ class DataflowSystem(System):
             value_format_flags=self.value_format_flags,
             lineage_stats=self.lineage_stats,
             join_telemetry=self.join_telemetry,
+            graph_audit=self.graph_audit,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
             verbosity_level=2 if self.verbose else 1,
@@ -363,6 +367,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "value_format_flags": self.value_format_flags,
                 "lineage_stats": self.lineage_stats,
                 "join_telemetry": self.join_telemetry,
+                "graph_audit": self.graph_audit,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
             }
@@ -1127,6 +1132,52 @@ class DataflowSystemGPT52LatestSchemaConvergeJoin(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT52LatestSchemaConvergeJoin",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# Lever 3 A/B: converge stack + graph-reachability audit (dead-load detection).
+# Only delta vs *LatestSchemaConverge is graph_audit=True.
+class DataflowSystemGPT5MiniLatestSchemaConvergeGraph(DataflowSystem):
+    """gpt-5-mini converge stack + graph-reachability audit."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            graph_audit=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeGraph",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestSchemaConvergeGraph(DataflowSystem):
+    """gpt-5.2 converge stack + graph-reachability audit."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            graph_audit=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestSchemaConvergeGraph",
             verbose=verbose,
             *args,
             **kwargs,

@@ -98,6 +98,9 @@ class AgentSettings:
     # Surface worker-flagged degenerate joins (near-zero key match w/ unmatched-key
     # sample, or many-to-many fan-out) as a `Join check` line (lever 2). No-op default.
     join_telemetry: bool = False
+    # Flag dead/disconnected DataLoading operators via typed-DAG reachability
+    # (lever 3, `Graph check`). No-op default.
+    graph_audit: bool = False
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
     # 0 = disabled (no-op default).
@@ -126,6 +129,7 @@ class AgentSettings:
             "valueFormatFlags": self.value_format_flags,
             "lineageStats": self.lineage_stats,
             "joinTelemetry": self.join_telemetry,
+            "graphAudit": self.graph_audit,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
         }
@@ -744,6 +748,7 @@ class DataflowAgent:
             value_format_flags: bool = False,
             lineage_stats: bool = False,
             join_telemetry: bool = False,
+            graph_audit: bool = False,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -807,6 +812,7 @@ class DataflowAgent:
             value_format_flags=value_format_flags,
             lineage_stats=lineage_stats,
             join_telemetry=join_telemetry,
+            graph_audit=graph_audit,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
         )
