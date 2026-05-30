@@ -55,6 +55,7 @@ class DataflowSystem(System):
         few_shot_prompt: bool = False,
         table_structure_hint: bool = False,
         loader_escalation: bool = False,
+        frontier_depth: int = 0,
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
@@ -129,6 +130,7 @@ class DataflowSystem(System):
         self.few_shot_prompt = few_shot_prompt
         self.table_structure_hint = table_structure_hint
         self.loader_escalation = loader_escalation
+        self.frontier_depth = frontier_depth
         self.max_result_rows = max_result_rows
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
@@ -267,6 +269,7 @@ class DataflowSystem(System):
             few_shot_prompt=self.few_shot_prompt,
             table_structure_hint=self.table_structure_hint,
             loader_escalation=self.loader_escalation,
+            frontier_depth=self.frontier_depth,
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
@@ -396,6 +399,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "few_shot_prompt": self.few_shot_prompt,
                 "table_structure_hint": self.table_structure_hint,
                 "loader_escalation": self.loader_escalation,
+                "frontier_depth": self.frontier_depth,
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
