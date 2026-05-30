@@ -1428,3 +1428,36 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeLoaderEsc(DataflowSystem):
             name="DataflowSystemGPT5MiniLatestSchemaConvergeLoaderEsc",
             verbose=verbose, *args, **kwargs,
         )
+
+
+class DataflowSystemGPT5MiniLatestSchemaConvergeFrontier(DataflowSystem):
+    """gpt-5-mini converge + compact dataflow-aware stats."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, frontier_depth=2,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeFrontier",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
+
+
+class DataflowSystemGPT52LatestSchemaConvergeFrontier(DataflowSystem):
+    """gpt-5-mini converge + compact dataflow-aware stats."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, frontier_depth=2,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestSchemaConvergeFrontier",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
+
