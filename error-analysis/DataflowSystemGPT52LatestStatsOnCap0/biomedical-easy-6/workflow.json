@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-348-7-1779107577472",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1Preview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    return pd.read_excel(path, sheet_name=0, header=None, dtype=str, nrows=40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect Excel file 1-s2.0-S0092867420301070-mmc1.xlsx (sheet 0) by reading first 40 rows with header=None and dtype=str to locate the real header row and relevant columns (e.g., age, FIGO_stage)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    # Read everything as string to avoid mixed-type schema issues in the runtime.\n    return pd.read_excel(path, sheet_name=0, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Excel file 1-s2.0-S0092867420301070-mmc1.xlsx (sheet_name=0) via pd.read_excel with dtype=str to prevent mixed-type column inference errors; keeps clinical columns such as Age and FIGO_stage as strings",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "figoModeOver70",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1):\n    import pandas as pd\n\n    df = mmc1.copy()\n\n    # Parse age to numeric; keep only patients strictly above 70\n    age = pd.to_numeric(df.get('Age'), errors='coerce')\n    df = df[age > 70].copy()\n\n    # Clean FIGO stage values\n    figo = df.get('FIGO_stage')\n    if figo is None:\n        return pd.DataFrame([{'FIGO_stage_mode': pd.NA, 'n_over70': len(df)}])\n\n    figo = (\n        figo.astype(str)\n        .str.strip()\n        .replace({'': pd.NA, 'nan': pd.NA, 'None': pd.NA})\n    )\n    df = df.assign(FIGO_stage_clean=figo)\n\n    counts = (\n        df.dropna(subset=['FIGO_stage_clean'])\n          .groupby('FIGO_stage_clean')\n          .size()\n          .reset_index(name='n')\n          .sort_values(['n', 'FIGO_stage_clean'], ascending=[False, True])\n    )\n\n    mode_val = counts.iloc[0]['FIGO_stage_clean'] if len(counts) else pd.NA\n\n    return pd.DataFrame([\n        {\n            'FIGO_stage_mode': mode_val,\n            'n_over70': int(df.shape[0]),\n            'n_with_figo': int(df['FIGO_stage_clean'].notna().sum()),\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the most common FIGO stage among samples from patients with Age > 70 in mmc1: convert Age (string) to numeric with errors='coerce', filter rows where Age > 70; clean FIGO_stage by stripping whitespace and mapping blank/'nan'/'None' to NA; count occurrences of FIGO_stage_clean and select the mode (highest count, tie-break by stage code alphabetically); return a 1-row table with FIGO_stage_mode and sample counts",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1Preview": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc1": {
+        "x": 100,
+        "y": 220
+      },
+      "figoModeOver70": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1-->figoModeOver70",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "figoModeOver70",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-40-7-1779139395759",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "newEnglandStates",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/new_england_states.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load new_england_states.csv via pd.read_csv (comma delimiter, first row header, UTF-8) to get the list/mapping of New England states.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msaIdentityTheftFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import os\n    import pandas as pd\n\n    pattern = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f'No files matched pattern: {pattern}')\n\n    return pd.DataFrame({'path': paths, 'file': [os.path.basename(p) for p in paths]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all CSV file paths matching glob pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv' and return a table with columns [path, file].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msaIdentityTheftInspect",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(msaIdentityTheftFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    # Inspect a few representative files (first 3 alphabetically)\n    sample_paths = msaIdentityTheftFiles['path'].sort_values().head(3).tolist()\n    out = []\n    for p in sample_paths:\n        try:\n            raw = pd.read_csv(p, header=None, nrows=25)\n            out.append({'path': p, 'preview': raw.to_csv(sep='\\t', index=False, header=False)})\n        except Exception as e:\n            out.append({'path': p, 'error': str(e)})\n    return pd.DataFrame(out)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect raw layout of a few State MSA Identity Theft CSVs by reading header=None (no header inference), nrows=25; return per-file path plus a TSV-serialized preview string to identify the real header row and year columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "newEnglandIdentityTheftTop5",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(newEnglandStates, msaIdentityTheftFiles) -> pd.DataFrame:\n    import os\n    import re\n    import pandas as pd\n\n    # --- Identify New England state files ---\n    ne_states = set(newEnglandStates['Name'].astype(str).str.strip().tolist())\n\n    def normalize_state_name(s: str) -> str:\n        s = str(s)\n        s = re.sub(r'[^A-Za-z]', '', s)\n        return s.lower()\n\n    norm_to_canon = {normalize_state_name(s): s for s in ne_states}\n\n    def file_to_state_canon(filename: str):\n        base = os.path.splitext(os.path.basename(filename))[0]\n        norm = normalize_state_name(base)\n        return norm_to_canon.get(norm)\n\n    files = msaIdentityTheftFiles.copy()\n    files['stateCanon'] = files['file'].map(file_to_state_canon)\n    ne_files = files[files['stateCanon'].notna()].copy()\n    if ne_files.empty:\n        raise ValueError('No New England state files matched. Check filename normalization / state list.')\n\n    # --- Load and concatenate the New England state tables ---\n    frames = []\n    for p, st in ne_files[['path', 'stateCanon']].itertuples(index=False):\n        # These CSN tables have 2 metadata rows, then a header row: \"Metropolitan Area\", \"# of Reports\"\n        df = pd.read_csv(p, skiprows=2)\n        df['sourceStateFile'] = st\n        frames.append(df)\n\n    all_df = pd.concat(frames, ignore_index=True)\n\n    # --- Normalize schema to [msa, reports2024] ---\n    # Expected columns after skiprows=2: Metropolitan Area, # of Reports\n    cols = [c for c in all_df.columns]\n\n    # Find MSA column\n    msa_col = None\n    for c in cols:\n        if isinstance(c, str) and c.strip().lower() in ['metropolitan area', 'metropolitan areas', 'msa']:\n            msa_col = c\n            break\n    if msa_col is None:\n        # fallback: first column\n        msa_col = cols[0]\n\n    # Find reports column\n    reports_col = None\n    for c in cols:\n        if not isinstance(c, str):\n            continue\n        cl = c.strip().lower()\n        if cl in ['# of reports', 'number of reports', 'reports']:\n            reports_col = c\n            break\n    if reports_col is None:\n        # Sometimes second column is unnamed\n        if len(cols) >= 2:\n            reports_col = cols[1]\n        else:\n            raise ValueError(f'Could not find reports column from columns: {cols}')\n\n    work = all_df[[msa_col, reports_col]].copy().rename(columns={msa_col: 'msa', reports_col: 'reports2024'})\n\n    # Drop footnote / blank rows\n    work['msa'] = work['msa'].astype(str).str.strip()\n    work = work[work['msa'].ne('')]\n    # remove rows that are clearly notes/sources\n    bad_prefixes = (\n        'Metropolitan Areas are defined',\n        'Source:',\n        'Consumer Sentinel Network',\n    )\n    work = work[~work['msa'].str.startswith(bad_prefixes)]\n\n    # Numeric cleaning: remove commas, coerce\n    work['reports2024'] = (\n        work['reports2024']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    work['reports2024'] = pd.to_numeric(work['reports2024'], errors='coerce')\n    work = work.dropna(subset=['reports2024'])\n\n    # Aggregate across states in case an MSA appears in multiple state files\n    agg = work.groupby('msa', as_index=False)['reports2024'].sum()\n\n    top5 = agg.sort_values('reports2024', ascending=False).head(5)\n    return top5\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter State MSA Identity Theft CSVs to New England states by matching filenames to the canonical state names from new_england_states.csv (normalize: remove non-letters, lowercase). For matched files, read each state CSV with skiprows=2 to skip title/blank rows and use the header row containing ['Metropolitan Area', '# of Reports']; concatenate across states; select MSA name column (prefer exact 'Metropolitan Area') and reports column (prefer '# of Reports' / 'Number of Reports'); clean footnote/source rows and coerce reports by removing commas; groupby 'msa' and sum reports as reports2024; return top 5 MSAs by reports2024.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "newEnglandStates": {
+        "x": 100,
+        "y": 40
+      },
+      "msaIdentityTheftFiles": {
+        "x": 100,
+        "y": 295
+      },
+      "msaIdentityTheftInspect": {
+        "x": 400,
+        "y": 370
+      },
+      "newEnglandIdentityTheftTop5": {
+        "x": 400,
+        "y": 115
+      }
+    },
+    "links": [
+      {
+        "linkID": "msaIdentityTheftFiles-->msaIdentityTheftInspect",
+        "source": {
+          "operatorID": "msaIdentityTheftFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "msaIdentityTheftInspect",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "newEnglandStates-->newEnglandIdentityTheftTop5",
+        "source": {
+          "operatorID": "newEnglandStates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "newEnglandIdentityTheftTop5",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "msaIdentityTheftFiles-->newEnglandIdentityTheftTop5",
+        "source": {
+          "operatorID": "msaIdentityTheftFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "newEnglandIdentityTheftTop5",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

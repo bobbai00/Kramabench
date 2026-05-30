@@ -49,10 +49,9 @@ def cost(input_tokens, output_tokens, pricing=None):
 
 SYSTEMS = [
     # "CodeAgentSystemGpt52",
-    "DataflowSystemGPT5MiniDeltaStatsOn",
     "DataflowSystemGPT5MiniLatestStatsOn",
-    "DataflowSystemGPT52DeltaStatsOn",
-    "DataflowSystemGPT52LatestStatsOn",
+    "DataflowSystemGPT5MiniDeltaStatsOn",
+    "DataflowSystemGPT5MiniFullStatsOn"
 ]
 
 # SYSTEMS = [

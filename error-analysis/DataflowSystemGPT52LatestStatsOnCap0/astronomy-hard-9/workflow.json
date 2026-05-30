@@ -1,0 +1,287 @@
+{
+  "headId": "step-agent-493-30-1779121712523",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "omniSpec",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    import os\n\n    # The task states omni2 data format specification is at omni2.text, but the provided\n    # file list includes omni2.txt. We'll locate either within the provided directory.\n    patterns = [\n        'data/astronomy/input/omni2_low_res/omni2.txt',\n        'data/astronomy/input/omni2_low_res/omni2.text',\n        'data/astronomy/input/omni2_low_res/*omni2*.*',\n    ]\n    matches = []\n    for p in patterns:\n        matches.extend(glob.glob(p))\n\n    # Keep only existing files\n    matches = [m for m in matches if os.path.isfile(m)]\n    # Prefer exact names if present\n    preferred = [m for m in matches if os.path.basename(m) in ('omni2.txt', 'omni2.text')]\n    path = (preferred[0] if preferred else (matches[0] if matches else None))\n    if path is None:\n        raise FileNotFoundError('Could not locate OMNI2 format specification (omni2.txt or omni2.text) under data/astronomy/input/omni2_low_res/')\n\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        txt = f.read()\n\n    return pd.DataFrame([{'path': path, 'content': txt}])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Locate and load OMNI2 format specification text by globbing for omni2.txt or omni2.text under data/astronomy/input/omni2_low_res/; return single-row DataFrame with columns [path, content] (UTF-8, errors='replace')",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omniRawPreview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n    # show raw fixed-width line preview to infer column positions\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = [next(f).rstrip('\\n') for _ in range(50)]\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 50 raw text lines of omni2_2024.dat (read as fixed-width text without parsing) to verify layout before applying omni2.txt specification",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "tleRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/TLE/43180.tle'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = [ln.rstrip('\\n') for ln in f if ln.strip() != '']\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw lines from 43180.tle (TLE text) into a one-column DataFrame 'line' for subsequent TLE parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omniLoadAp",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omniRawPreview) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n\n    # Robust parse: fixed-width files still parse fine with delim_whitespace=True\n    df = pd.read_csv(\n        path,\n        header=None,\n        delim_whitespace=True,\n        dtype=str,\n        engine='python'\n    )\n\n    # Convert to numeric where possible\n    df = df.apply(pd.to_numeric, errors='coerce')\n\n    # year, day-of-year, hour are the first three columns in OMNI2 low-res hourly\n    if df.shape[1] < 3:\n        raise ValueError(f'Unexpected OMNI2 tokenized width: {df.shape[1]} columns')\n\n    df = df.rename(columns={0: 'year', 1: 'doy', 2: 'hour'})\n\n    # Build datetime\n    df['datetime'] = (\n        pd.to_datetime(df['year'].astype(int).astype(str) + '-01-01')\n        + pd.to_timedelta(df['doy'].astype(int) - 1, unit='D')\n        + pd.to_timedelta(df['hour'].astype(int), unit='h')\n    )\n\n    # Name remaining columns as c03.. etc to keep stable references\n    for c in df.columns:\n        pass\n    rename_map = {}\n    for i in range(df.shape[1]):\n        if i in [0, 1, 2]:\n            continue\n        rename_map[i] = f'c{i:02d}'\n    df = df.rename(columns=rename_map)\n\n    # order columns: datetime first\n    other_cols = [c for c in df.columns if c not in ['datetime']]\n    df = df[['datetime'] + other_cols]\n\n    df = df.sort_values('datetime').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and parse hourly OMNI2 file omni2_2024.dat (data/astronomy/input/omni2_low_res/omni2_2024.dat): read full file as whitespace-delimited tokens (engine='python', dtype=str), coerce to numeric; rename columns 0..2\u2192[year,doy,hour], compute datetime=year-01-01+(doy-1 days)+hour; rename remaining numeric columns to c03,c04,...; sort by datetime; output columns [datetime,year,doy,hour,c03..]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "tleParseSma",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(tleRaw) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    from datetime import datetime, timedelta\n\n    mu = 398600.4418  # km^3/s^2\n\n    lines = tleRaw[\"line\"].dropna().astype(str).tolist()\n\n    recs = []\n    i = 0\n    while i < len(lines) - 1:\n        l1 = lines[i].rstrip(\"\\n\")\n        l2 = lines[i + 1].rstrip(\"\\n\")\n        if l1.startswith(\"1 \") and l2.startswith(\"2 \") and l1[2:7].strip() == \"43180\" and l2[2:7].strip() == \"43180\":\n            # Epoch: columns 19-32 in TLE (0-based 18:32): YYDDD.DDDDDDDD\n            ep = l1[18:32].strip()\n            try:\n                yy = int(ep[0:2])\n                ddd = int(ep[2:5])\n                frac = float(\"0.\" + ep.split(\".\")[1]) if \".\" in ep else 0.0\n            except Exception:\n                i += 2\n                continue\n\n            year = 2000 + yy if yy < 57 else 1900 + yy\n            epoch = datetime(year, 1, 1) + timedelta(days=ddd - 1) + timedelta(days=frac)\n\n            # Mean motion (rev/day): line2 cols 53-63 (0-based 52:63)\n            mm_str = l2[52:63].strip()\n            mm = pd.to_numeric(mm_str, errors=\"coerce\")\n            if pd.isna(mm) or mm <= 0:\n                i += 2\n                continue\n\n            n_rad_s = mm * 2 * np.pi / 86400.0\n            sma_km = (mu / (n_rad_s ** 2)) ** (1.0 / 3.0)\n\n            recs.append({\"epoch\": epoch, \"meanMotionRevPerDay\": float(mm), \"smaKm\": float(sma_km)})\n            i += 2\n        else:\n            i += 1\n\n    df = pd.DataFrame(recs)\n    if df.empty:\n        return df\n\n    df = df.sort_values(\"epoch\").reset_index(drop=True)\n\n    # Round to nearest hour\n    df[\"epochHour\"] = pd.to_datetime(df[\"epoch\"]).dt.round(\"h\")\n\n    # Semi-major axis change (successive diffs in time order)\n    df[\"deltaSmaKm\"] = df[\"smaKm\"].diff()\n\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse SATCAT 43180 TLE pairs from 43180.tle (tleRaw): iterate line1/line2 records; extract epoch YYDDD.DDDDDDDD from line1[18:32] to datetime (YY<57\u21922000+YY else 1900+YY); extract mean motion (rev/day) from line2[52:63]; convert to rad/s and compute semi-major axis smaKm using mu=398600.4418 via a=(mu/n^2)^(1/3); sort by epoch; round epoch to nearest hour (epochHour); compute semi-major-axis change deltaSmaKm as diff(smaKm)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "bestLag",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(tleParseSma, omniLoadAp) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    # Window: May 1-30 2024 inclusive -> use end exclusive May 31 00:00\n    start = pd.Timestamp(\"2024-05-01 00:00:00\")\n    end = pd.Timestamp(\"2024-05-31 00:00:00\")\n\n    tle = tleParseSma.copy()\n    omni = omniLoadAp.copy()\n\n    if tle.empty or omni.empty:\n        return pd.DataFrame(columns=[\"lagHours\", \"n\", \"r2\", \"apColumnChosen\"])\n\n    tle[\"epochHour\"] = pd.to_datetime(tle[\"epochHour\"], errors=\"coerce\")\n    tle = tle[(tle[\"epochHour\"] >= start) & (tle[\"epochHour\"] < end)].copy()\n    tle = tle[pd.notna(tle[\"deltaSmaKm\"])].copy()\n\n    omni[\"datetime\"] = pd.to_datetime(omni[\"datetime\"], errors=\"coerce\")\n    omni = omni[(omni[\"datetime\"] >= (start - pd.Timedelta(hours=48))) & (omni[\"datetime\"] < end)].copy()\n\n    # Candidate numeric columns for AP among remaining cXX fields\n    candidate_cols = [c for c in omni.columns if c.startswith(\"c\")]\n\n    def clean_series(s: pd.Series) -> pd.Series:\n        s = pd.to_numeric(s, errors=\"coerce\")\n        # Common OMNI fill values\n        s = s.mask(s.isin([999, 9999, 99999, 999999]))\n        s = s.mask(s >= 900)\n        return s\n\n    best_col = None\n    best_score = -np.inf\n    for c in candidate_cols:\n        s = clean_series(omni[c])\n        if s.notna().sum() < 24 * 10:\n            continue\n        # AP is non-negative and typically <= 400\n        q05, q50, q95 = s.quantile([0.05, 0.5, 0.95])\n        if not (q05 >= 0):\n            continue\n        if not (q95 <= 500):\n            continue\n        if not (q50 > 0):\n            continue\n        if s.nunique(dropna=True) < 20:\n            continue\n        # Prefer more integer-like series\n        intlike = (np.abs(s.dropna() - np.round(s.dropna())) < 1e-6).mean()\n        score = float(intlike) + 0.001 * float(s.notna().sum())\n        if score > best_score:\n            best_score = score\n            best_col = c\n\n    if best_col is None:\n        return pd.DataFrame(columns=[\"lagHours\", \"n\", \"r2\", \"apColumnChosen\"])\n\n    omni_ap = omni[[\"datetime\", best_col]].copy()\n    omni_ap[\"ap\"] = clean_series(omni_ap[best_col])\n    omni_ap = omni_ap.dropna(subset=[\"ap\"]).drop(columns=[best_col])\n\n    out = []\n    for lag in range(0, 49):\n        shifted = omni_ap.copy()\n        # Correlate deltaSmaKm(t) with AP(t - lag): shift OMNI forward by lag so join on same timestamp\n        shifted[\"epochHour\"] = shifted[\"datetime\"] + pd.Timedelta(hours=lag)\n        merged = tle[[\"epochHour\", \"deltaSmaKm\"]].merge(\n            shifted[[\"epochHour\", \"ap\"]], on=\"epochHour\", how=\"inner\"\n        )\n        merged = merged.dropna()\n        n = len(merged)\n        if n < 10:\n            r2 = np.nan\n        else:\n            r = np.corrcoef(merged[\"deltaSmaKm\"].astype(float), merged[\"ap\"].astype(float))[0, 1]\n            r2 = float(r * r) if np.isfinite(r) else np.nan\n        out.append({\"lagHours\": lag, \"n\": int(n), \"r2\": r2, \"apColumnChosen\": best_col})\n\n    res = pd.DataFrame(out).sort_values([\"r2\", \"n\"], ascending=[False, False]).reset_index(drop=True)\n    return res\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For May 1\u201330 2024 (end exclusive 2024-05-31 00:00), find lag L=0..48h maximizing r^2 between TLE semi-major axis change deltaSmaKm (epochs rounded to nearest hour) and OMNI2 AP index: filter TLE to epochHour in window and non-null deltaSmaKm; filter OMNI to [start-48h, end); select AP column among OMNI numeric cXX fields by nonnegativity/quantiles/variability and integer-likeness; treat fill values (999,9999,99999,>=900) as NaN; for each lag shift OMNI datetime forward by L hours and inner-join on epochHour; compute Pearson r then r^2; return table [lagHours,n,r2,apColumnChosen] sorted by r2 desc",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "bestLagValue",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(bestLag) -> pd.DataFrame:\n    import pandas as pd\n    if bestLag is None or bestLag.empty:\n        return pd.DataFrame([{\"bestLagHours\": None}])\n    return pd.DataFrame([{\"bestLagHours\": int(bestLag.iloc[0][\"lagHours\"])}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract best lag (hours) as integer: take first row of bestLag (max r^2) and return one-row table with column bestLagHours",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "omniSpec": {
+        "x": 100,
+        "y": 40
+      },
+      "omniRawPreview": {
+        "x": 100,
+        "y": 400
+      },
+      "tleRaw": {
+        "x": 100,
+        "y": 220
+      },
+      "omniLoadAp": {
+        "x": 400,
+        "y": 400
+      },
+      "tleParseSma": {
+        "x": 400,
+        "y": 220
+      },
+      "bestLag": {
+        "x": 700,
+        "y": 310
+      },
+      "bestLagValue": {
+        "x": 1000,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "tleRaw-->tleParseSma",
+        "source": {
+          "operatorID": "tleRaw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "tleParseSma",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "tleParseSma-->bestLag",
+        "source": {
+          "operatorID": "tleParseSma",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bestLag",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omniLoadAp-->bestLag",
+        "source": {
+          "operatorID": "omniLoadAp",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bestLag",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "bestLag-->bestLagValue",
+        "source": {
+          "operatorID": "bestLag",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bestLagValue",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omniRawPreview-->omniLoadAp",
+        "source": {
+          "operatorID": "omniRawPreview",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "omniLoadAp",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

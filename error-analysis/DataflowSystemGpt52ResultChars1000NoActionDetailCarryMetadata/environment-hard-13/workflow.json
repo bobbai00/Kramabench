@@ -1,0 +1,223 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_constitution",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/constitution_beach_datasheet.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of data/environment/input/constitution_beach_datasheet.csv to inspect schema and values",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "inspect_raw_constitution",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/constitution_beach_datasheet.csv'\n    # read without assuming headers to see structure\n    df = pd.read_csv(path, header=None, dtype=str, keep_default_na=False)\n    # show first 30 rows\n    out = df.head(30).copy()\n    out.columns = [f'col_{i}' for i in range(out.shape[1])]\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect first 30 raw rows of constitution_beach_datasheet.csv with header=None to identify where the real header and data start",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "constitution",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    df = pd.read_csv('data/environment/input/constitution_beach_datasheet.csv', header=None)\n    # Find first row where first column looks like a date (contains comma and year)\n    c0 = df.iloc[:,0].astype(str)\n    mask = c0.str.contains(r',\\s*\\d{4}$', regex=True)\n    start_idx = mask.idxmax()  # first True\n    data = df.iloc[start_idx:,:10].copy()\n    data.columns = ['date','North_tide1','North_tide2','North_tide3','North_lt','North_ec','Middle_lt','Middle_ec','South_lt','South_ec']\n    return data"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full constitution_beach_datasheet.csv (headerless), detect first data row by date pattern, and assign columns for date and Enterococcus counts at North/Middle/South with possible '<' qualifiers.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "constitution_typed",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(constitution):\n    import pandas as pd\n    import numpy as np\n\n    df = constitution.copy()\n\n    # Parse date\n    df['date'] = pd.to_datetime(df['date'], errors='coerce')\n\n    # Clean enterococcus columns to numeric\n    for col in ['North_ec', 'Middle_ec', 'South_ec']:\n        df[col] = (\n            df[col]\n            .astype(str)\n            .str.strip()\n            .replace({'': np.nan, 'nan': np.nan, 'None': np.nan})\n        )\n        df[col] = pd.to_numeric(df[col], errors='coerce')\n\n    # If lt marker indicates a below-detection like '<', treat numeric value as that value\n    # (e.g., '< 10' already represented as lt marker + 10)\n\n    # Keep only rows with a valid date and at least one measurement\n    df = df[df['date'].notna()].copy()\n    df = df[df[['North_ec', 'Middle_ec', 'South_ec']].notna().any(axis=1)].copy()\n\n    return df[['date','North_ec','Middle_ec','South_ec']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse constitution date to datetime; coerce North/Middle/South Enterococcus counts to numeric; keep rows with valid date and at least one measurement; output date and three count columns.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "discordant_days_2024",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(constitution_typed) -> pd.DataFrame:\n    import pandas as pd\n\n    df = constitution_typed.copy()\n    df = df[(df['date'] >= '2024-01-01') & (df['date'] < '2025-01-01')]\n\n    # Determine standard meeting per point: < 104 counts/100mL\n    threshold = 104\n    points = ['North_ec', 'Middle_ec', 'South_ec']\n\n    # Boolean meets where value is not null and < threshold\n    meets = pd.DataFrame({p: (df[p].notna()) & (df[p] < threshold) for p in points})\n    has_value = pd.DataFrame({p: df[p].notna() for p in points})\n\n    # Consider only sampling points that have a measurement that day\n    n_meets = (meets & has_value).sum(axis=1)\n    n_not_meets = ((~meets) & has_value).sum(axis=1)\n\n    # Discordant day: at least one meets and at least one does not meet (among measured points)\n    discordant = (n_meets >= 1) & (n_not_meets >= 1)\n\n    out = df[['date']].copy()\n    out['discordant'] = discordant\n    out['n_points_measured'] = has_value.sum(axis=1)\n    out['n_meets'] = n_meets\n    out['n_not_meets'] = n_not_meets\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter to 2024 dates; for each day compute whether each sampling point (North/Middle/South Enterococcus count) meets standard (<104) when measured; mark a day discordant if at least one measured point meets and at least one measured point does not; output per-day flags and counts.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "count_discordant_2024",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(discordant_days_2024):\n    import pandas as pd\n    df = discordant_days_2024.copy()\n    # discordant column may be boolean or string; normalize\n    df['discordant_flag'] = df['discordant'].astype(str).str.lower().isin(['true','1','t','yes']) if df['discordant'].dtype != bool else df['discordant']\n    out = pd.DataFrame({\n        'discordant_days_2024': [int(df['discordant_flag'].sum())],\n        'total_sample_days_2024': [df.shape[0]]\n    })\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Count number of 2024 sampling dates that are discordant (at least one point meets <104 and at least one does not), and report total 2024 sampling dates.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_constitution": {
+      "x": 100,
+      "y": 40
+    },
+    "inspect_raw_constitution": {
+      "x": 100,
+      "y": 220
+    },
+    "constitution": {
+      "x": 100,
+      "y": 400
+    },
+    "constitution_typed": {
+      "x": 430,
+      "y": 400
+    },
+    "discordant_days_2024": {
+      "x": 760,
+      "y": 400
+    },
+    "count_discordant_2024": {
+      "x": 1090,
+      "y": 400
+    }
+  },
+  "links": [
+    {
+      "linkID": "constitution-->constitution_typed",
+      "source": {
+        "operatorID": "constitution",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "constitution_typed",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "constitution_typed-->discordant_days_2024",
+      "source": {
+        "operatorID": "constitution_typed",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "discordant_days_2024",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "discordant_days_2024-->count_discordant_2024",
+      "source": {
+        "operatorID": "discordant_days_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "count_discordant_2024",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

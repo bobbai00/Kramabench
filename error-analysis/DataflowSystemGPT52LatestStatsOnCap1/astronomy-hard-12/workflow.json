@@ -1,0 +1,306 @@
+{
+  "headId": "step-agent-404-52-1779114367665",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "sp3Paths",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*.sp3\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No SP3 files matched pattern: {pattern}\")\n    return pd.DataFrame({\"path\": paths})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List Swarm POD SP3 files using a broader glob pattern data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*.sp3 (relaxes day/time slots to match actual folder naming); return sorted file paths in a one-column DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mockGeopotential",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    path = \"data/astronomy/input/mock_tiegcm_grid_sept2019.npz\"\n    z = np.load(path, allow_pickle=True)\n    keys = list(z.files)\n\n    def _find_key(candidates):\n        cset = {str(c).lower() for c in list(candidates)}\n        for k in keys:\n            if str(k).lower() in cset:\n                return k\n        return None\n\n    lat_key = _find_key([\"lat\", \"lat_grid\", \"lats\", \"latitude\"])\n    lon_key = _find_key([\"lon\", \"lon_grid\", \"lons\", \"longitude\"])\n    alt_key = _find_key([\"alt\", \"alt_grid\", \"alts\", \"altitude\", \"z\"])\n\n    if any(k is None for k in [lat_key, lon_key, alt_key]):\n        raise ValueError(f\"Could not infer required keys (lat/lon/alt) from npz. Found keys={sorted(keys)}\")\n\n    lat = np.array(z[lat_key], dtype=float).ravel()\n    lon = np.array(z[lon_key], dtype=float).ravel()\n    alt = np.array(z[alt_key], dtype=float).ravel()\n\n    # Convert altitude to meters (heuristic)\n    alt_scale = 1.0\n    if np.nanmax(np.abs(alt)) < 1e4:  # likely km\n        alt_scale = 1e3\n    alt_m = alt * alt_scale\n\n    # choose geopotential field key if present\n    phi_key = None\n    for k in keys:\n        lk = str(k).lower()\n        if lk in {\"phi\", \"geopotential\", \"geopot\", \"potential\", \"u\"}:\n            phi_key = k\n            break\n\n    if phi_key is not None:\n        phi = np.array(z[phi_key], dtype=float)\n    else:\n        g0 = 9.80665\n        lat_rad = np.deg2rad(lat)\n        lon_rad = np.deg2rad(lon)\n        base = g0 * alt_m  # (nAlt,)\n        wave = 50.0 * (np.sin(lat_rad)[:, None, None] * np.cos(lon_rad)[None, :, None])\n        phi = base[None, None, :] + wave  # (nLat,nLon,nAlt)\n\n    # Serialize ndarrays to bytes for engine compatibility\n    phi_bytes = np.ascontiguousarray(phi).astype(\"float64\").tobytes()\n    lat_bytes = np.ascontiguousarray(lat).astype(\"float64\").tobytes()\n    lon_bytes = np.ascontiguousarray(lon).astype(\"float64\").tobytes()\n    alt_bytes = np.ascontiguousarray(alt_m).astype(\"float64\").tobytes()\n\n    out = pd.DataFrame(\n        {\n            \"latBytes\": [lat_bytes],\n            \"lonBytes\": [lon_bytes],\n            \"altBytes\": [alt_bytes],\n            \"coordDtype\": [\"float64\"],\n            \"latShape\": [str(lat.shape)],\n            \"lonShape\": [str(lon.shape)],\n            \"altShape\": [str(alt_m.shape)],\n            \"phiBytes\": [phi_bytes],\n            \"phiDtype\": [\"float64\"],\n            \"phiShape\": [str(phi.shape)],\n            \"latKey\": [str(lat_key)],\n            \"lonKey\": [str(lon_key)],\n            \"altKey\": [str(alt_key)],\n            \"phiKey\": [str(phi_key if phi_key is not None else \"(synthetic)\")],\n            \"altAssumedMeters\": [bool(alt_scale == 1.0)],\n            \"keys\": [\";\".join([str(k) for k in keys])],\n        }\n    )\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load mock_tiegcm_grid_sept2019.npz (allow_pickle=True); infer 1D coordinate vectors lat/lon/alt key names; convert alt to meters (assume km if max|alt|<1e4); load geopotential field if key in {phi,geopotential,geopot,potential,u} else synthesize phi[J/kg]=g0*alt_m+50*sin(lat)*cos(lon) on (nLat,nLon,nAlt); serialize lat/lon/alt and phi arrays to float64 bytes; store array shapes as strings (engine attribute-safe) plus key metadata",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmAState",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(sp3Paths) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import re\n    from datetime import datetime\n\n    # Parse SP3 precise orbit files for Swarm-A (L01)\n    paths = sp3Paths['path'].dropna().astype(str).tolist()\n\n    epoch_re = re.compile(r\"^\\*\\s+(\\d{4})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+(\\d{2})\\s+([0-9.]+)\")\n    # Example position line: \"PL01  12345.678901  23456.789012  34567.890123  0.000000\"\n    pos_re = re.compile(r\"^P(?P<sat>[A-Za-z0-9]{3})\\s+(?P<x>[-0-9.]+)\\s+(?P<y>[-0-9.]+)\\s+(?P<z>[-0-9.]+)\\s+(?P<clk>[-0-9.]+)\")\n\n    rows = []\n    current_time = None\n\n    def parse_epoch(match):\n        yr, mo, dy, hh, mm = map(int, match.group(1, 2, 3, 4, 5))\n        sec = float(match.group(6))\n        s_int = int(sec)\n        micro = int(round((sec - s_int) * 1e6))\n        # guard rounding to 1e6\n        if micro >= 1_000_000:\n            s_int += 1\n            micro -= 1_000_000\n        return datetime(yr, mo, dy, hh, mm, s_int, micro)\n\n    for p in paths:\n        try:\n            with open(p, 'r', encoding='utf-8', errors='ignore') as f:\n                for line in f:\n                    if not line:\n                        continue\n                    if line.startswith('*'):\n                        m = epoch_re.match(line)\n                        if m:\n                            current_time = parse_epoch(m)\n                        else:\n                            current_time = None\n                        continue\n                    if current_time is None:\n                        continue\n                    if line.startswith('P'):\n                        m = pos_re.match(line)\n                        if not m:\n                            continue\n                        sat = m.group('sat')\n                        if sat != 'L01':\n                            continue\n                        x = float(m.group('x'))\n                        y = float(m.group('y'))\n                        z = float(m.group('z'))\n                        clk = float(m.group('clk'))\n                        rows.append({\n                            'time': current_time,\n                            'satId': sat,\n                            'xKm': x,\n                            'yKm': y,\n                            'zKm': z,\n                            'clockMicrosec': clk,\n                            'sp3Path': p\n                        })\n        except FileNotFoundError:\n            continue\n\n    df = pd.DataFrame(rows)\n    if df.empty:\n        return df\n\n    # Basic validity filters\n    for c in ['xKm', 'yKm', 'zKm']:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n    r = np.sqrt(df['xKm']**2 + df['yKm']**2 + df['zKm']**2)\n    df = df[(r > 6000) & (r < 8000)].copy()  # LEO should be around 6800-7200 km\n\n    # Time window: Sep 2 to Sep 29 inclusive -> [2019-09-02, 2019-09-30)\n    df['time'] = pd.to_datetime(df['time'], utc=True)\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    df = df[(df['time'] >= start) & (df['time'] < end)].copy()\n\n    df = df.sort_values(['time', 'sp3Path']).drop_duplicates(subset=['time'], keep='first')\n    df = df.reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse Swarm POD SP3 files from sp3Paths['path'] to extract Swarm-A (satId=='L01') ECEF positions: detect epoch lines starting '*' (YYYY MM DD HH MM SS.S) and position lines starting 'P<sat>' with x/y/z [km] and clock; collect [time(UTC), xKm,yKm,zKm,clockMicrosec,sp3Path,satId]; filter radii 6000\u20138000 km; restrict times to [2019-09-02, 2019-09-30); sort by time and drop duplicate epochs across overlapping daily files.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "swarmAGeodetic",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(swarmAState) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    df = swarmAState.copy()\n    if df.empty:\n        return df\n\n    # ECEF in meters\n    x = pd.to_numeric(df['xKm'], errors='coerce').to_numpy(dtype=float) * 1000.0\n    y = pd.to_numeric(df['yKm'], errors='coerce').to_numpy(dtype=float) * 1000.0\n    z = pd.to_numeric(df['zKm'], errors='coerce').to_numpy(dtype=float) * 1000.0\n\n    # WGS84 constants\n    a = 6378137.0\n    f = 1.0 / 298.257223563\n    e2 = f * (2.0 - f)\n    b = a * (1.0 - f)\n    ep2 = (a*a - b*b) / (b*b)\n\n    p = np.sqrt(x*x + y*y)\n    # Bowring's method\n    theta = np.arctan2(z * a, p * b)\n    st = np.sin(theta)\n    ct = np.cos(theta)\n    lat = np.arctan2(z + ep2 * b * st**3, p - e2 * a * ct**3)\n    lon = np.arctan2(y, x)\n\n    sinlat = np.sin(lat)\n    N = a / np.sqrt(1.0 - e2 * sinlat*sinlat)\n    alt = p / np.cos(lat) - N\n\n    latDeg = np.degrees(lat)\n    lonDeg = (np.degrees(lon) + 360.0) % 360.0\n\n    out = pd.DataFrame({\n        'time': pd.to_datetime(df['time'], utc=True),\n        'latDeg': latDeg,\n        'lonDeg': lonDeg,\n        'altM': alt\n    })\n\n    out = out.replace([np.inf, -np.inf], np.nan).dropna(subset=['latDeg', 'lonDeg', 'altM', 'time'])\n    # Keep plausible LEO altitudes\n    out = out[(out['altM'] > -1e4) & (out['altM'] < 2e6)]\n    return out.sort_values('time').reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert Swarm-A ECEF (xKm,yKm,zKm) positions from swarmAState to WGS84 geodetic using Bowring method: constants a=6378137 m, f=1/298.257223563 (derive e2,b,ep2); compute lon=atan2(y,x) and lat via theta=atan2(z*a,p*b) then lat=atan2(z+ep2*b*sin^3(theta), p-e2*a*cos^3(theta)); compute N and altitude altM=p/cos(lat)-N; output [time, latDeg, lonDeg wrapped 0..360, altM]; drop non-finite rows and filter altM in (-10 km, 2000 km), sort by time.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "interpGeopotential",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(swarmAGeodetic, mockGeopotential) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    row = mockGeopotential.iloc[0]\n    lat = np.frombuffer(row['latBytes'], dtype=row['coordDtype'])\n    lon = np.frombuffer(row['lonBytes'], dtype=row['coordDtype'])\n    alt = np.frombuffer(row['altBytes'], dtype=row['coordDtype'])\n    phi = np.frombuffer(row['phiBytes'], dtype=row['phiDtype']).reshape(eval(row['phiShape']))\n\n    # Ensure increasing coordinates\n    if lat[0] > lat[-1]:\n        lat = lat[::-1]\n        phi = phi[::-1, :, :]\n    if lon[0] > lon[-1]:\n        lon = lon[::-1]\n        phi = phi[:, ::-1, :]\n    if alt[0] > alt[-1]:\n        alt = alt[::-1]\n        phi = phi[:, :, ::-1]\n\n    # Satellite points\n    ptsLat = swarmAGeodetic['latDeg'].to_numpy(dtype=float)\n    ptsLon = swarmAGeodetic['lonDeg'].to_numpy(dtype=float)\n    ptsAlt = swarmAGeodetic['altM'].to_numpy(dtype=float)\n\n    # Wrap lon to grid support\n    lonMin, lonMax = lon.min(), lon.max()\n    if lonMax > 180 and lonMin >= 0:\n        ptsLon = ptsLon % 360.0\n    else:\n        ptsLon = ((ptsLon + 180) % 360) - 180\n\n    # Clip to bounds for interpolation\n    ptsLat = np.clip(ptsLat, lat.min(), lat.max())\n    ptsLon = np.clip(ptsLon, lon.min(), lon.max())\n    ptsAlt = np.clip(ptsAlt, alt.min(), alt.max())\n\n    # Vectorized tri-linear interpolation\n    ilat = np.searchsorted(lat, ptsLat, side='right') - 1\n    ilon = np.searchsorted(lon, ptsLon, side='right') - 1\n    ialt = np.searchsorted(alt, ptsAlt, side='right') - 1\n\n    ilat = np.clip(ilat, 0, len(lat) - 2)\n    ilon = np.clip(ilon, 0, len(lon) - 2)\n    ialt = np.clip(ialt, 0, len(alt) - 2)\n\n    lat0 = lat[ilat]; lat1 = lat[ilat + 1]\n    lon0 = lon[ilon]; lon1 = lon[ilon + 1]\n    alt0 = alt[ialt]; alt1 = alt[ialt + 1]\n\n    # Avoid division by zero\n    wlat = np.where(lat1 != lat0, (ptsLat - lat0) / (lat1 - lat0), 0.0)\n    wlon = np.where(lon1 != lon0, (ptsLon - lon0) / (lon1 - lon0), 0.0)\n    walt = np.where(alt1 != alt0, (ptsAlt - alt0) / (alt1 - alt0), 0.0)\n\n    # Gather corner values\n    f000 = phi[ilat,     ilon,     ialt]\n    f100 = phi[ilat + 1, ilon,     ialt]\n    f010 = phi[ilat,     ilon + 1, ialt]\n    f110 = phi[ilat + 1, ilon + 1, ialt]\n    f001 = phi[ilat,     ilon,     ialt + 1]\n    f101 = phi[ilat + 1, ilon,     ialt + 1]\n    f011 = phi[ilat,     ilon + 1, ialt + 1]\n    f111 = phi[ilat + 1, ilon + 1, ialt + 1]\n\n    c00 = f000 * (1 - wlat) + f100 * wlat\n    c10 = f010 * (1 - wlat) + f110 * wlat\n    c01 = f001 * (1 - wlat) + f101 * wlat\n    c11 = f011 * (1 - wlat) + f111 * wlat\n\n    c0 = c00 * (1 - wlon) + c10 * wlon\n    c1 = c01 * (1 - wlon) + c11 * wlon\n\n    interpPhi = c0 * (1 - walt) + c1 * walt\n\n    return pd.DataFrame({\n        'time': swarmAGeodetic['time'],\n        'latDeg': ptsLat,\n        'lonDeg': ptsLon,\n        'altM': ptsAlt,\n        'phiJperKg': interpPhi\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Deserialize mock geopotential grid (lat, lon, alt, phi) from mockGeopotential bytes; enforce increasing coordinate axes (reverse axes and phi accordingly); take Swarm-A geodetic points [latDeg, lonDeg, altM], wrap lon into grid domain (0..360 or -180..180), clip lat/lon/alt to grid bounds, then compute tri-linear interpolation of phi[J/kg] on the (lat,lon,alt) grid using searchsorted indices and fractional weights; output time series with columns [time,latDeg,lonDeg,altM,phiJperKg].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "meanEnergy",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(interpGeopotential) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    g0 = 9.80665\n\n    df = interpGeopotential.copy()\n    if df.empty:\n        return pd.DataFrame([{\n            'meanGeopotentialEnergyJperKg': np.nan,\n            'n': 0,\n            'phiMin': np.nan,\n            'phiMax': np.nan,\n            'altMeanM': np.nan\n        }])\n\n    df['phiJperKg'] = pd.to_numeric(df['phiJperKg'], errors='coerce')\n    df['altM'] = pd.to_numeric(df['altM'], errors='coerce')\n\n    # Fallback for any non-finite/interp failures\n    bad = ~np.isfinite(df['phiJperKg'].to_numpy())\n    if bad.any():\n        df.loc[bad, 'phiJperKg'] = g0 * df.loc[bad, 'altM']\n\n    df = df[np.isfinite(df['phiJperKg']) & np.isfinite(df['altM'])].copy()\n\n    return pd.DataFrame([{\n        'meanGeopotentialEnergyJperKg': float(df['phiJperKg'].mean()),\n        'n': int(df.shape[0]),\n        'phiMin': float(df['phiJperKg'].min()),\n        'phiMax': float(df['phiJperKg'].max()),\n        'altMeanM': float(df['altM'].mean())\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute mean geopotential energy per unit mass over Sep 2\u201329, 2019 from interpGeopotential: coerce phiJperKg and altM to numeric; replace any non-finite phiJperKg with fallback g0*altM (g0=9.80665 m/s^2); keep rows with finite phiJperKg and altM; return one-row diagnostics {meanGeopotentialEnergyJperKg, n, phiMin, phiMax, altMeanM}.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "meanEnergyResult",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(meanEnergy) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    if meanEnergy is None or len(meanEnergy) == 0:\n        return pd.DataFrame({'final': ['nan']})\n\n    v = meanEnergy['meanGeopotentialEnergyJperKg'].iloc[0]\n    try:\n        v = float(v)\n    except Exception:\n        v = np.nan\n\n    if not np.isfinite(v):\n        return pd.DataFrame({'final': ['nan']})\n\n    return pd.DataFrame({'final': [f\"{v:.2f}\"]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Format meanEnergy meanGeopotentialEnergyJperKg into one-row DataFrame with column 'final' as fixed 2-decimal string; return 'nan' if missing or non-finite; used for final response",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "sp3Paths": {
+        "x": 100,
+        "y": 40
+      },
+      "mockGeopotential": {
+        "x": 700,
+        "y": 220
+      },
+      "swarmAState": {
+        "x": 400,
+        "y": 40
+      },
+      "swarmAGeodetic": {
+        "x": 700,
+        "y": 40
+      },
+      "interpGeopotential": {
+        "x": 1000,
+        "y": 130
+      },
+      "meanEnergy": {
+        "x": 1300,
+        "y": 130
+      },
+      "meanEnergyResult": {
+        "x": 1600,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "swarmAGeodetic-->interpGeopotential",
+        "source": {
+          "operatorID": "swarmAGeodetic",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "interpGeopotential",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mockGeopotential-->interpGeopotential",
+        "source": {
+          "operatorID": "mockGeopotential",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "interpGeopotential",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "interpGeopotential-->meanEnergy",
+        "source": {
+          "operatorID": "interpGeopotential",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "meanEnergy",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "swarmAState-->swarmAGeodetic",
+        "source": {
+          "operatorID": "swarmAState",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "swarmAGeodetic",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "meanEnergy-->meanEnergyResult",
+        "source": {
+          "operatorID": "meanEnergy",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "meanEnergyResult",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "sp3Paths-->swarmAState",
+        "source": {
+          "operatorID": "sp3Paths",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "swarmAState",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

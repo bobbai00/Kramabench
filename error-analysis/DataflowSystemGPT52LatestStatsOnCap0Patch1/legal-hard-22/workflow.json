@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-81-10-1779140047452",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv\"\n\n    # File has a title row, then header row.\n    df = pd.read_csv(path, header=1)\n\n    # Standardize first two columns to [reportType, numReports]\n    df = df.rename(columns={df.columns[0]: \"reportType\", df.columns[1]: \"numReports\"})\n    df = df[[\"reportType\", \"numReports\"]]\n\n    # Keep only rows where numReports is a numeric count; drop header repeats/source/blanks.\n    num = (\n        df[\"numReports\"]\n        .astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.strip()\n    )\n    num = pd.to_numeric(num, errors=\"coerce\")\n    out = df.loc[num.notna(), [\"reportType\"]].copy()\n    out[\"numReports\"] = num[num.notna()].astype(int).to_numpy()\n\n    out[\"reportType\"] = out[\"reportType\"].astype(str).str.strip()\n    out = out[out[\"reportType\"].ne(\"\")]\n\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Type.csv via pd.read_csv with header=1 (skip leading title row); rename first two columns to ['reportType','numReports']; keep only rows where numReports parses numeric (drop '# of Reports' header repeat/source/blanks); remove commas; cast numReports to int; strip whitespace in reportType.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "idTheftByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv\"\n    # File contains non-UTF8 characters (e.g., Windows-1252 en-dash). Try cp1252.\n    return pd.read_csv(path, encoding=\"cp1252\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Identity_Theft_Reports_by_Type.csv via pd.read_csv with encoding='cp1252' (handles Windows-1252 characters that break UTF-8) to obtain identity theft report counts by theft type and subtype.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "idTheftClean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(idTheftByType) -> pd.DataFrame:\n    import pandas as pd\n\n    df = idTheftByType.copy()\n    df = df.rename(\n        columns={\n            'Identity Theft Reports by Type': 'theftType',\n            'Unnamed: 1': 'theftSubtype',\n            'Unnamed: 2': 'numReports',\n            'Unnamed: 3': 'pctDiffFromPrevYear',\n        }\n    )\n\n    # Drop non-data rows (blank, headers, notes, source)\n    df = df.dropna(subset=['theftType', 'theftSubtype', 'numReports'], how='any')\n    df = df[~df['theftType'].astype(str).str.strip().isin([\n        'Theft Type',\n        'Consumers can report multiple types of identity theft. In 2024, 14% of identity theft reports included more than one type of identity theft',\n        'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission',\n    ])]\n\n    for c in ['theftType', 'theftSubtype']:\n        df[c] = df[c].astype(str).str.strip()\n\n    # Clean counts like \"42,041\" -> 42041\n    df['numReports'] = (\n        df['numReports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df = df[pd.to_numeric(df['numReports'], errors='coerce').notna()].copy()\n    df['numReports'] = df['numReports'].astype(int)\n\n    return df[['theftType', 'theftSubtype', 'numReports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean 2024_CSN_Identity_Theft_Reports_by_Type.csv: rename columns to [theftType,theftSubtype,numReports,pctDiffFromPrevYear]; drop blank/header/note/source rows; strip whitespace; parse numReports by removing commas and casting to int; output only [theftType,theftSubtype,numReports].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "bankNewProp",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportType, idTheftClean) -> pd.DataFrame:\n    import pandas as pd\n\n    total_reports = float(reportType['numReports'].sum())\n\n    mask = (\n        (idTheftClean['theftType'].astype(str).str.strip().str.casefold() == 'bank account')\n        & (idTheftClean['theftSubtype'].astype(str).str.strip().str.casefold() == 'new accounts')\n    )\n    n = idTheftClean.loc[mask, 'numReports'].sum()\n\n    prop = n / total_reports if total_reports else float('nan')\n\n    return pd.DataFrame([\n        {\n            'bankAccountNewAccountsReports': int(n),\n            'allReports': int(total_reports),\n            'proportion': round(prop, 4),\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute proportion of all reports with identity theft theftType='Bank Account' and theftSubtype='New Accounts': sum idTheftClean.numReports for matching rows; divide by total reports across reportType (sum numReports for Fraud/Identity Theft/Other); output counts and proportion rounded to 4 decimals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportType": {
+        "x": 400,
+        "y": 40
+      },
+      "idTheftByType": {
+        "x": 100,
+        "y": 220
+      },
+      "idTheftClean": {
+        "x": 400,
+        "y": 220
+      },
+      "bankNewProp": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "idTheftByType-->idTheftClean",
+        "source": {
+          "operatorID": "idTheftByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "idTheftClean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "reportType-->bankNewProp",
+        "source": {
+          "operatorID": "reportType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bankNewProp",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "idTheftClean-->bankNewProp",
+        "source": {
+          "operatorID": "idTheftClean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bankNewProp",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

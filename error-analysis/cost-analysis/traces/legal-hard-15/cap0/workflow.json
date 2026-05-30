@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-597-27-1779125225395",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadStateMsaIdTheft2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p, dtype=str)\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSVs matching pattern `data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv` (State MSA Identity Theft data) via glob; read each with pd.read_csv(dtype=str), append `__source_file` as filename, and concat into one table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parseStateMsaIdTheft2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadStateMsaIdTheft2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadStateMsaIdTheft2024.copy()\n\n    df = df.rename(columns={\n        'Metropolitan Areas: Identity Theft Reports': 'metroArea',\n        'Unnamed: 1': 'reportsRaw'\n    })\n\n    # Normalize strings\n    for c in ['metroArea', 'reportsRaw', '__source_file']:\n        if c in df.columns:\n            df[c] = df[c].astype('string')\n\n    df['metroAreaStripped'] = df['metroArea'].fillna('').str.strip()\n    df['reportsStripped'] = df['reportsRaw'].fillna('').str.strip()\n\n    # Drop non-data rows\n    df = df[df['metroAreaStripped'].ne('')].copy()\n    df = df[~df['metroAreaStripped'].eq('Metropolitan Area')].copy()\n    df = df[~df['metroAreaStripped'].str.startswith('Metropolitan Areas: Identity Theft Reports', na=False)].copy()\n    df = df[~df['metroAreaStripped'].str.startswith('Source:', na=False)].copy()\n\n    # Parse numeric reports\n    reportsDigits = df['reportsStripped'].str.replace(r'[^0-9]', '', regex=True)\n    df['reportsNum'] = pd.to_numeric(reportsDigits, errors='coerce')\n    df = df[df['reportsNum'].notna()].copy()\n    df['reportsNum'] = df['reportsNum'].astype('int64')\n\n    # Flag cross-state MSAs: contains \", XX-YY\" (2+ states)\n    df['metroAreaClean'] = df['metroAreaStripped']\n    isCross = df['metroAreaClean'].str.contains(r',\\s*[A-Z]{2}(?:-[A-Z]{2})+\\b', regex=True, na=False)\n    # Texera expects STRING-type columns; cast boolean to string\n    df['isCrossState'] = isCross.map(lambda x: 'true' if bool(x) else 'false').astype('string')\n\n    return df[['metroAreaClean', 'reportsNum', 'isCrossState', '__source_file']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean/parse State MSA Identity Theft data (all matched state CSVs): rename columns ['Metropolitan Areas: Identity Theft Reports'\u2192metroArea, 'Unnamed: 1'\u2192reportsRaw]; strip whitespace; drop non-data/header/source rows; parse reportsRaw to integer reportsNum by removing non-digits then pd.to_numeric; flag cross-state MSAs when metroAreaClean matches multi-state code pattern r',\\s*[A-Z]{2}(?:-[A-Z]{2})+\\b' and cast flag to STRING values 'true'/'false'; output metroAreaClean, reportsNum, isCrossState, __source_file",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "sumCrossStateReports2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parseStateMsaIdTheft2024):\n    import pandas as pd\n\n    df = parseStateMsaIdTheft2024.copy()\n    # isCrossState is stored as 'true'/'false' strings\n    cross = df[df['isCrossState'].str.lower().eq('true')]\n    total = int(pd.to_numeric(cross['reportsNum'], errors='coerce').fillna(0).sum())\n    return pd.DataFrame([{'totalCrossStateReports2024': total}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter parsed State MSA Identity Theft 2024 rows to cross-state MSAs where isCrossState == 'true' (case-insensitive); sum reportsNum across those rows; return single-row DataFrame with totalCrossStateReports2024 as integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadStateMsaIdTheft2024": {
+        "x": 100,
+        "y": 40
+      },
+      "parseStateMsaIdTheft2024": {
+        "x": 400,
+        "y": 40
+      },
+      "sumCrossStateReports2024": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadStateMsaIdTheft2024-->parseStateMsaIdTheft2024",
+        "source": {
+          "operatorID": "loadStateMsaIdTheft2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parseStateMsaIdTheft2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parseStateMsaIdTheft2024-->sumCrossStateReports2024",
+        "source": {
+          "operatorID": "parseStateMsaIdTheft2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "sumCrossStateReports2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

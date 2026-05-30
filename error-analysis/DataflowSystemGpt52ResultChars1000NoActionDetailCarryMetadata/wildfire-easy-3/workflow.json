@@ -1,0 +1,253 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_usa",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    import pandas as pd\n    path = 'data/wildfire/input/usa.gpkg'\n    gdf = gpd.read_file(path, layer='usa_adm2')\n    # avoid geometry serialization issues by converting geometry to WKT and dropping geometry\n    out = pd.DataFrame(gdf.drop(columns='geometry'))\n    return pd.concat([out.head(3), out.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 3 rows from usa.gpkg layer 'usa_adm2' and drop geometry (avoid MULTIPOLYGON serialization issues); inspect state name columns",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "inspect_usa_raw",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import fiona\n    from fiona import open as fiona_open\n    path = 'data/wildfire/input/usa.gpkg'\n    with fiona_open(path, layer=0) as src:\n        schema = src.schema\n        crs = src.crs\n        feat0 = next(iter(src))\n    import pandas as pd\n    return pd.DataFrame([\n        {\n            'path': path,\n            'driver': 'GPKG',\n            'layer0_name': '0',\n            'schema': str(schema),\n            'crs': str(crs),\n            'properties_keys': list(feat0['properties'].keys()),\n            'geometry_type': feat0['geometry']['type'] if feat0.get('geometry') else None\n        }\n    ])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect usa.gpkg schema and a sample feature using fiona (avoid geometry conversion issues)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_layers",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import fiona\n    import pandas as pd\n    path_usa = 'data/wildfire/input/usa.gpkg'\n    path_nifc = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n    usa_layers = fiona.listlayers(path_usa)\n    nifc_layers = fiona.listlayers(path_nifc)\n    return pd.DataFrame([\n        {'path': path_usa, 'layers': usa_layers},\n        {'path': path_nifc, 'layers': nifc_layers}\n    ])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List layers in both GeoPackages using fiona.listlayers to determine correct layer names",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_nifc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n    layer = 'National_GACC_Final_20250113'\n    gdf = gpd.read_file(path, layer=layer)\n    df = pd.DataFrame(gdf.drop(columns='geometry'))\n    return pd.concat([df.head(3), df.tail(3)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 3 rows from nifc_geographic_areas.gpkg layer 'National_GACC_Final_20250113' and drop geometry to inspect attribute columns (e.g., GACC name/ID)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "usa",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    path = 'data/wildfire/input/usa.gpkg'\n    gdf = gpd.read_file(path, layer='usa_adm2')\n    # Keep only needed attributes; geometry needed for spatial join later\n    return gdf[['adm1_name','geometry']].rename(columns={'adm1_name':'state'})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full usa.gpkg layer 'usa_adm2' as GeoDataFrame; keep state name (adm1_name) and geometry for counties",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "usa_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    path = 'data/wildfire/input/usa.gpkg'\n    gdf = gpd.read_file(path, layer='usa_adm2')\n    # Keep geometry as WKB bytes to avoid serialization/type issues\n    out = gdf[['adm1_name','geometry']].rename(columns={'adm1_name':'state'}).copy()\n    out['geometry'] = out['geometry'].to_wkb()\n    return out\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full usa.gpkg layer 'usa_adm2' with state name (adm1_name as state) and county geometries converted to WKB bytes for downstream spatial operations",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "nifc_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    from shapely import wkb\n    path = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n    gdf = gpd.read_file(path, layer='National_GACC_Final_20250113')\n    gdf = gdf[['GACCName','geometry']].rename(columns={'GACCName':'gacc'})\n    # Convert to WKB for stable table transport\n    gdf['geometry'] = gdf['geometry'].apply(lambda geom: geom.wkb if geom is not None else None)\n    return gdf\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full NIFC geographic areas GeoPackage layer 'National_GACC_Final_20250113'; keep GACCName as gacc and convert polygon geometry to WKB bytes",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "state_gacc_counts",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(usa_full, nifc_full) -> pd.DataFrame:\n    import pandas as pd\n    import shapely\n    from shapely import wkb\n    import geopandas as gpd\n\n    # Rehydrate geometries from WKB\n    usa = usa_full.copy()\n    usa['geometry'] = usa['geometry'].apply(lambda b: wkb.loads(bytes(b)))\n    gacc = nifc_full.copy()\n    gacc['geometry'] = gacc['geometry'].apply(lambda b: wkb.loads(bytes(b)))\n\n    usa_gdf = gpd.GeoDataFrame(usa, geometry='geometry', crs='EPSG:4326')\n    gacc_gdf = gpd.GeoDataFrame(gacc, geometry='geometry', crs='EPSG:4326')\n\n    # Spatial join counties -> GACC polygons using intersection\n    joined = gpd.sjoin(\n        usa_gdf[['state', 'geometry']],\n        gacc_gdf[['gacc', 'geometry']],\n        how='inner',\n        predicate='intersects'\n    )\n\n    # Unique state-GACC relationships\n    state_gacc = joined[['state', 'gacc']].drop_duplicates()\n\n    counts = state_gacc.groupby('state', as_index=False).agg(n_gacc=('gacc', 'nunique'))\n    max_n = counts['n_gacc'].max() if len(counts) else 0\n    out = counts[counts['n_gacc'] == max_n].sort_values('state').reset_index(drop=True)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Rehydrate county and GACC geometries from WKB; spatial-join (intersects) to map each state to all NIFC GACC areas it intersects; count distinct GACC per state and return states with the maximum count",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_usa": {
+      "x": 100,
+      "y": 40
+    },
+    "inspect_usa_raw": {
+      "x": 100,
+      "y": 220
+    },
+    "sample_layers": {
+      "x": 100,
+      "y": 400
+    },
+    "sample_nifc": {
+      "x": 100,
+      "y": 580
+    },
+    "usa": {
+      "x": 100,
+      "y": 760
+    },
+    "usa_full": {
+      "x": 100,
+      "y": 940
+    },
+    "nifc_full": {
+      "x": 100,
+      "y": 1120
+    },
+    "state_gacc_counts": {
+      "x": 430,
+      "y": 1030
+    }
+  },
+  "links": [
+    {
+      "linkID": "usa_full-->state_gacc_counts",
+      "source": {
+        "operatorID": "usa_full",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "state_gacc_counts",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "nifc_full-->state_gacc_counts",
+      "source": {
+        "operatorID": "nifc_full",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "state_gacc_counts",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

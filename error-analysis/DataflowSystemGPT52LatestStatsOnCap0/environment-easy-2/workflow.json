@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-539-6-1779123819962",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadAllYears",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    import os\n\n    paths = [\n        \"data/environment/input/water-body-testing-2022.csv\",\n        \"data/environment/input/water-body-testing-2016.csv\",\n        \"data/environment/input/water-body-testing-2018.csv\",\n        \"data/environment/input/water-body-testing-2009.csv\",\n        \"data/environment/input/water-body-testing-2010.csv\",\n        \"data/environment/input/water-body-testing-2005.csv\",\n        \"data/environment/input/water-body-testing-2013.csv\",\n        \"data/environment/input/water-body-testing-2002.csv\",\n        \"data/environment/input/water-body-testing-2014.csv\",\n        \"data/environment/input/water-body-testing-2006.csv\",\n        \"data/environment/input/water-body-testing-2008.csv\",\n        \"data/environment/input/water-body-testing-2019.csv\",\n        \"data/environment/input/water-body-testing-2004.csv\",\n        \"data/environment/input/water-body-testing-2007.csv\",\n        \"data/environment/input/water-body-testing-2003.csv\",\n        \"data/environment/input/water-body-testing-2012.csv\",\n        \"data/environment/input/water-body-testing-2017.csv\",\n        \"data/environment/input/water-body-testing-2021.csv\",\n        \"data/environment/input/water-body-testing-2015.csv\",\n        \"data/environment/input/water-body-testing-2020.csv\",\n        \"data/environment/input/water-body-testing-2011.csv\",\n        \"data/environment/input/water-body-testing-2023.csv\",\n    ]\n\n    matched = []\n    for p in paths:\n        if any(ch in p for ch in ['*', '?', '[']):\n            matched.extend(glob.glob(p))\n        else:\n            matched.append(p)\n\n    if len(matched) == 0:\n        raise FileNotFoundError(\"No files matched the provided paths\")\n\n    dfs = []\n    for path in matched:\n        year = int(os.path.basename(path).split('-')[-1].split('.')[0])\n        df = pd.read_csv(path, dtype=str)\n        df['sourceFile'] = os.path.basename(path)\n        df['year'] = year\n        dfs.append(df)\n\n    return pd.concat(dfs, ignore_index=True, sort=False)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and vertically concatenate water-body-testing CSVs for years 2002-2023 from the provided paths (supports glob patterns); read all columns as strings; append metadata columns [sourceFile, year] derived from filename; return combined table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "exceedanceByYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAllYears) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = loadAllYears.copy()\n\n    # --- Identify/standardize key columns ---\n    # year\n    if 'year' not in df.columns:\n        if 'Year' in df.columns:\n            df['year'] = pd.to_numeric(df['Year'], errors='coerce')\n        else:\n            raise ValueError('No year column found (expected year or Year).')\n\n    # water type (fresh vs marine)\n    water_col = None\n    for c in ['Beach Type Description', 'Beach Type', 'Water Type', 'Waterbody Type']:\n        if c in df.columns:\n            water_col = c\n            break\n    if water_col is None:\n        raise ValueError('Could not find water type column (expected Beach Type Description / Beach Type / Water Type / Waterbody Type).')\n\n    # exceedance indicator: prefer explicit Violation column\n    if 'Violation' not in df.columns:\n        raise ValueError(\"Could not find 'Violation' column to determine bacterial exceedance.\")\n\n    viol = df['Violation'].astype(str).str.strip().str.lower()\n    # map common yes/no variants; anything else => unknown\n    exc = np.select(\n        [viol.isin(['yes', 'y', 'true', 't', '1', 'violation', 'exceedance', 'exceeded']),\n         viol.isin(['no', 'n', 'false', 'f', '0', 'non-violation', 'nonviolation'])],\n        [True, False],\n        default=np.nan\n    )\n\n    df['_exceed_bool'] = pd.Series(exc, index=df.index)\n\n    # freshwater beaches filter: water type contains 'fresh'\n    water = df[water_col].astype(str).str.strip().str.lower()\n    fresh_df = df[water.str.contains('fresh', na=False)].copy()\n\n    # denominator: only rows where exceedance is determinable\n    fresh_df = fresh_df[fresh_df['_exceed_bool'].notna()].copy()\n    fresh_df['_exceed'] = fresh_df['_exceed_bool'].astype(bool).astype(int)\n\n    grp = (\n        fresh_df.groupby('year', as_index=False)\n        .agg(samples=('year', 'size'), exceedances=('_exceed', 'sum'))\n    )\n    grp['exceedRate'] = grp['exceedances'] / grp['samples']\n\n    overall_avg = float(grp['exceedRate'].mean())\n    grp['overallAvg'] = overall_avg\n\n    # compare rounded-to-2dp values as requested\n    grp['exceedRate2dp'] = grp['exceedRate'].round(2)\n    grp['overallAvg2dp'] = round(overall_avg, 2)\n\n    higher_years = grp.loc[grp['exceedRate2dp'] > grp['overallAvg2dp'], ['year']].sort_values('year')\n    higher_years['year'] = higher_years['year'].astype(int)\n\n    return higher_years.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From combined water-body-testing data: filter to freshwater beaches using water type column ('Beach Type Description' if present, else fallback); determine bacterial exceedance from 'Violation' by mapping common yes/no variants case-insensitively and dropping unknowns; compute per-year exceedance rate = exceedances/samples; compute overall average exceedance rate across years; round yearly rates and overall average to 2 decimals and return years where yearly (2dp) > overall average (2dp)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalYearsList",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(exceedanceByYear) -> pd.DataFrame:\n    import pandas as pd\n    years = sorted(exceedanceByYear['year'].astype(int).tolist())\n    # Store as string to avoid LIST attribute type issues in the runtime\n    return pd.DataFrame({'years': [str(years)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From exceedanceByYear, sort years ascending and return a single-row DataFrame with column 'years' containing the Python-list representation as a string (avoids runtime LIST attribute type error)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadAllYears": {
+        "x": 100,
+        "y": 40
+      },
+      "exceedanceByYear": {
+        "x": 400,
+        "y": 40
+      },
+      "finalYearsList": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadAllYears-->exceedanceByYear",
+        "source": {
+          "operatorID": "loadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedanceByYear",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "exceedanceByYear-->finalYearsList",
+        "source": {
+          "operatorID": "exceedanceByYear",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalYearsList",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

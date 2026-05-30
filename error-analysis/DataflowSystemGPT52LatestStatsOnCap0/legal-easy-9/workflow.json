@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-42-8-1779100175007",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv\"\n    # File appears to have a title row above the true header; read with skiprows=1.\n    df = pd.read_csv(path, skiprows=1, dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n\n    # Keep only the first two columns: Year and total Reports (Fraud + Identity Theft + Other)\n    first_two = list(df.columns[:2])\n    df = df[first_two].rename(columns={first_two[0]: \"Year\", first_two[1]: \"Reports\"})\n\n    # Drop any repeated header rows that might appear in the body\n    df = df[df[\"Year\"].astype(str).str.strip().str.lower() != \"year\"].copy()\n\n    # Extract a 4-digit year; non-year rows become NaN and will be dropped\n    df[\"Year\"] = df[\"Year\"].astype(str).str.extract(r\"(\\d{4})\", expand=False)\n\n    # Clean reports counts and convert\n    df[\"Reports\"] = df[\"Reports\"].astype(str).str.replace(\",\", \"\", regex=False).str.strip()\n    df[\"Reports\"] = pd.to_numeric(df[\"Reports\"], errors=\"coerce\")\n\n    df = df.dropna(subset=[\"Year\", \"Reports\"]).copy()\n\n    # Keep year as string to satisfy the runtime's expected schema\n    df[\"Year\"] = df[\"Year\"].astype(str)\n\n    df = df.sort_values(\"Year\").reset_index(drop=True)\n    return df[[\"Year\", \"Reports\"]]\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv via pd.read_csv(skiprows=1, dtype=str); keep first two columns and rename to [Year, Reports]; drop repeated header rows; extract 4-digit year with regex; remove thousands separators from Reports and cast Reports to numeric; drop non-year/footer rows; keep Year as string; sort by Year and return clean [Year, Reports] table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "maxRelativeIncreaseYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCount.copy()\n    df['Year'] = df['Year'].astype(int)\n    df = df.sort_values('Year')\n\n    # Compute year-over-year relative increase: (curr - prev) / prev\n    df['prevReports'] = df['Reports'].shift(1)\n    df['relIncrease'] = (df['Reports'] - df['prevReports']) / df['prevReports']\n\n    # Restrict to 2002-2024 inclusive (YoY defined for 2002 based on 2001)\n    df2 = df[(df['Year'] >= 2002) & (df['Year'] <= 2024) & df['prevReports'].notna()].copy()\n\n    # Find the year with the maximum relative increase\n    best = df2.loc[df2['relIncrease'].idxmax(), ['Year', 'relIncrease', 'Reports', 'prevReports']]\n    return pd.DataFrame([best.to_dict()])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From cleaned reportCount [Year, Reports], cast Year to int and sort; compute prevReports (Reports shifted by 1 year) and relIncrease=(Reports-prevReports)/prevReports; filter to years 2002-2024 with non-null prevReports; select the single year with maximum relIncrease and return [Year, relIncrease, Reports, prevReports] for verification",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCount": {
+        "x": 100,
+        "y": 40
+      },
+      "maxRelativeIncreaseYear": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCount-->maxRelativeIncreaseYear",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maxRelativeIncreaseYear",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

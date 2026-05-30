@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-74-7-1779100683185",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # File contains Windows-1252 smart quotes; use a tolerant encoding.\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv via pd.read_csv with encoding='cp1252' (Windows-1252) to handle smart-quote bytes; comma delimiter; header inferred from first row.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv'\n    # The CSV has title/blank rows before the real header row.\n    df = pd.read_csv(path, header=None, dtype=str)\n    # Find the row that contains the real headers: ['Year', '# of Reports']\n    header_row = None\n    for i in range(len(df)):\n        row = df.iloc[i].tolist()\n        if len(row) >= 2 and str(row[0]).strip() == 'Year' and str(row[1]).strip() == '# of Reports':\n            header_row = i\n            break\n    if header_row is None:\n        raise ValueError('Could not find header row with Year / # of Reports')\n    out = pd.read_csv(path, skiprows=header_row, dtype=str)\n    out = out.rename(columns={out.columns[0]: 'Year', out.columns[1]: 'Reports'})\n    out = out[['Year', 'Reports']]\n    # Keep only year rows\n    out = out[out['Year'].str.fullmatch(r'\\d{4}', na=False)].copy()\n    out['Year'] = out['Year'].astype(int)\n    out['Reports'] = (\n        out['Reports']\n        .str.replace(',', '', regex=False)\n        .str.replace('\"', '', regex=False)\n        .astype(float)\n        .round()\n        .astype(int)\n    )\n    return out.sort_values('Year').reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv by first scanning for the real header row ('Year', '# of Reports'), then re-reading with skiprows=<header_row>; rename to [Year, Reports]; keep 4-digit years only; parse Reports as integer after removing commas/quotes; sort by Year.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "categoryShare2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCategories.copy()\n\n    # Find the header row that contains 'Rank' and 'Category'\n    header_idx = None\n    for i in range(len(df)):\n        row = df.iloc[i].astype(str).str.strip().str.lower().tolist()\n        if any(v == 'rank' for v in row) and any(v == 'category' for v in row):\n            header_idx = i\n            break\n    if header_idx is None:\n        # Fallback: assume row 1 like the preview\n        header_idx = 1\n\n    # Rebuild dataframe with the proper header\n    new_header = df.iloc[header_idx].tolist()\n    body = df.iloc[header_idx + 1 :].copy()\n    body.columns = new_header\n\n    # Keep required columns and drop non-data rows\n    # Expected columns: Rank, Category,  # of Reports , Percentage\n    cols = [c for c in body.columns if isinstance(c, str)]\n    body = body[cols]\n\n    # Standardize column names\n    rename_map = {}\n    for c in body.columns:\n        cl = str(c).strip().lower()\n        if cl == 'category':\n            rename_map[c] = 'Category'\n        elif '# of reports' in cl:\n            rename_map[c] = 'Reports'\n        elif 'percentage' in cl:\n            rename_map[c] = 'Percentage'\n        elif cl == 'rank':\n            rename_map[c] = 'Rank'\n    body = body.rename(columns=rename_map)\n\n    # Filter to rows with a numeric rank and non-null category\n    body['Rank_num'] = pd.to_numeric(body.get('Rank'), errors='coerce')\n    body = body[body['Rank_num'].notna() & body['Category'].notna()].copy()\n\n    # Parse percentage into a share\n    body['share2024'] = (\n        body['Percentage']\n        .astype(str)\n        .str.strip()\n        .str.replace('%', '', regex=False)\n        .replace({'nan': None, 'None': None, '': None})\n    )\n    body['share2024'] = pd.to_numeric(body['share2024'], errors='coerce') / 100.0\n\n    out = body[['Category', 'share2024']].copy()\n    out['Category'] = out['Category'].astype(str).str.strip()\n\n    # Some tables may contain duplicated categories; aggregate just in case\n    out = out.groupby('Category', as_index=False)['share2024'].sum()\n\n    return out.sort_values('share2024', ascending=False).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse 2024_CSN_Report_Categories.csv (already loaded) by locating the in-file header row containing 'Rank' and 'Category'; set that row as columns; keep rows with numeric Rank and non-null Category; parse 'Percentage' strings like '20.91%' into numeric share2024 (0-1); output [Category, share2024] aggregated by Category (sum) and sorted desc.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "autoRelated2007",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(categoryShare2024, reportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    # total reports in 2007\n    total2007 = reportCount.loc[reportCount['Year'] == 2007, 'Reports']\n    if total2007.empty:\n        raise ValueError('Year 2007 not found in reportCount')\n    total2007 = int(total2007.iloc[0])\n\n    # 2024 share for Auto Related\n    autoShare = categoryShare2024.loc[\n        categoryShare2024['Category'].str.strip().str.lower() == 'auto related',\n        'share2024'\n    ]\n    if autoShare.empty:\n        raise ValueError('Category \"Auto Related\" not found in categoryShare2024')\n    autoShare = float(autoShare.iloc[0])\n\n    est = int(round(total2007 * autoShare))\n\n    return pd.DataFrame([{\n        'Year': 2007,\n        'totalReports': total2007,\n        'autoRelatedShare2024': autoShare,\n        'autoRelatedReportsIf2024Dist': est\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute hypothetical 2007 Auto Related report count assuming 2007 distribution matches 2024: take total Reports for Year=2007 from reportCount; lookup categoryShare2024 share where Category=='Auto Related' (case/whitespace-insensitive); multiply total2007*share and round to nearest integer; output diagnostic columns including the final rounded estimate.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "reportCount": {
+        "x": 400,
+        "y": 220
+      },
+      "categoryShare2024": {
+        "x": 400,
+        "y": 40
+      },
+      "autoRelated2007": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCategories-->categoryShare2024",
+        "source": {
+          "operatorID": "reportCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "categoryShare2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "categoryShare2024-->autoRelated2007",
+        "source": {
+          "operatorID": "categoryShare2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "autoRelated2007",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "reportCount-->autoRelated2007",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "autoRelated2007",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

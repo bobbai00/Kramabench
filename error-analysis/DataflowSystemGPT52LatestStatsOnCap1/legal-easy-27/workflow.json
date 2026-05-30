@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-68-8-1779100615710",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n\n    # Read the file without header inference first, then promote the first non-empty row to header.\n    raw = pd.read_csv(path, header=None, dtype=str)\n\n    # Find the first row that looks like the header (contains 'State' and 'Category').\n    def norm(x):\n        return \"\" if x is None else str(x).strip()\n\n    header_row_idx = None\n    for i in range(len(raw)):\n        row = [norm(v) for v in raw.iloc[i].tolist()]\n        row_lc = [v.lower() for v in row]\n        if \"state\" in row_lc and \"category\" in row_lc:\n            header_row_idx = i\n            break\n\n    if header_row_idx is None:\n        # Return the raw preview so the user can diagnose file structure.\n        return raw.head(30)\n\n    header = [norm(v) for v in raw.iloc[header_row_idx].tolist()]\n    df = raw.iloc[header_row_idx + 1 :].copy()\n    df.columns = header\n\n    # Drop fully blank rows.\n    df = df.dropna(how=\"all\")\n\n    # Normalize expected column names if there are minor variations.\n    rename_map = {}\n    for c in df.columns:\n        c0 = norm(c)\n        if c0.lower() == \"# of reports\" or c0.lower() == \"number of reports\":\n            rename_map[c] = \"# of Reports\"\n        if c0.lower() == \"percent\" or c0.lower() == \"percentage\":\n            rename_map[c] = \"Percentage\"\n    if rename_map:\n        df = df.rename(columns=rename_map)\n\n    # Filter out footer/source rows: keep only rows with a non-empty State value.\n    if \"State\" in df.columns:\n        df = df[df[\"State\"].notna() & (df[\"State\"].astype(str).str.strip() != \"\")]\n\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv by first reading with header=None (dtype=str), detecting the first row containing both 'State' and 'Category' (case-insensitive) as the true header, promoting it to column names, dropping fully blank rows, lightly normalizing '# of Reports'/'Percentage' column names, and filtering out footer/source rows by requiring non-empty State; source: data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "prizesStatesCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = topTenCategories.copy()\n\n    # Clean footer rows that slipped through: keep rows where Category is present.\n    df = df[df[\"Category\"].notna() & (df[\"Category\"].astype(str).str.strip() != \"\")]\n\n    target = \"Prizes, Sweepstakes and Lotteries\"\n    states = (\n        df.loc[df[\"Category\"].astype(str).str.strip() == target, \"State\"]\n        .astype(str)\n        .str.strip()\n        .dropna()\n        .unique()\n    )\n\n    return pd.DataFrame([{\"statesWithCategoryCount\": int(len(states))}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count distinct State values whose Category exactly equals 'Prizes, Sweepstakes and Lotteries' (after stripping whitespace), excluding footer rows by requiring non-empty Category; output single-row DataFrame with statesWithCategoryCount",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "prizesStatesCount": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories-->prizesStatesCount",
+        "source": {
+          "operatorID": "topTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prizesStatesCount",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

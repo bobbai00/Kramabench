@@ -1,0 +1,242 @@
+{
+  "headId": "step-agent-603-6-1779125163537",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv'\n    return pd.read_csv(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv via pd.read_csv (dtype=str to preserve any non-numeric tokens); source for total report counts by year including 2007",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftByAge",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv'\n    return pd.read_csv(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Identity_Theft_Reports_by_Age.csv via pd.read_csv (dtype=str); source for 2024 identity theft reports distribution across age groups",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "reportCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # File appears to be encoded in Windows-1252 (common for smart quotes 0x93/0x94)\n    return pd.read_csv(path, dtype=str, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv via pd.read_csv with encoding='cp1252' (Windows-1252) to handle smart-quote bytes like 0x93/0x94; dtype=str to preserve formatting",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanReportCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCount.copy()\n    df.columns = ['col0', 'col1']\n\n    # keep rows that look like a 4-digit year and a numeric count\n    df = df[df['col0'].astype(str).str.fullmatch(r'\\d{4}', na=False)].copy()\n\n    df['year'] = df['col0'].astype(int)\n    df['reports'] = (\n        df['col1']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n\n    df = df.dropna(subset=['reports'])\n    return df[['year', 'reports']].sort_values('year').reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean 2024_CSN_Report_Count.csv: rename to [col0,col1]; filter rows where col0 is a 4-digit year; parse reports by removing commas and casting to numeric; output columns [year, reports] sorted ascending",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cleanIdentityTheftByAge",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identityTheftByAge) -> pd.DataFrame:\n    import pandas as pd\n\n    df = identityTheftByAge.copy()\n    df.columns = ['ageRange', 'reportsRaw']\n\n    # keep only standard age-range rows (exclude headers/notes/sources)\n    df = df[df['ageRange'].astype(str).str.contains(r'\\d', regex=True, na=False)].copy()\n\n    df['reports'] = (\n        df['reportsRaw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df.dropna(subset=['reports'])\n\n    return df[['ageRange', 'reports']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean 2024_CSN_Identity_Theft_Reports_by_Age.csv: rename columns to [ageRange,reportsRaw]; keep rows whose ageRange contains digits (drop headers/notes); parse reports by stripping commas and casting to numeric; output [ageRange, reports]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compute2007Age40plusIdentityTheft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanIdentityTheftByAge, cleanReportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    # --- 2024 distribution: share of identity theft reports with age >= 40 ---\n    ita = cleanIdentityTheftByAge.copy()\n    # ageRange values are standardized like: '40 - 49', '80 and Over'\n    ita['is40plus'] = ita['ageRange'].astype(str).str.match(r'^(40\\s*-\\s*49|50\\s*-\\s*59|60\\s*-\\s*69|70\\s*-\\s*79|80\\s+and\\s+Over)$')\n\n    total2024 = ita['reports'].sum()\n    share40plus = ita.loc[ita['is40plus'], 'reports'].sum() / total2024 if total2024 else float('nan')\n\n    # --- 2007 total reports (all categories) ---\n    # Using Report_Count table as the only provided by-year series in the available files.\n    rc = cleanReportCount.copy()\n    totalReports2007 = rc.loc[rc['year'] == 2007, 'reports']\n    if totalReports2007.empty:\n        return pd.DataFrame([{'error': '2007 not found in cleanReportCount', 'share40plus2024': share40plus}])\n    totalReports2007 = float(totalReports2007.iloc[0])\n\n    est40plus2007 = totalReports2007 * share40plus\n    rounded = int(round(est40plus2007 / 1000.0) * 1000)\n\n    return pd.DataFrame([{\n        'share40plus2024': share40plus,\n        'totalReports2007': totalReports2007,\n        'estimated40plus2007': est40plus2007,\n        'roundedNearestThousand': rounded\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Estimate 2007 reports concerning age>=40 assuming the 2024 identity-theft-by-age distribution: (1) from cleanIdentityTheftByAge compute share of reports in age groups [40-49,50-59,60-69,70-79,80 and Over] over total 2024 identity theft-by-age reports; (2) take 2007 total # of reports from cleanReportCount where year==2007; (3) multiply totalReports2007*share40plus and round to nearest thousand; output diagnostics + roundedNearestThousand",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCount": {
+        "x": 100,
+        "y": 220
+      },
+      "identityTheftByAge": {
+        "x": 100,
+        "y": 40
+      },
+      "reportCategories": {
+        "x": 400,
+        "y": 400
+      },
+      "cleanReportCount": {
+        "x": 400,
+        "y": 220
+      },
+      "cleanIdentityTheftByAge": {
+        "x": 400,
+        "y": 40
+      },
+      "compute2007Age40plusIdentityTheft": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCount-->cleanReportCount",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanReportCount",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identityTheftByAge-->cleanIdentityTheftByAge",
+        "source": {
+          "operatorID": "identityTheftByAge",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdentityTheftByAge",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdentityTheftByAge-->compute2007Age40plusIdentityTheft",
+        "source": {
+          "operatorID": "cleanIdentityTheftByAge",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute2007Age40plusIdentityTheft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanReportCount-->compute2007Age40plusIdentityTheft",
+        "source": {
+          "operatorID": "cleanReportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute2007Age40plusIdentityTheft",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

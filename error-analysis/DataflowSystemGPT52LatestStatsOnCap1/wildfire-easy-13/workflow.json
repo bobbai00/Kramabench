@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-194-5-1779102812269",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "helicopterRequestsByRegion",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/cleaned_helicopter_requests_by_region.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load cleaned_helicopter_requests_by_region.csv via pd.read_csv from data/wildfire/input/cleaned_helicopter_requests_by_region.csv (comma delimiter, header=0, UTF-8 default) containing helicopter request counts by NICC geographic area/region",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "topNiccRegion",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(helicopterRequestsByRegion) -> pd.DataFrame:\n    import pandas as pd\n\n    df = helicopterRequestsByRegion.copy()\n\n    # Keep only the 10 NICC-defined geographic areas (exclude rollups/non-areas)\n    exclude = {\n        'National Interagency Coordination Center',\n        'Other',\n        'Canada',\n    }\n    df = df[~df['Region'].isin(exclude)]\n\n    # If any area appears multiple times, aggregate defensively\n    out = (\n        df.groupby('Region', as_index=False)['Total Helicopter Requests']\n        .sum()\n        .sort_values('Total Helicopter Requests', ascending=False)\n        .head(1)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter helicopterRequestsByRegion to the 10 NICC-defined geographic areas by excluding non-area/rollup rows ['National Interagency Coordination Center','Other','Canada']; groupby Region and sum Total Helicopter Requests (defensive against duplicates); sort descending by Total Helicopter Requests and return top 1 region",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "helicopterRequestsByRegion": {
+        "x": 100,
+        "y": 40
+      },
+      "topNiccRegion": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "helicopterRequestsByRegion-->topNiccRegion",
+        "source": {
+          "operatorID": "helicopterRequestsByRegion",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topNiccRegion",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

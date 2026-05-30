@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-467-6-1779120404039",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "worldcities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv via pd.read_csv with default comma delimiter, header inference, UTF-8 encoding.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "romanCities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/roman_cities.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load roman_cities.csv from data/archeology/input/roman_cities.csv via pd.read_csv with default comma delimiter, header inference, UTF-8 encoding.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "romanToModernMatch",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(romanCities, worldcities):\n    import pandas as pd\n    import numpy as np\n\n    rc = romanCities.copy()\n    wc = worldcities.copy()\n\n    # --- parse rank ---\n    def parse_rank(x):\n        if pd.isna(x):\n            return np.nan\n        s = str(x).strip()\n        if s == '-' or s == '':\n            return np.nan\n        if 'or' in s:\n            parts = [p.strip() for p in s.split('or')]\n            nums = []\n            for p in parts:\n                try:\n                    nums.append(float(p))\n                except Exception:\n                    pass\n            return float(np.mean(nums)) if nums else np.nan\n        try:\n            return float(s)\n        except Exception:\n            return np.nan\n\n    rc['rankParsed'] = rc['Barrington Atlas Rank'].map(parse_rank)\n\n    # Keep only roman city rows with a usable rank\n    rc = rc.dropna(subset=['rankParsed']).reset_index(drop=True)\n\n    # Modern cities: population > 1,000,000\n    wc = wc.copy()\n    wc['population'] = pd.to_numeric(wc['population'], errors='coerce')\n    wc = wc[wc['population'] > 1_000_000].reset_index(drop=True)\n\n    # --- match by coordinate distance < 0.1 degrees ---\n    # Roman coords\n    rc_lat = rc['Latitude (Y)'].astype(float).to_numpy()\n    rc_lng = rc['Longitude (X)'].astype(float).to_numpy()\n\n    wc_lat = wc['lat'].astype(float).to_numpy()\n    wc_lng = wc['lng'].astype(float).to_numpy()\n\n    # Build all roman-modern pairs via broadcasting (1388 x ~?) feasible after pop>1m\n    dlat = rc_lat[:, None] - wc_lat[None, :]\n    dlng = rc_lng[:, None] - wc_lng[None, :]\n    dist = np.sqrt(dlat**2 + dlng**2)\n\n    # For each modern city, choose the last roman city (largest row index) within threshold\n    within = dist < 0.1\n    # last index: use argmax on reversed, but handle no matches\n    rc_idx = np.arange(rc.shape[0])\n    # set to -1 for non-within then take max index\n    candidates = np.where(within, rc_idx[:, None], -1)\n    chosen_rc_idx = candidates.max(axis=0)  # per modern city\n\n    matched_mask = chosen_rc_idx >= 0\n    matched_wc = wc.loc[matched_mask].copy().reset_index(drop=True)\n    matched_rc = rc.iloc[chosen_rc_idx[matched_mask]].copy().reset_index(drop=True)\n\n    out = pd.DataFrame({\n        'modernCity': matched_wc['city'].astype(str),\n        'modernLat': matched_wc['lat'].astype(float),\n        'modernLng': matched_wc['lng'].astype(float),\n        'population': matched_wc['population'].astype(float),\n        'romanAncientToponym': matched_rc['Ancient Toponym'].astype(str),\n        'romanModernToponym': matched_rc['Modern Toponym'].astype(str),\n        'romanLat': matched_rc['Latitude (Y)'].astype(float),\n        'romanLng': matched_rc['Longitude (X)'].astype(float),\n        'rank': matched_rc['rankParsed'].astype(float),\n        'romanRowOrder': chosen_rc_idx[matched_mask].astype(int),\n    })\n\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Match ancient Roman cities to modern world cities (population > 1,000,000) by coordinate distance < 0.1 degrees (Euclidean in lat/lng). Parse 'Barrington Atlas Rank' into numeric rank (e.g., '4 or 5' -> 4.5; '-' -> NaN) and drop Roman rows without rank. For each modern city, if multiple Roman cities match, select the last Roman sample in the data (max Roman row order). Output matched pairs with modern city, population, Roman toponyms/coords, and parsed rank.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "rankPopulationCorrelation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(romanToModernMatch) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    df = romanToModernMatch.copy()\n\n    # Ensure numeric\n    df['rank'] = pd.to_numeric(df['rank'], errors='coerce')\n    df['population'] = pd.to_numeric(df['population'], errors='coerce')\n\n    df = df.dropna(subset=['rank', 'population'])\n\n    # Pearson correlation between ancient rank and modern population\n    if len(df) < 2:\n        corr = np.nan\n    else:\n        corr = float(df['rank'].corr(df['population']))\n\n    return pd.DataFrame([{\n        'nPairs': int(len(df)),\n        'correlation': corr,\n        'correlationRounded6': (None if pd.isna(corr) else round(corr, 6))\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute Pearson correlation between parsed Roman city 'rank' and corresponding modern city 'population' using matched pairs from romanToModernMatch (already constrained to modern population > 1,000,000 and distance<0.1\u00b0 with last Roman sample per modern city). Coerce rank/population to numeric, drop NA, and output nPairs plus correlation and correlation rounded to 6 decimals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "worldcities": {
+        "x": 100,
+        "y": 220
+      },
+      "romanCities": {
+        "x": 100,
+        "y": 40
+      },
+      "romanToModernMatch": {
+        "x": 400,
+        "y": 130
+      },
+      "rankPopulationCorrelation": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "romanCities-->romanToModernMatch",
+        "source": {
+          "operatorID": "romanCities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "romanToModernMatch",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "worldcities-->romanToModernMatch",
+        "source": {
+          "operatorID": "worldcities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "romanToModernMatch",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "romanToModernMatch-->rankPopulationCorrelation",
+        "source": {
+          "operatorID": "romanToModernMatch",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "rankPopulationCorrelation",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

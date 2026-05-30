@@ -1,0 +1,174 @@
+{
+  "headId": "step-agent-231-9-1779103530818",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "tle48445Raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from pathlib import Path\n\n    path = Path('data/astronomy/input/TLE/48445.tle')\n    text = path.read_text(encoding='utf-8', errors='replace')\n    lines = [ln.rstrip('\\n') for ln in text.splitlines() if ln.strip() != '']\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/astronomy/input/TLE/48445.tle as raw text lines (UTF-8 with replacement) into a single-column DataFrame 'line' (blank lines removed) for subsequent TLE parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "tle48445Parse",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(tle48445Raw) -> pd.DataFrame:\n    import pandas as pd\n    from datetime import datetime, timedelta\n\n    lines = tle48445Raw['line'].astype(str).tolist()\n    if len(lines) % 2 != 0:\n        raise ValueError(f\"Expected even number of TLE lines (pairs of line1/line2). Got {len(lines)}\")\n\n    # Parse pairs; keep duplicates (same epoch) because they can reflect multiple element sets; we'll dedupe later.\n    recs = []\n    for i in range(0, len(lines), 2):\n        l1 = lines[i].strip()\n        l2 = lines[i + 1].strip()\n        if not (l1.startswith('1 ') and l2.startswith('2 ')):\n            # try to skip malformed pair\n            continue\n        # Epoch field: columns 19-32 (1-indexed), format YYDDD.DDDDDDDD\n        epoch_str = l1[18:32].strip()\n        if len(epoch_str) < 5:\n            continue\n        yy = int(epoch_str[0:2])\n        ddd = float(epoch_str[2:])\n        year = 2000 + yy if yy < 57 else 1900 + yy\n        dt = datetime(year, 1, 1) + timedelta(days=ddd - 1)\n\n        # satellite number\n        satnum = int(l1[2:7])\n        recs.append({'satnum': satnum, 'epoch': pd.Timestamp(dt), 'line1': l1, 'line2': l2})\n\n    df = pd.DataFrame(recs)\n    df = df[df['satnum'] == 48445].copy()\n    # Sort by epoch; also drop exact duplicate (epoch,line1,line2)\n    df = df.sort_values('epoch').drop_duplicates(subset=['epoch', 'line1', 'line2']).reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse data/astronomy/input/TLE/48445.tle raw line pairs into a structured table with columns [satnum, epoch (from TLE line1 epoch YYDDD.DDD...), line1, line2]; filter satnum=48445; sort by epoch and drop exact duplicate TLE records",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "tle48445Altitude",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(tle48445Parse) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    from skyfield.api import EarthSatellite, load, utc\n\n    df = tle48445Parse.copy()\n\n    ts = load.timescale()\n\n    # Mean Earth radius (meters) for a simple geocentric altitude estimate\n    earthRadiusM = 6_371_000.0\n\n    def altitudeM(l1: str, l2: str, epoch: pd.Timestamp) -> float:\n        sat = EarthSatellite(l1, l2, '48445', ts)\n\n        # Skyfield requires timezone-aware UTC datetimes\n        dt = epoch.to_pydatetime()\n        if dt.tzinfo is None:\n            dt = dt.replace(tzinfo=utc)\n        else:\n            dt = dt.astimezone(utc)\n\n        t = ts.from_datetime(dt)\n\n        geocentric = sat.at(t)\n\n        # Try Earth-fixed ITRF position first\n        try:\n            from skyfield.framelib import itrf\n            pos_m = geocentric.frame_xyz(itrf).m\n        except Exception:\n            pos_m = geocentric.position.m\n\n        return float(np.linalg.norm(pos_m) - earthRadiusM)\n\n    df['altitudeM'] = [\n        altitudeM(l1, l2, ep)\n        for l1, l2, ep in zip(df['line1'].tolist(), df['line2'].tolist(), df['epoch'].tolist())\n    ]\n\n    return df[['epoch', 'altitudeM', 'line1', 'line2']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute altitude estimate for each TLE record by propagating Skyfield EarthSatellite to the TLE epoch (epoch converted to timezone-aware UTC for Skyfield); estimate geocentric altitude (meters) as ||position_m|| \u2212 6,371,000; attempt Earth-fixed ITRF position using skyfield.framelib.itrf via geocentric.frame_xyz(itrf), falling back to inertial geocentric.position.m if ITRF frame is unavailable; output columns [epoch, altitudeM, line1, line2]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "tle48445MajorAltChanges",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(tle48445Altitude) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = tle48445Altitude.copy()\n\n    # Ensure sorted by epoch\n    df = df.sort_values('epoch').reset_index(drop=True)\n\n    # Compare each TLE to the previous one if within 12 hours\n    df['prevEpoch'] = df['epoch'].shift(1)\n    df['prevAltM'] = df['altitudeM'].shift(1)\n\n    df['dtHours'] = (df['epoch'] - df['prevEpoch']).dt.total_seconds() / 3600.0\n    df['dAltM'] = df['altitudeM'] - df['prevAltM']\n\n    # Count major altitude changes: |\u0394alt| > 1000 m within 12 hours\n    mask = (df['dtHours'].notna()) & (df['dtHours'] <= 12.0) & (df['dtHours'] >= 0) & (df['dAltM'].abs() > 1000.0)\n\n    count = int(mask.sum())\n\n    return pd.DataFrame([{'majorAltitudeChangeCount': count}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sort TLE altitude records by epoch; compute time difference to previous record (dtHours) and altitude difference (dAltM); count events where consecutive records are within 12 hours and |dAltM| > 1000 m; return single-row DataFrame with majorAltitudeChangeCount",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "tle48445Raw": {
+        "x": 100,
+        "y": 40
+      },
+      "tle48445Parse": {
+        "x": 400,
+        "y": 40
+      },
+      "tle48445Altitude": {
+        "x": 700,
+        "y": 40
+      },
+      "tle48445MajorAltChanges": {
+        "x": 1000,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "tle48445Raw-->tle48445Parse",
+        "source": {
+          "operatorID": "tle48445Raw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "tle48445Parse",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "tle48445Parse-->tle48445Altitude",
+        "source": {
+          "operatorID": "tle48445Parse",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "tle48445Altitude",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "tle48445Altitude-->tle48445MajorAltChanges",
+        "source": {
+          "operatorID": "tle48445Altitude",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "tle48445MajorAltChanges",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

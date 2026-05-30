@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-196-5-1779102885274",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wildfiresVarDesc",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv via pd.read_csv (comma delimiter, header row inferred, UTF-8) to inspect variable definitions/units for wildfire dataset",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (comma delimiter, header row inferred, UTF-8) containing wildfire records including fire size, location, month, and wind statistics",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fireWindCorr",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = wildfires.copy()\n    cols = {c.lower(): c for c in df.columns}\n\n    # Month column: derive from start_date if present, otherwise from start_day_of_year.\n    month_col = None\n    if 'start_date' in cols:\n        date_col = cols['start_date']\n        dt = pd.to_datetime(df[date_col], errors='coerce', infer_datetime_format=True)\n        df['_month'] = dt.dt.month\n        month_col = '_month'\n    elif 'start_day_of_year' in cols and 'start_year' in cols:\n        # Approximate month via year + day-of-year\n        dt = pd.to_datetime(df[cols['start_year']].astype(str), errors='coerce') + pd.to_timedelta(df[cols['start_day_of_year']] - 1, unit='D')\n        df['_month'] = dt.dt.month\n        month_col = '_month'\n\n    # Fire size column: based on dataset columns, use 'hec' (hectares) as the size.\n    size_col = cols.get('hec', None)\n\n    # Median wind speed column\n    wind_col = cols.get('wind_med', None)\n\n    out = {\n        'month_col': [month_col],\n        'size_col': [size_col],\n        'wind_col': [wind_col],\n        'pearson_r_july': [np.nan],\n        'n_july': [0],\n        'strong_corr_abs_ge_0_7': [False]\n    }\n\n    if month_col is None or size_col is None or wind_col is None:\n        return pd.DataFrame(out)\n\n    july = df.loc[df[month_col] == 7, [size_col, wind_col]].copy()\n    july[size_col] = pd.to_numeric(july[size_col], errors='coerce')\n    july[wind_col] = pd.to_numeric(july[wind_col], errors='coerce')\n    july = july.dropna(subset=[size_col, wind_col])\n\n    if len(july) >= 3:\n        r = float(july[size_col].corr(july[wind_col], method='pearson'))\n        out['pearson_r_july'] = [r]\n        out['n_july'] = [int(len(july))]\n        out['strong_corr_abs_ge_0_7'] = [bool(abs(r) >= 0.7)]\n\n    return pd.DataFrame(out)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute NOAA wildfire July correlation between fire size and median wind speed: derive month from start_date (parsed to datetime) or from [start_year,start_day_of_year]; use fire size column hec (hectares) and wind_med (median wind speed); filter rows where month==7; coerce hec and wind_med to numeric, drop NA; compute Pearson r and sample size n for July; flag strong correlation if |r|>=0.7; output diagnostics (chosen columns, r, n, flag).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wildfiresVarDesc": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "fireWindCorr": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfires-->fireWindCorr",
+        "source": {
+          "operatorID": "wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fireWindCorr",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

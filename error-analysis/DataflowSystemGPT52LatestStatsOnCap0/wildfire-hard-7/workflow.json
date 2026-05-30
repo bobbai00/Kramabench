@@ -1,0 +1,178 @@
+{
+  "headId": "step-agent-221-7-1779103412438",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "humanAcres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_human_caused_acres.csv'\n    # File is tab-delimited with thousands separators and occasional 'N/A'\n    return pd.read_csv(path, sep='\\t', dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_human_caused_acres.csv via pd.read_csv with sep='\\t' (tab-delimited as seen in raw lines) and dtype=str to preserve thousands separators and 'N/A' placeholders for later numeric cleaning.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "lightningAcres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_lightning_caused_acres.csv'\n    # File is tab-delimited with thousands separators and occasional 'N/A'\n    return pd.read_csv(path, sep='\\t', dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_lightning_caused_acres.csv via pd.read_csv with sep='\\t' (tab-delimited as seen in raw lines) and dtype=str to preserve thousands separators and 'N/A' placeholders for later numeric cleaning.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "anomalousYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(humanAcres, lightningAcres) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    def to_long(df: pd.DataFrame, cause: str) -> pd.DataFrame:\n        df = df.copy()\n        # Standardize column names\n        df.columns = [c.strip() for c in df.columns]\n        if 'Year' not in df.columns:\n            raise ValueError(f\"Missing Year column for cause={cause}. Columns: {df.columns.tolist()}\")\n\n        long = df.melt(id_vars=['Year'], var_name='area', value_name='acres')\n        # drop totals if present\n        long = long[~long['area'].str.fullmatch('Total', case=False, na=False)]\n\n        # Clean\n        long['Year'] = pd.to_numeric(long['Year'], errors='coerce')\n        # remove commas, treat N/A and blanks as NaN\n        long['acres'] = (long['acres']\n                        .astype(str)\n                        .str.replace(',', '', regex=False)\n                        .replace({'N/A': np.nan, 'nan': np.nan, '': np.nan, 'None': np.nan}))\n        long['acres'] = pd.to_numeric(long['acres'], errors='coerce')\n        long['cause'] = cause\n        long = long.dropna(subset=['Year'])\n        return long\n\n    h = to_long(humanAcres, 'human')\n    l = to_long(lightningAcres, 'lightning')\n\n    both = pd.concat([h, l], ignore_index=True)\n\n    # Total acres burned per area-year across both causes\n    areaYear = (both.groupby(['area', 'Year'], as_index=False)['acres']\n                    .sum(min_count=1))\n\n    # Per-area historical mean/std across years\n    stats = (areaYear.groupby('area')['acres']\n                    .agg(mean='mean', std='std', n='count')\n                    .reset_index())\n\n    merged = areaYear.merge(stats, on='area', how='left')\n    merged['z'] = (merged['acres'] - merged['mean']) / merged['std']\n\n    # Exclude areas with undefined std (e.g., n<2 or zero variance)\n    merged = merged.replace([np.inf, -np.inf], np.nan)\n    merged = merged.dropna(subset=['z'])\n    merged['abs_z'] = merged['z'].abs()\n\n    top = merged.sort_values(['abs_z'], ascending=False).head(1)\n    # Return for final answer consumption\n    return top[['area', 'Year', 'acres', 'mean', 'std', 'z', 'abs_z']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Melt humanAcres and lightningAcres wide tables into long format with columns [Year, area, acres] (drop 'Total'); clean acres by removing thousands separators and mapping 'N/A'/blanks to NaN; concatenate causes and sum acres per (area, Year); compute each area's historical mean and std of annual acres; compute Z-score per (area, Year); select the maximum absolute Z-score row and return [area, Year, acres, mean, std, z, abs_z].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectHumanRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_human_caused_acres.csv'\n    # Read raw rows without parsing to inspect delimiter/quoting issues\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:40]\n    return pd.DataFrame({'line_no': list(range(1, len(lines)+1)), 'line': [l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 40 raw text lines of nifc_human_caused_acres.csv (readlines with utf-8, errors='replace') to diagnose parsing issues such as extra delimiters/quotes.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectLightningRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_lightning_caused_acres.csv'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:40]\n    return pd.DataFrame({'line_no': list(range(1, len(lines)+1)), 'line': [l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 40 raw text lines of nifc_lightning_caused_acres.csv (readlines with utf-8, errors='replace') to diagnose whether the header is malformed or delimiter is inconsistent.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "humanAcres": {
+        "x": 100,
+        "y": 40
+      },
+      "lightningAcres": {
+        "x": 100,
+        "y": 220
+      },
+      "anomalousYear": {
+        "x": 400,
+        "y": 130
+      },
+      "inspectHumanRaw": {
+        "x": 100,
+        "y": 400
+      },
+      "inspectLightningRaw": {
+        "x": 100,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "humanAcres-->anomalousYear",
+        "source": {
+          "operatorID": "humanAcres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "anomalousYear",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "lightningAcres-->anomalousYear",
+        "source": {
+          "operatorID": "lightningAcres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "anomalousYear",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

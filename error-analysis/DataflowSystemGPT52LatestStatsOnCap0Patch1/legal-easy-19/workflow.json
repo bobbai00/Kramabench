@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-74-7-1779139973314",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudReportsByAmountLost2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Amount_Lost.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud_Reports_by_Amount_Lost.csv via pd.read_csv (comma delimiter, first row header, UTF-8) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Amount_Lost.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "proportionLost1To500",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudReportsByAmountLost2024):\n    import pandas as pd\n    import numpy as np\n\n    raw = fraudReportsByAmountLost2024.copy()\n\n    # Use first two columns as label + value\n    df = raw.iloc[:, :2].copy()\n    df.columns = ['category', 'count_raw']\n\n    df['category'] = df['category'].astype('string').str.strip()\n\n    # Parse counts: remove non-digits, keep as numeric\n    df['count'] = (\n        df['count_raw']\n        .astype('string')\n        .str.replace(r'[^0-9]', '', regex=True)\n        .replace({'': pd.NA})\n    )\n    df['count'] = pd.to_numeric(df['count'], errors='coerce')\n\n    # Denominator: total number of fraud reports\n    total_mask = df['category'].eq('Number of Fraud Reports')\n    total = df.loc[total_mask, 'count'].dropna().iloc[0]\n\n    # Numerator: sum of $1-$100, $101-$200, $201-$300, $301-$400, $401-$500\n    buckets = [\n        r'^\\$\\s*1\\s*[-\u2013]\\s*\\$\\s*100\\s*$',\n        r'^\\$\\s*101\\s*[-\u2013]\\s*\\$\\s*200\\s*$',\n        r'^\\$\\s*201\\s*[-\u2013]\\s*\\$\\s*300\\s*$',\n        r'^\\$\\s*301\\s*[-\u2013]\\s*\\$\\s*400\\s*$',\n        r'^\\$\\s*401\\s*[-\u2013]\\s*\\$\\s*500\\s*$',\n    ]\n\n    num = 0.0\n    found = []\n    for pat in buckets:\n        m = df['category'].fillna('').str.contains(pat, regex=True, na=False)\n        val = df.loc[m, 'count'].dropna()\n        if not val.empty:\n            num += float(val.iloc[0])\n            found.append(df.loc[m, 'category'].dropna().iloc[0])\n\n    if num == 0.0:\n        cats = df['category'].dropna().unique().tolist()\n        raise ValueError(f\"Could not compute numerator from bucket rows. Categories (sample): {cats[:80]}\")\n\n    prop = num / float(total)\n\n    return pd.DataFrame([{\n        'numerator_1_to_500': num,\n        'denominator_total_reports': float(total),\n        'proportion': prop,\n        'proportion_rounded_3dp': round(prop, 3),\n        'buckets_found': ', '.join(found)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute proportion of 2024 fraud reporters who lost between $1-$500 by summing counts for the five buckets [$1-$100, $101-$200, $201-$300, $301-$400, $401-$500] from 2024_CSN_Fraud_Reports_by_Amount_Lost.csv (first two columns). Parse counts by stripping non-digits. Denominator = 'Number of Fraud Reports'. Output numerator, denominator, proportion, and 3dp rounded proportion.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudReportsByAmountLost2024": {
+        "x": 100,
+        "y": 40
+      },
+      "proportionLost1To500": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudReportsByAmountLost2024-->proportionLost1To500",
+        "source": {
+          "operatorID": "fraudReportsByAmountLost2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "proportionLost1To500",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

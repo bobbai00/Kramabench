@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_top_ten",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 5 rows of 2024_CSN_State_Top_Ten_Report_Categories.csv to inspect columns and values",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "top_ten_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv'\n    # File contains a blank row then a header row inside the file.\n    df = pd.read_csv(path, header=None)\n    # Find the row that contains the actual headers (starts with 'State')\n    header_idx = df.index[df.iloc[:,0].astype(str).str.strip().eq('State')]\n    if len(header_idx)==0:\n        raise ValueError('Could not find header row containing \"State\"')\n    h = int(header_idx[0])\n    headers = df.iloc[h].tolist()\n    data = df.iloc[h+1:].copy()\n    data.columns = headers\n    # Keep only the expected columns\n    data = data[['State','Category','# of Reports','Percentage']]\n    # Drop footer/source and blank rows\n    data = data.dropna(subset=['State','Category'])\n    data = data[~data['State'].astype(str).str.startswith('Source:')]\n    # Clean types\n    data['# of Reports'] = (\n        data['# of Reports'].astype(str).str.replace(',','',regex=False)\n    )\n    data['# of Reports'] = pd.to_numeric(data['# of Reports'], errors='coerce')\n    data['Percentage'] = data['Percentage'].astype(str).str.replace('%','',regex=False)\n    data['Percentage'] = pd.to_numeric(data['Percentage'], errors='coerce')\n    return data.reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and clean full 2024_CSN_State_Top_Ten_Report_Categories.csv by detecting in-file header row ('State'), selecting columns [State, Category, # of Reports, Percentage], dropping blank/footer rows, and converting report counts and percentages to numeric.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "state_top_category",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(top_ten_full):\n    import pandas as pd\n\n    df = top_ten_full.copy()\n\n    # For each state, pick the category with the highest percentage; break ties with # of Reports\n    df_sorted = df.sort_values(['State', 'Percentage', '# of Reports', 'Category'], ascending=[True, False, False, True])\n    top1 = df_sorted.groupby('State', as_index=False).head(1)\n\n    # Keep only states whose top category is Identity Theft\n    out = top1[top1['Category'].str.strip().eq('Identity Theft')][['State']].sort_values('State').reset_index(drop=True)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Determine each state's top report category by max Percentage (tie-breaker: # of Reports), then list states where the top category equals 'Identity Theft'.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_top_ten": {
+      "x": 100,
+      "y": 40
+    },
+    "top_ten_full": {
+      "x": 100,
+      "y": 220
+    },
+    "state_top_category": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "top_ten_full-->state_top_category",
+      "source": {
+        "operatorID": "top_ten_full",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "state_top_category",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

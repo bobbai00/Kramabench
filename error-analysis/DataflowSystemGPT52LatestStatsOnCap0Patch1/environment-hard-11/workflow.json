@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-59-6-1779139754481",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "pleasureBay",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv\"\n    # The CSV has multi-row headers; read without header inference to locate the real header row,\n    # then re-read using that row as header.\n    raw = pd.read_csv(path, header=None)\n\n    # Find the first row that contains the canonical \"Date\" column.\n    header_row = None\n    for i in range(min(len(raw), 50)):\n        row_vals = raw.iloc[i].astype(str).str.strip().str.lower().tolist()\n        if any(v == \"date\" for v in row_vals):\n            header_row = i\n            break\n    if header_row is None:\n        # Fallback to row 2 (common for these datasheets)\n        header_row = 2\n\n    df = pd.read_csv(path, header=header_row)\n    # Drop fully-empty columns and normalize column names\n    df = df.dropna(axis=1, how='all')\n    df.columns = [str(c).strip() for c in df.columns]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load pleasure_bay_and_castle_island_beach_datasheet.csv by first scanning the first 50 rows with header=None to detect the row containing a 'Date' field (multi-row header), then re-read with header=<detected row>; drop fully-empty columns and strip column names.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "failedAvgRain",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pleasureBay):\n    import pandas as pd\n    df = pleasureBay.copy()\n\n    # Pleasure Bay Beach results appear to be in the first replicate columns: Tag + Enterococcus\n    # Standard: Enterococcus <= 104 counts / 100mL\n    df['failed'] = df['Enterococcus'] > 104\n\n    # Ensure rain is numeric\n    rain = pd.to_numeric(df['1-Day Rain'], errors='coerce')\n\n    avg_rain = rain[df['failed']].mean()\n\n    return pd.DataFrame([{\n        'avgRain1DayBeforeSampling': avg_rain,\n        'nFailedSamples': int(df['failed'].sum())\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average of '1-Day Rain' for dates where Pleasure Bay Beach primary Enterococcus result ('Enterococcus') exceeds swimming standard (>104 counts/100mL); add count of failed samples (nFailedSamples) for context; return single-row table with avgRain1DayBeforeSampling and nFailedSamples.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "pleasureBay": {
+        "x": 100,
+        "y": 40
+      },
+      "failedAvgRain": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "pleasureBay-->failedAvgRain",
+        "source": {
+          "operatorID": "pleasureBay",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "failedAvgRain",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

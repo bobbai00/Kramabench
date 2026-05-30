@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-255-4-1779104368065",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "density2014",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu016-20140314_to_20140317.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Swarm A atmospheric mass density time series from swarma-wu016-20140314_to_20140317.csv using pd.read_csv with default CSV parsing (comma delimiter, header row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "density2018",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu545-20180718_to_20180721.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Swarm A atmospheric mass density time series from swarma-wu545-20180718_to_20180721.csv using pd.read_csv with default CSV parsing (comma delimiter, header row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "peakRatio",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(density2014, density2018) -> pd.DataFrame:\n    import pandas as pd\n\n    def peak(df: pd.DataFrame) -> float:\n        # choose the first column that looks like density\n        candidates = [c for c in df.columns if 'dens' in c.lower()]\n        if not candidates:\n            # fallback: numeric columns\n            numcols = df.select_dtypes(include='number').columns.tolist()\n            if not numcols:\n                raise ValueError('No numeric columns found to compute peak density.')\n            col = numcols[0]\n        else:\n            # prefer 'rho' if present\n            rho = [c for c in candidates if c.lower() in ('rho', 'rho_n', 'rho_nrlmsise00', 'density', 'mass_density')]\n            col = rho[0] if rho else candidates[0]\n        s = pd.to_numeric(df[col], errors='coerce')\n        return float(s.max())\n\n    p2014 = peak(density2014)\n    p2018 = peak(density2018)\n    ratio = p2014 / p2018\n    return pd.DataFrame([{\n        'peak2014': p2014,\n        'peak2018': p2018,\n        'ratio': ratio\n    }])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute peak (maximum) atmospheric mass density for each period by selecting a density-like column (name contains 'dens', else first numeric column), then calculate ratio = peak2014 / peak2018; return single-row table with peak2014, peak2018, and ratio.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "density2014": {
+        "x": 100,
+        "y": 40
+      },
+      "density2018": {
+        "x": 100,
+        "y": 220
+      },
+      "peakRatio": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "density2014-->peakRatio",
+        "source": {
+          "operatorID": "density2014",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peakRatio",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "density2018-->peakRatio",
+        "source": {
+          "operatorID": "density2018",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peakRatio",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

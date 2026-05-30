@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-96-16-1779101062455",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudReports2024Load",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv\"\n\n    # The file has a title row above the table, but pandas read_csv(header=1)\n    # can still leave us with an extra header row inside the data. Load raw, then\n    # we will set the true header in a downstream operator.\n    return pd.read_csv(path, header=None, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv via pd.read_csv with header=None and dtype=str to capture raw rows (including title and the embedded table header row) for reliable downstream header detection/cleanup.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "medianFraudLossByBranch2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudReports2024Load) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    raw = fraudReports2024Load.copy()\n\n    # Find the embedded header row\n    header_idx = None\n    for i in range(len(raw)):\n        row = raw.iloc[i].astype(str).tolist()\n        if ('Military Status' in row) and ('Median Fraud Loss' in row):\n            header_idx = i\n            break\n    if header_idx is None:\n        return pd.DataFrame([{ 'error': 'Could not locate embedded header row' }])\n\n    header = raw.iloc[header_idx].tolist()\n    df = raw.iloc[header_idx + 1:].copy()\n    df.columns = header\n\n    # Keep only relevant columns\n    needed = ['Military Status', 'Median Fraud Loss']\n    df = df[[c for c in needed if c in df.columns]].copy()\n    if df.shape[1] != 2:\n        return pd.DataFrame([{ 'error': f'Missing expected columns after header detection: got {list(df.columns)}' }])\n\n    # Drop blank/separator/source rows\n    df = df.dropna(how='all')\n    df['Military Status'] = df['Military Status'].astype(str).str.strip()\n    df['Median Fraud Loss'] = df['Median Fraud Loss'].astype(str).str.strip()\n    df = df[(df['Military Status'] != '') & (~df['Military Status'].str.startswith('Source:'))]\n\n    # The table appears to contain branch names directly in Military Status (Army, Navy, etc.).\n    # Keep the four common service branches if present.\n    branches = ['Army', 'Navy', 'Air Force', 'Marine Corps', 'Space Force', 'Coast Guard']\n    dfBranch = df[df['Military Status'].isin(branches)].copy()\n\n    if dfBranch.empty:\n        # Fallback: keep any rows that look like a branch (non-total, non-header)\n        dfBranch = df[~df['Military Status'].str.contains('Total', case=False, na=False)].copy()\n\n    def parse_money(x):\n        if x is None:\n            return pd.NA\n        s = str(x)\n        s = re.sub(r'[^0-9.\\-]', '', s)\n        return pd.to_numeric(s, errors='coerce')\n\n    dfBranch['Median Fraud Loss (numeric)'] = dfBranch['Median Fraud Loss'].map(parse_money)\n    dfBranch = dfBranch.dropna(subset=['Median Fraud Loss (numeric)'])\n\n    if dfBranch.empty:\n        return pd.DataFrame([{ 'error': 'No parsable branch rows found', 'militaryStatusDistinct': ', '.join(sorted(df['Military Status'].unique())[:50]) }])\n\n    out = dfBranch.sort_values('Median Fraud Loss (numeric)', ascending=False).head(1).copy()\n    out = out.rename(columns={'Military Status': 'Branch'})\n    return out[['Branch', 'Median Fraud Loss', 'Median Fraud Loss (numeric)']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From fraudReports2024Load (raw CSV header=None): detect embedded header row containing 'Military Status' and 'Median Fraud Loss', set as columns, keep rows below; select ['Military Status','Median Fraud Loss']; drop all-null/blank/source rows; treat branch as rows where Military Status is one of ['Army','Navy','Air Force','Marine Corps','Space Force','Coast Guard'] (fallback: non-Total rows); parse Median Fraud Loss by stripping non-numeric chars ($, commas) to float; sort descending by parsed numeric and return top 1 as [Branch, Median Fraud Loss, Median Fraud Loss (numeric)].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudReports2024Load": {
+        "x": 100,
+        "y": 40
+      },
+      "medianFraudLossByBranch2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudReports2024Load-->medianFraudLossByBranch2024",
+        "source": {
+          "operatorID": "fraudReports2024Load",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "medianFraudLossByBranch2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

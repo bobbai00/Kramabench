@@ -1,0 +1,204 @@
+{
+  "operators": [
+    {
+      "operatorID": "harbor_txt",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/boston-harbor-beaches.txt'\n    with open(path, 'r', encoding='utf-8', errors='ignore') as f:\n        content = f.read()\n    return pd.DataFrame([{'file': path, 'content': content}])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load raw text file data/environment/input/boston-harbor-beaches.txt to identify relevant Boston Harbor beaches and how they map to datasheet files.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "constitution",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/constitution_beach_datasheet.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load data/environment/input/constitution_beach_datasheet.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "carson",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/carson_beach_datasheet.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load data/environment/input/carson_beach_datasheet.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "load_all",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob, os\n    paths = [\n      'data/environment/input/*_beach_datasheet.csv'\n    ]\n    files = []\n    for p in paths:\n        files.extend(glob.glob(p))\n    files = sorted(set(files))\n\n    rows = []\n    for fp in files:\n        # read everything as string to handle mixed header rows\n        df = pd.read_csv(fp, dtype=str)\n        df.insert(0, 'source_file', os.path.basename(fp))\n        rows.append(df)\n    # union by columns\n    out = pd.concat(rows, ignore_index=True, sort=False)\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and union all beach datasheet CSVs from data/environment/input/*_beach_datasheet.csv as raw strings, adding source_file column.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "tidy_samples",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(load_all):\n    import pandas as pd\n    import numpy as np\n\n    df = load_all.copy()\n\n    # Map each source_file to its date column and one or more enterococcus columns (already in unioned frame)\n    configs = {\n        'carson_beach_datasheet.csv': {\n            'beach': 'Carson Beach',\n            'date_col': 'Carson Beach, South Boston: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7'],\n        },\n        'city_point_beach_datasheet.csv': {\n            'beach': 'City Point Beach',\n            'date_col': 'City Point Beach, South Boston: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7'],\n        },\n        'constitution_beach_datasheet.csv': {\n            'beach': 'Constitution Beach',\n            'date_col': 'Constitution Beach, East Boston: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7', 'Unnamed: 9'],\n        },\n        'm_street_beach_datasheet.csv': {\n            'beach': 'M Street Beach',\n            'date_col': 'M Street Beach, South Boston: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7'],\n        },\n        'malibu_beach_datasheet.csv': {\n            'beach': 'Malibu Beach',\n            'date_col': 'Malibu Beach, Dorchester: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7'],\n        },\n        'tenean_beach_datasheet.csv': {\n            'beach': 'Tenean Beach',\n            'date_col': 'Tenean Beach, Dorchester: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7', 'Unnamed: 9'],\n        },\n        'wollaston_beach_datasheet.csv': {\n            'beach': 'Wollaston Beach',\n            'date_col': 'Wollaston Beach, Quincy: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7', 'Unnamed: 9', 'Unnamed: 11'],\n        },\n        'pleasure_bay_and_castle_island_beach_datasheet.csv': {\n            'beach': None,  # handled separately: Pleasure Bay & Castle Island in one file\n            'date_col': 'Pleasure Bay Beach, South Boston: Bacterial Water Quality',\n            'enter_cols': ['Unnamed: 5', 'Unnamed: 7', 'Unnamed: 9'],\n        },\n    }\n\n    out_parts = []\n\n    for sf, cfg in configs.items():\n        sub = df[df['source_file'] == sf].copy()\n        date_raw = sub[cfg['date_col']]\n\n        # Drop header/label rows (where date isn't parseable)\n        date = pd.to_datetime(date_raw, errors='coerce')\n\n        def parse_enter(s):\n            if pd.isna(s):\n                return np.nan\n            s = str(s).strip()\n            if s.lower() == 'null' or s == '':\n                return np.nan\n            # treat '< x' as x (conservative for passing threshold since x is small here)\n            if s.startswith('<'):\n                s = s.replace('<', '').strip()\n            if s.startswith('>'):\n                s = s.replace('>', '').strip()\n            try:\n                return float(s)\n            except Exception:\n                return np.nan\n\n        enter_vals = []\n        for c in cfg['enter_cols']:\n            if c in sub.columns:\n                enter_vals.append(sub[c].map(parse_enter))\n        if not enter_vals:\n            continue\n        enter_df = pd.concat(enter_vals, axis=1)\n        # If multiple stations per date, consider worst (max) enterococcus\n        enter_max = enter_df.max(axis=1, skipna=True)\n\n        beach_name = cfg['beach']\n        if sf == 'pleasure_bay_and_castle_island_beach_datasheet.csv':\n            # Distinguish using tag/location columns: Unnamed:4 / Unnamed:6 / Unnamed:8 carry station names.\n            # Castle Island stations include 'Castle Island' in those tag columns.\n            tag_cols = [c for c in ['Unnamed: 4', 'Unnamed: 6', 'Unnamed: 8'] if c in sub.columns]\n            tag_text = sub[tag_cols].astype(str).agg(' '.join, axis=1) if tag_cols else pd.Series('', index=sub.index)\n            is_castle = tag_text.str.contains('Castle Island', case=False, na=False)\n            beach_series = pd.Series(np.where(is_castle, 'Castle Island Beach', 'Pleasure Bay Beach'), index=sub.index)\n        else:\n            beach_series = pd.Series(beach_name, index=sub.index)\n\n        tidy = pd.DataFrame({\n            'beach': beach_series,\n            'date': date,\n            'enterococcus': enter_max\n        })\n        tidy = tidy.dropna(subset=['date'])\n        out_parts.append(tidy)\n\n    out = pd.concat(out_parts, ignore_index=True)\n\n    # Keep years 2020-2024 inclusive\n    out = out[(out['date'].dt.year >= 2020) & (out['date'].dt.year <= 2024)]\n\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Transform unioned raw datasheets into tidy samples with columns (beach, date, enterococcus=max across stations per row). Parse dates, coerce '<'/'>' values to numerics, split Pleasure Bay vs Castle Island using tag/location columns, then filter to years 2020-2024 inclusive.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "standards_100pct",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(tidy_samples):\n    import pandas as pd\n\n    df = tidy_samples.copy()\n    # Standard: < 104 counts per 100 mL\n    df['meets_standard'] = df['enterococcus'] < 104\n\n    agg = (df.groupby('beach')\n             .agg(n_samples=('meets_standard','size'),\n                  n_fail=('meets_standard', lambda s: (~s).sum()),\n                  pct_meet=('meets_standard','mean'))\n             .reset_index())\n\n    met_100 = agg[(agg['n_samples'] > 0) & (agg['n_fail'] == 0)].copy()\n    # Return just beach names sorted for stable output\n    return met_100.sort_values('beach')[['beach']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute whether each 2020-2024 sample meets swimming standard (enterococcus <104), aggregate by beach, keep beaches with 0 failures (100% compliance), output sorted beach names.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "harbor_txt": {
+      "x": 100,
+      "y": 40
+    },
+    "constitution": {
+      "x": 100,
+      "y": 220
+    },
+    "carson": {
+      "x": 100,
+      "y": 400
+    },
+    "load_all": {
+      "x": 100,
+      "y": 580
+    },
+    "tidy_samples": {
+      "x": 430,
+      "y": 580
+    },
+    "standards_100pct": {
+      "x": 760,
+      "y": 580
+    }
+  },
+  "links": [
+    {
+      "linkID": "load_all-->tidy_samples",
+      "source": {
+        "operatorID": "load_all",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "tidy_samples",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "tidy_samples-->standards_100pct",
+      "source": {
+        "operatorID": "tidy_samples",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "standards_100pct",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

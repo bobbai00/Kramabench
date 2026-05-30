@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-66-7-1779100583087",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n\n    # Observed: after skiprows=1, the first remaining row still contains the header values\n    # ('State','Category','# of Reports','Percentage'), and the file includes trailing\n    # blank/source rows. So: read with no header, skip the title row, then promote the\n    # first row to header and drop non-data rows.\n    raw = pd.read_csv(path, skiprows=1, header=None, dtype=str)\n    raw = raw.dropna(how='all')\n\n    header = raw.iloc[0].tolist()\n    df = raw.iloc[1:].copy()\n    df.columns = header\n\n    # Keep only rows that look like data (State and Category present)\n    df = df[df['State'].notna() & df['Category'].notna()]\n    return df.reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv by skipping the title row (skiprows=1) and reading header=None; promote the first remaining row to column names [State, Category, # of Reports, Percentage]; drop fully blank rows and non-data footer rows by requiring non-null State and Category; return cleaned table as strings",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftTopStates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = topTenCategories.copy()\n\n    # For each state, the top category is the one with the max number of reports.\n    # '# of Reports' is a string with thousands separators.\n    df['reports'] = (\n        df['# of Reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n\n    # Keep rows tied for max (just in case)\n    maxByState = df.groupby('State', as_index=False)['reports'].max().rename(columns={'reports': 'maxReports'})\n    df2 = df.merge(maxByState, on='State', how='inner')\n    topRows = df2[df2['reports'] == df2['maxReports']]\n\n    identityTop = topRows[topRows['Category'].str.strip().eq('Identity Theft')]\n\n    out = (\n        identityTop[['State']]\n        .drop_duplicates()\n        .sort_values('State')\n        .reset_index(drop=True)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From topTenCategories: parse '# of Reports' (remove commas, to numeric) into 'reports'; compute per-State maximum reports; keep rows tied for that max as each state's top category; filter to Category == 'Identity Theft'; output distinct State values sorted alphabetically",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "identityTheftTopStates": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories-->identityTheftTopStates",
+        "source": {
+          "operatorID": "topTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identityTheftTopStates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_idtheft_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob, os\n    paths = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    rows = []\n    for p in sorted(paths)[:3]:\n        try:\n            df = pd.read_csv(p)\n        except Exception:\n            df = pd.read_csv(p, encoding='latin-1')\n        rows.append({\n            'path': p,\n            'nrows': len(df),\n            'ncols': df.shape[1],\n            'columns': list(df.columns)[:20],\n            'head': df.head(2).to_json(orient='records')\n        })\n    return pd.DataFrame(rows)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample a few identity theft CSV files under data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv to inspect schema/columns",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_fraud_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob, os\n    paths = sorted(glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv'))\n    rows = []\n    for p in paths[:3]:\n        df = pd.read_csv(p)\n        rows.append({\n            'path': p,\n            'nrows': len(df),\n            'ncols': df.shape[1],\n            'columns': list(df.columns),\n            'head': df.head(3).to_dict(orient='records')\n        })\n    return pd.DataFrame(rows)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample a few fraud CSV files under data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv to inspect schema/columns",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "idtheft_all",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    import os\n\n    paths = sorted(glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'))\n    out = []\n    for p in paths:\n        df = pd.read_csv(p)\n        # Expect 2 columns: metro area name and # of reports\n        c0, c1 = df.columns[:2]\n        tmp = df[[c0, c1]].copy()\n        tmp.columns = ['metro_area', 'reports_raw']\n        tmp['state_file'] = os.path.splitext(os.path.basename(p))[0]\n        out.append(tmp)\n    all_df = pd.concat(out, ignore_index=True)\n    return all_df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and concatenate all identity theft CSVs from data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv; keep first two columns as metro_area and reports_raw, plus state_file from filename",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fraud_all",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob, os\n    paths = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv')\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        # take first two columns\n        c0, c1 = df.columns[:2]\n        out = df[[c0, c1]].copy()\n        out.columns = ['metro_area', 'reports_raw']\n        out['state_file'] = os.path.splitext(os.path.basename(p))[0]\n        dfs.append(out)\n    return pd.concat(dfs, ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and concatenate all fraud and other CSVs from data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv; keep first two columns as metro_area and reports_raw, plus state_file from filename",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "idtheft_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(idtheft_all):\n    import pandas as pd\n    df = idtheft_all.copy()\n    # drop header/footer/blank rows\n    df = df[df['metro_area'].notna()]\n    df = df[~df['metro_area'].astype(str).str.contains('Source:', na=False)]\n    df = df[~df['metro_area'].astype(str).str.strip().eq('Metropolitan Area')]\n    # parse reports\n    rep = (\n        df['reports_raw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['reports'] = pd.to_numeric(rep, errors='coerce')\n    df = df[df['reports'].notna()]\n    df['metro_area'] = df['metro_area'].astype(str).str.strip()\n    return df[['metro_area','reports']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean identity theft table: remove blank/header/footer rows; parse reports as numeric; output metro_area and reports",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "fraud_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fraud_all):\n    import pandas as pd\n    df = fraud_all.copy()\n    # drop rows with missing metro_area\n    df = df[df['metro_area'].notna()].copy()\n    # remove header/footer-like rows\n    bad_prefixes = (\n        'Metropolitan Areas:',\n        'Source:',\n    )\n    df = df[~df['metro_area'].astype(str).str.startswith(bad_prefixes)]\n    df = df[df['metro_area'].astype(str).str.strip().ne('Metropolitan Area')]\n\n    # parse reports\n    df['reports'] = (\n        df['reports_raw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df = df[df['reports'].str.fullmatch(r'\\d+', na=False)].copy()\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df[df['reports'].notna()].copy()\n\n    return df[['metro_area', 'reports']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean fraud table: remove blank/header/footer rows; parse reports as numeric; output metro_area and reports",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "id_fraud_compare",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(idtheft_clean, fraud_clean) -> pd.DataFrame:\n    import pandas as pd\n    merged = idtheft_clean.merge(\n        fraud_clean,\n        on='metro_area',\n        how='inner',\n        suffixes=('_idtheft','_fraud')\n    )\n    merged['idtheft_gt_fraud'] = merged['reports_idtheft'] > merged['reports_fraud']\n    return pd.DataFrame({\n        'any_metro_idtheft_exceeds_fraud': [bool(merged['idtheft_gt_fraud'].any())],\n        'count_metros_idtheft_exceeds_fraud': [int(merged['idtheft_gt_fraud'].sum())],\n        'n_metros_compared': [int(len(merged))]\n    })\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inner-join cleaned identity theft and fraud tables on metro_area; check if any metro has identity theft reports > fraud reports; output boolean and counts",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_idtheft_files": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_fraud_files": {
+      "x": 100,
+      "y": 220
+    },
+    "idtheft_all": {
+      "x": 100,
+      "y": 400
+    },
+    "fraud_all": {
+      "x": 100,
+      "y": 580
+    },
+    "idtheft_clean": {
+      "x": 430,
+      "y": 400
+    },
+    "fraud_clean": {
+      "x": 430,
+      "y": 580
+    },
+    "id_fraud_compare": {
+      "x": 760,
+      "y": 490
+    }
+  },
+  "links": [
+    {
+      "linkID": "idtheft_all-->idtheft_clean",
+      "source": {
+        "operatorID": "idtheft_all",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "idtheft_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fraud_all-->fraud_clean",
+      "source": {
+        "operatorID": "fraud_all",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fraud_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "idtheft_clean-->id_fraud_compare",
+      "source": {
+        "operatorID": "idtheft_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "id_fraud_compare",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fraud_clean-->id_fraud_compare",
+      "source": {
+        "operatorID": "fraud_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "id_fraud_compare",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

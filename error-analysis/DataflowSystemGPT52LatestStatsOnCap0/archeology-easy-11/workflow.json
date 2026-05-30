@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-470-7-1779120468421",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "worldcities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv(\n        'data/archeology/input/worldcities.csv',\n        dtype={\n            'city': 'string',\n            'city_ascii': 'string',\n            'country': 'string',\n            'iso2': 'string',\n            'iso3': 'string',\n            'admin_name': 'string',\n            'capital': 'string',\n        },\n        low_memory=False,\n    )\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv via pd.read_csv (comma-delimited, header row inferred); set key text columns to pandas string dtype (city, city_ascii, country, iso2, iso3, admin_name, capital) and low_memory=False for stable type inference.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "capitalAvgLat",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(worldcities) -> pd.DataFrame:\n    import pandas as pd\n\n    df = worldcities.copy()\n    # National capitals are marked as 'primary' in this dataset\n    df = df[df[\"capital\"].astype(\"string\").str.lower() == \"primary\"].copy()\n\n    df[\"population\"] = pd.to_numeric(df[\"population\"], errors=\"coerce\")\n    df[\"lat\"] = pd.to_numeric(df[\"lat\"], errors=\"coerce\")\n\n    # If a country has multiple primary capitals, keep the one with the largest population\n    df = df.sort_values(\n        by=[\"country\", \"population\", \"lat\", \"city\"],\n        ascending=[True, False, False, True],\n        na_position=\"last\",\n    )\n    topCapitals = df.drop_duplicates(subset=[\"country\"], keep=\"first\")\n\n    avgLat = topCapitals[\"lat\"].mean()\n    return pd.DataFrame([{\"avg_latitude\": round(float(avgLat), 4)}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average latitude of national capital cities from worldcities: filter rows where capital == 'primary' (case-insensitive); coerce 'population' and 'lat' to numeric; within each country sort by population desc (tie-break by lat desc then city asc) and keep the top row; compute mean latitude across selected capitals; round to 4 decimals; output single-row DataFrame with column avg_latitude.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "worldcities": {
+        "x": 100,
+        "y": 40
+      },
+      "capitalAvgLat": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "worldcities-->capitalAvgLat",
+        "source": {
+          "operatorID": "worldcities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "capitalAvgLat",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

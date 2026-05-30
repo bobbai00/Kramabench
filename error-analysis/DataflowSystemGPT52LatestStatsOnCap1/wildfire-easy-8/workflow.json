@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-187-5-1779102738952",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fireWeather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'\n    return pd.read_csv(path, low_memory=False)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Fire_Weather_Data_2002-2014_2016.csv via pd.read_csv(path, low_memory=False); keep all columns as provided with header inferred from first row (comma-delimited).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "causeOver100",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fireWeather) -> pd.DataFrame:\n    import pandas as pd\n\n    df = fireWeather.copy()\n\n    # Use the provided indicator if present; otherwise fall back to hec (>100 acres).\n    if 'gt_100' in df.columns:\n        mask = df['gt_100'] == 1\n    elif 'hec' in df.columns:\n        mask = pd.to_numeric(df['hec'], errors='coerce') > 100\n    else:\n        raise ValueError('No gt_100 or hec column found to determine >100 acres fires.')\n\n    sub = df.loc[mask, ['cause']].copy()\n    sub['cause'] = sub['cause'].astype(str).str.strip().str.upper()\n\n    # Map to two categories of interest\n    # Data uses codes: L=Lightning, H=Human, others: U (Unknown), N, O\n    sub = sub[sub['cause'].isin(['L', 'H'])]\n\n    counts = sub['cause'].value_counts(dropna=False).rename_axis('cause').reset_index(name='fire_count')\n    counts['label'] = counts['cause'].map({'L': 'Lightning', 'H': 'Human'})\n    return counts[['label', 'fire_count']].sort_values('fire_count', ascending=False).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to fires impacting >100 acres using gt_100==1 (fallback: hec>100 if gt_100 missing); keep causes coded as 'L' (Lightning) or 'H' (Human); compute fire_count by cause and output labels with counts sorted descending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fireWeather": {
+        "x": 100,
+        "y": 40
+      },
+      "causeOver100": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fireWeather-->causeOver100",
+        "source": {
+          "operatorID": "fireWeather",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "causeOver100",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

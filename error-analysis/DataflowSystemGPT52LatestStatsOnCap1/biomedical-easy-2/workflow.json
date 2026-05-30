@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-435-7-1779115990379",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1Preview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    # Preview first rows from first sheet to understand structure\n    return pd.read_excel(path, sheet_name=0, dtype=str, nrows=40, header=None)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx (sheet_name=0) as a 40-row, headerless preview (header=None, dtype=str) to inspect the raw layout and locate the patient age and tumor type/serous fields",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1Clinical",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    # Force all columns to string to avoid mixed-type schema issues in the runtime.\n    return pd.read_excel(path, sheet_name=0, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx sheet_name=0 (clinical/sample annotation table) via pd.read_excel with dtype=str to prevent mixed numeric/string column type conflicts (e.g., 'Num_full_term_pregnancies'); keeps header row from the sheet as column names (header=0 default).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "serousAgeAverage",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1Clinical) -> pd.DataFrame:\n    import pandas as pd\n\n    df = mmc1Clinical.copy()\n\n    # Focus on tumor samples and non-excluded cases (typical analysis cohort)\n    if 'Proteomics_Tumor_Normal' in df.columns:\n        df = df[df['Proteomics_Tumor_Normal'].astype(str).str.strip().str.lower().eq('tumor')]\n    if 'Case_excluded' in df.columns:\n        df = df[df['Case_excluded'].astype(str).str.strip().str.lower().eq('no')]\n\n    # Identify serous histologic type\n    ht_col = 'Histologic_type'\n    serous_mask = df[ht_col].astype(str).str.strip().str.lower().str.contains('serous', na=False)\n    serous = df[serous_mask].copy()\n\n    # Parse age to numeric\n    serous['Age_num'] = pd.to_numeric(serous['Age'], errors='coerce')\n    mean_age = serous['Age_num'].mean()\n\n    return pd.DataFrame([\n        {\n            'n_serous_rows': int(serous.shape[0]),\n            'n_serous_age_nonnull': int(serous['Age_num'].notna().sum()),\n            'avg_age': float(mean_age) if pd.notna(mean_age) else None,\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute mean patient age for serous tumor samples from mmc1Clinical: filter to Proteomics_Tumor_Normal == 'Tumor' (if present) and Case_excluded == 'No' (if present); select rows where Histologic_type contains 'serous' (case-insensitive); convert Age to numeric (errors='coerce'); return avg_age plus counts of serous rows and non-null ages for QC.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1Preview": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc1Clinical": {
+        "x": 100,
+        "y": 220
+      },
+      "serousAgeAverage": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1Clinical-->serousAgeAverage",
+        "source": {
+          "operatorID": "mmc1Clinical",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "serousAgeAverage",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

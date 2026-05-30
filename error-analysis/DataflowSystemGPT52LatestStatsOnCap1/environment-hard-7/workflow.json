@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-120-5-1779101480454",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "ejPopulations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/environmental-justice-populations.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load environmental-justice-populations.csv via pd.read_csv (comma-delimited, header inferred from first row, UTF-8 default)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterTesting2023",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2023.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2023.csv via pd.read_csv (comma-delimited, header inferred from first row, UTF-8 default)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "ejMarineExceedanceRates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(ejPopulations, waterTesting2023) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    ej = ejPopulations.copy()\n    wt = waterTesting2023.copy()\n\n    ej.columns = [c.strip() for c in ej.columns]\n    wt.columns = [c.strip() for c in wt.columns]\n\n    # --- EJ percent of population ---\n    ej_id_col = 'Municipality' if 'Municipality' in ej.columns else ej.columns[0]\n    ej_pct_col = 'Percent of population in EJ BGs'\n    if ej_pct_col not in ej.columns:\n        # fallback: any column containing 'Percent of population' and 'EJ'\n        cands = [c for c in ej.columns if 'percent' in c.lower() and 'population' in c.lower() and 'ej' in c.lower()]\n        if not cands:\n            raise ValueError('Could not find EJ population percentage column in EJ table')\n        ej_pct_col = cands[0]\n\n    ej = ej[[ej_id_col, ej_pct_col]].rename(columns={ej_id_col: 'community', ej_pct_col: 'ejPct'})\n    ej['community'] = ej['community'].astype(str).str.strip().str.lower()\n    ej['ejPct'] = pd.to_numeric(ej['ejPct'], errors='coerce')\n    ej = ej.dropna(subset=['ejPct'])\n\n    # --- Water testing: filter marine beaches and compute exceedance from Violation ---\n    # Use Community (municipality) as join key.\n    if 'Community' not in wt.columns:\n        raise ValueError('Expected Community column in water testing table')\n\n    wt['community'] = wt['Community'].astype(str).str.strip().str.lower()\n\n    # Filter to marine beach samples (Beach Type Description == 'Marine')\n    if 'Beach Type Description' not in wt.columns:\n        raise ValueError('Expected Beach Type Description column in water testing table')\n    wt = wt[wt['Beach Type Description'].astype(str).str.strip().str.lower().eq('marine')].copy()\n\n    # Ensure 2023 (though file already is 2023)\n    if 'Year' in wt.columns:\n        wt = wt[pd.to_numeric(wt['Year'], errors='coerce') == 2023].copy()\n\n    # Exceedance indicator: Violation == 'Yes'\n    if 'Violation' not in wt.columns:\n        raise ValueError('Expected Violation column in water testing table')\n    v = wt['Violation'].astype(str).str.strip().str.lower()\n    wt['exceed'] = np.where(v.eq('yes'), 1, np.where(v.eq('no'), 0, np.nan))\n    wt = wt.dropna(subset=['exceed'])\n\n    merged = wt.merge(ej, on='community', how='inner')\n\n    high = merged[merged['ejPct'] > 50]\n    low = merged[merged['ejPct'] < 25]\n\n    def rate(df: pd.DataFrame) -> float:\n        return float(df['exceed'].mean() * 100.0) if len(df) else np.nan\n\n    high_rate = rate(high)\n    low_rate = rate(low)\n\n    diff = high_rate - low_rate\n\n    return pd.DataFrame([{\n        'highEJ_exceedance_rate_pct': high_rate,\n        'lowEJ_exceedance_rate_pct': low_rate,\n        'difference_pct_points': diff,\n        'nHighSamples': int(len(high)),\n        'nLowSamples': int(len(low))\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute marine-beach bacterial exceedance-rate difference by EJ population share: (1) From environmental-justice-populations.csv select Municipality as community join key and 'Percent of population in EJ BGs' as ejPct; standardize community to lowercase and coerce ejPct numeric. (2) From water-body-testing-2023.csv use Community as join key, filter Beach Type Description == 'Marine' and Year==2023, derive exceedance indicator exceed=1 if Violation=='Yes' else 0. (3) Inner join on community; compute exceedance rates (% of samples with exceed==1) for communities with ejPct>50 and ejPct<25, and output both rates and their percentage-point difference plus sample counts.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "ejPopulations": {
+        "x": 100,
+        "y": 40
+      },
+      "waterTesting2023": {
+        "x": 100,
+        "y": 220
+      },
+      "ejMarineExceedanceRates": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "ejPopulations-->ejMarineExceedanceRates",
+        "source": {
+          "operatorID": "ejPopulations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ejMarineExceedanceRates",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterTesting2023-->ejMarineExceedanceRates",
+        "source": {
+          "operatorID": "waterTesting2023",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ejMarineExceedanceRates",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

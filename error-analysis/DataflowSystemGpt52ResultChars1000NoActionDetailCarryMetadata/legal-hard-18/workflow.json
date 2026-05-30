@@ -1,0 +1,308 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_age_2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample 2024_CSN_Identity_Theft_Reports_by_Age.csv to inspect schema and year/age fields",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "age_2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv'\n    df = pd.read_csv(path, header=None)\n    df = df.dropna(how='all')\n    # Find header row containing 'Age Range'\n    header_idx = df.index[df[0].astype(str).str.contains('Age Range', na=False)].tolist()[0]\n    data = df.loc[header_idx+1:].copy()\n    data.columns = ['age_range','reports_raw']\n    # keep rows that look like age ranges and have counts\n    data = data.dropna(subset=['age_range','reports_raw'])\n    # remove footer/source lines\n    data = data[~data['age_range'].astype(str).str.contains('Of the|Source:', na=False)]\n    # parse counts\n    data['reports'] = (data['reports_raw'].astype(str)\n                       .str.replace(',','', regex=False)\n                       .str.extract(r'(\\d+)', expand=False)\n                       .astype(float))\n    data = data[['age_range','reports']]\n    return data"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Identity_Theft_Reports_by_Age.csv (no header), locate 'Age Range' header row, extract age_range and numeric report counts for 2024.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_count",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path='data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv'\n    df=pd.read_csv(path, header=None)\n    return pd.concat([df.head(6), df.tail(6)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample 2024_CSN_Report_Count.csv to inspect how 2007 report counts are stored (likely all report types) and find year/identity theft totals.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "count_reports",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    df_raw = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv', header=None, dtype=str)\n    # find header row containing 'Year'\n    header_idx = None\n    for i in range(len(df_raw)):\n        if (str(df_raw.iloc[i,0]).strip().lower() == 'year') and (str(df_raw.iloc[i,1]).strip().lower().startswith('#')):\n            header_idx = i\n            break\n    if header_idx is None:\n        # fallback: search anywhere in row\n        for i in range(len(df_raw)):\n            row = ' '.join([str(x) for x in df_raw.iloc[i].tolist()]).lower()\n            if 'year' in row and '# of reports' in row:\n                header_idx = i\n                break\n    data = df_raw.iloc[header_idx+1:, :2].copy()\n    data.columns = ['year','reports_total']\n    data = data.dropna(subset=['year'])\n    data = data[data['year'].str.match(r'^\\d{4}$', na=False)]\n    data['year'] = data['year'].astype(int)\n    data['reports_total'] = (data['reports_total'].str.replace(',','', regex=False)\n                             .str.extract(r'(\\d+)', expand=False).astype(float).astype('Int64'))\n    data = data.dropna(subset=['reports_total']).astype({'reports_total':'int'})\n    return data.sort_values('year').reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Report_Count.csv (no header), parse Year and # of Reports into tidy table (year, reports_total) for all years including 2007.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "share_age_40plus_2024",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(age_2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = age_2024.copy()\n    # define 40+ as ranges starting with 40, 50, 60, 70, and 80+\n    mask_40plus = df['age_range'].str.contains(r'^(40|50|60|70|80)', regex=True)\n    total = df['reports'].sum()\n    total_40plus = df.loc[mask_40plus, 'reports'].sum()\n    share = total_40plus / total if total else None\n\n    return pd.DataFrame([{\n        'reports_total_2024_with_age': int(total),\n        'reports_40plus_2024_with_age': int(total_40plus),\n        'share_40plus_among_age_known_2024': share\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute 2024 share of identity theft reports for ages 40+ among age-known reports (sum 40-49,50-59,60-69,70-79,80+ divided by total across all age ranges).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sample_categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # Try common encodings due to smart quotes\n    for enc in ['utf-8', 'cp1252', 'latin1']:\n        try:\n            df = pd.read_csv(path, header=None, encoding=enc)\n            df['__encoding__'] = enc\n            return pd.concat([df.head(8), df.tail(8)], ignore_index=True)\n        except UnicodeDecodeError:\n            continue\n    # fallback\n    df = pd.read_csv(path, header=None, encoding='latin1')\n    df['__encoding__'] = 'latin1'\n    return pd.concat([df.head(8), df.tail(8)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample 2024_CSN_Report_Categories.csv with fallback encodings (utf-8/cp1252/latin1) to inspect whether it includes identity theft category totals by year.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "identity_total_2024",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sample_categories):\n    import pandas as pd\n    # sample_categories is just to keep linkage; reload full file for robust parse\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # read raw with no header\n    df_raw = pd.read_csv(path, header=None, dtype=str, encoding='cp1252')\n\n    # find row where Category column equals 'Identity Theft'\n    # locate header row containing 'Category'\n    header_idx = None\n    for i in range(len(df_raw)):\n        row = df_raw.iloc[i].astype(str).str.strip().tolist()\n        if any(x.lower() == 'category' for x in row):\n            header_idx = i\n            break\n    if header_idx is None:\n        raise ValueError('Could not find header row with Category')\n\n    df = df_raw.iloc[header_idx+1:].copy()\n    df.columns = ['rank','category','reports','percentage'] + [f'extra_{k}' for k in range(df.shape[1]-4)]\n    df = df[['rank','category','reports','percentage']]\n    df['category'] = df['category'].astype(str).str.strip()\n    # drop footer/blank\n    df = df[df['category'].notna() & (df['category']!='')]\n\n    it = df[df['category'].str.lower()=='identity theft']\n    if it.empty:\n        raise ValueError('Identity Theft row not found')\n\n    reports = it['reports'].iloc[0]\n    reports_num = int(str(reports).replace(',','').strip())\n    return pd.DataFrame([{'identity_theft_reports_2024_total': reports_num}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse 2024_CSN_Report_Categories.csv to extract the total number of Identity Theft reports in 2024 (all ages, not just age-known).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "estimate_2007_age40plus_identity",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(count_reports, share_age_40plus_2024, identity_total_2024) -> pd.DataFrame:\n    import pandas as pd\n    # total reports in 2007 (all categories)\n    total_2007 = float(count_reports.loc[count_reports['year'] == 2007, 'reports_total'].iloc[0])\n\n    # 2024 identity theft total (all ages)\n    id_2024 = float(identity_total_2024['identity_theft_reports_2024_total'].iloc[0])\n\n    # 2024 total reports (all categories)\n    total_2024 = float(count_reports.loc[count_reports['year'] == 2024, 'reports_total'].iloc[0])\n\n    # If 2007 distributed like 2024 by category, estimate 2007 identity theft total by applying 2024 identity share\n    identity_share_2024 = id_2024 / total_2024\n    id_2007_est = total_2007 * identity_share_2024\n\n    # Apply 2024 40+ share among identity theft (using age-known distribution as proxy for all identity theft)\n    share_40plus = float(share_age_40plus_2024['share_40plus_among_age_known_2024'].iloc[0])\n    id_2007_40plus_est = id_2007_est * share_40plus\n\n    return pd.DataFrame([{\n        'reports_total_2007_all': total_2007,\n        'identity_share_2024_of_all_reports': identity_share_2024,\n        'identity_theft_reports_2007_est_total': id_2007_est,\n        'share_40plus_2024_among_identity_theft_age_known': share_40plus,\n        'identity_theft_reports_2007_est_40plus': id_2007_40plus_est\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        },
+        {
+          "portID": "input-2",
+          "displayName": "Input 2",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Estimate 2007 identity theft reports ages 40+ by (1) applying 2024 identity theft share of all reports to 2007 total reports, then (2) applying 2024 age 40+ share among identity-theft reports (from age-known distribution) and output intermediate values.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_age_2024": {
+      "x": 100,
+      "y": 40
+    },
+    "age_2024": {
+      "x": 100,
+      "y": 220
+    },
+    "sample_count": {
+      "x": 100,
+      "y": 400
+    },
+    "count_reports": {
+      "x": 430,
+      "y": 40
+    },
+    "share_age_40plus_2024": {
+      "x": 430,
+      "y": 220
+    },
+    "sample_categories": {
+      "x": 100,
+      "y": 580
+    },
+    "identity_total_2024": {
+      "x": 430,
+      "y": 580
+    },
+    "estimate_2007_age40plus_identity": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "age_2024-->share_age_40plus_2024",
+      "source": {
+        "operatorID": "age_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "share_age_40plus_2024",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sample_categories-->identity_total_2024",
+      "source": {
+        "operatorID": "sample_categories",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "identity_total_2024",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "count_reports-->estimate_2007_age40plus_identity",
+      "source": {
+        "operatorID": "count_reports",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "estimate_2007_age40plus_identity",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "share_age_40plus_2024-->estimate_2007_age40plus_identity",
+      "source": {
+        "operatorID": "share_age_40plus_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "estimate_2007_age40plus_identity",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "identity_total_2024-->estimate_2007_age40plus_identity",
+      "source": {
+        "operatorID": "identity_total_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "estimate_2007_age40plus_identity",
+        "portID": "input-2"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

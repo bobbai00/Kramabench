@@ -1,0 +1,175 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_2014",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu016-20140314_to_20140317.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of 2014 Swarm A mass density CSV to inspect columns and formatting.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_2018",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu545-20180718_to_20180721.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of 2018 Swarm A mass density CSV to inspect columns and formatting.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarmA_2014",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu016-20140314_to_20140317.csv'\n    df = pd.read_csv(path)\n    # standardize columns\n    df = df.rename(columns=lambda c: c.strip())\n    # parse timestamp\n    if 'Timestamp' in df.columns:\n        df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')\n    # coerce density column\n    dens_col = 'Orbit Mean Density (kg/m^3)'\n    if dens_col in df.columns:\n        df[dens_col] = pd.to_numeric(df[dens_col], errors='coerce')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full Swarm A density data for 2014-03-14 to 2014-03-17 from swarma-wu016-20140314_to_20140317.csv; parse Timestamp and coerce Orbit Mean Density (kg/m^3) to numeric.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarmA_2018",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu545-20180718_to_20180721.csv'\n    df = pd.read_csv(path)\n    # Standardize types\n    df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce', utc=True)\n    col = 'Orbit Mean Density (kg/m^3)'\n    df[col] = pd.to_numeric(df[col], errors='coerce')\n    df = df.dropna(subset=['Timestamp', col]).sort_values('Timestamp').reset_index(drop=True)\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full Swarm A density data for 2018-07-18 to 2018-07-21 from swarma-wu545-20180718_to_20180721.csv; parse Timestamp (UTC) and coerce Orbit Mean Density (kg/m^3) to numeric.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "peak_ratio",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarmA_2014, swarmA_2018) -> pd.DataFrame:\n    import pandas as pd\n    col = 'Orbit Mean Density (kg/m^3)'\n    peak_2014 = pd.to_numeric(swarmA_2014[col], errors='coerce').max()\n    peak_2018 = pd.to_numeric(swarmA_2018[col], errors='coerce').max()\n    ratio = peak_2014 / peak_2018 if peak_2018 and pd.notna(peak_2018) else float('nan')\n    return pd.DataFrame([\n        {'period': '2014-03-14_to_2014-03-17', 'peak_density_kg_m3': peak_2014},\n        {'period': '2018-07-18_to_2018-07-21', 'peak_density_kg_m3': peak_2018},\n        {'period': 'ratio_2014_over_2018', 'peak_density_kg_m3': ratio},\n    ])"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute peak Orbit Mean Density (kg/m^3) in each period and the ratio (2014 peak / 2018 peak).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_2014": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_2018": {
+      "x": 100,
+      "y": 220
+    },
+    "swarmA_2014": {
+      "x": 100,
+      "y": 400
+    },
+    "swarmA_2018": {
+      "x": 100,
+      "y": 580
+    },
+    "peak_ratio": {
+      "x": 430,
+      "y": 490
+    }
+  },
+  "links": [
+    {
+      "linkID": "swarmA_2014-->peak_ratio",
+      "source": {
+        "operatorID": "swarmA_2014",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "peak_ratio",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarmA_2018-->peak_ratio",
+      "source": {
+        "operatorID": "swarmA_2018",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "peak_ratio",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

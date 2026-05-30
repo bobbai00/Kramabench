@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows of data/archeology/input/worldcities.csv to inspect schema, coordinate columns, and population field",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load complete data/archeology/input/worldcities.csv with city names, coordinates (lat,lng), and population",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "southern_western",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(worldcities):\n    import pandas as pd\n    df = worldcities.copy()\n    # Ensure numeric lat/lng/population\n    for c in ['lat','lng','population']:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n    # Southern hemisphere: lat < 0; Western hemisphere: lng < 0\n    df = df[(df['lat'] < 0) & (df['lng'] < 0)]\n    # Drop rows without population\n    df = df.dropna(subset=['population'])\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter worldcities to cities in both Southern (lat<0) and Western (lng<0) hemispheres; coerce lat/lng/population to numeric and drop missing population",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "top_southern_western",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(southern_western):\n    import pandas as pd\n    df = southern_western.copy()\n    # Ensure numeric\n    df['population'] = pd.to_numeric(df['population'], errors='coerce')\n    df = df.dropna(subset=['population'])\n    df = df.sort_values(['population','city','country'], ascending=[False, True, True])\n    return df.head(1)[['city','country','population','lat','lng']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "From southern_western cities, sort by population descending and return the single highest-population city (with country, population, lat, lng)",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_worldcities": {
+      "x": 100,
+      "y": 40
+    },
+    "worldcities": {
+      "x": 100,
+      "y": 220
+    },
+    "southern_western": {
+      "x": 430,
+      "y": 220
+    },
+    "top_southern_western": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "worldcities-->southern_western",
+      "source": {
+        "operatorID": "worldcities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "southern_western",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "southern_western-->top_southern_western",
+      "source": {
+        "operatorID": "southern_western",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "top_southern_western",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

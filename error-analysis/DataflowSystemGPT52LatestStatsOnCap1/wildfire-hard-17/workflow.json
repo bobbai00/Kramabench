@@ -1,0 +1,303 @@
+{
+  "headId": "step-agent-637-9-1779125587275",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "noaaWildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8) from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "rawsStations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/PublicView_RAWS_-3515561676727363726.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load PublicView_RAWS_-3515561676727363726.csv (RAWS weather station public view export) via pd.read_csv with default parameters from data/wildfire/input/PublicView_RAWS_-3515561676727363726.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # File contains curly quotes / Windows-1252 characters\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv (NOAA wildfires variable descriptions) via pd.read_csv with encoding='cp1252' to handle non-UTF8 bytes",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stationElevationAvg",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires, rawsStations) -> pd.DataFrame:\n    import pandas as pd\n\n    # Unique station identifiers used for fire site monitoring in NOAA dataset\n    noaa_ids = (\n        noaaWildfires[['station_verified_in_psa']]\n        .dropna()\n        .drop_duplicates()\n        .rename(columns={'station_verified_in_psa': 'noaa_station_id'})\n    )\n    noaa_ids['noaa_station_id'] = pd.to_numeric(noaa_ids['noaa_station_id'], errors='coerce')\n    noaa_ids = noaa_ids.dropna().astype({'noaa_station_id': 'int64'})\n\n    # In RAWS export, the only ID column whose numeric range matches NOAA ids (20k-480k)\n    # is 'NWS ID' (NOT Station ID/WX ID which are ~16-19M).\n    raws = rawsStations[['NWS ID', 'Elevation']].copy()\n    raws['NWS ID'] = pd.to_numeric(raws['NWS ID'], errors='coerce')\n    raws['Elevation'] = pd.to_numeric(raws['Elevation'], errors='coerce')\n    raws = raws.dropna(subset=['NWS ID']).drop_duplicates(subset=['NWS ID'])\n\n    matched = noaa_ids.merge(raws, left_on='noaa_station_id', right_on='NWS ID', how='inner')\n\n    avg_elev = matched['Elevation'].mean(skipna=True)\n\n    return pd.DataFrame([{\n        'stationsInNoaa': int(noaa_ids.shape[0]),\n        'stationsMatchedRaws': int(matched.shape[0]),\n        'avgElevationFeet': float(avg_elev) if pd.notna(avg_elev) else None\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average station elevation (feet) for weather stations used in NOAA wildfire monitoring: extract unique noaa_wildfires.station_verified_in_psa as integer noaa_station_id; coerce RAWS 'NWS ID' and 'Elevation' to numeric and deduplicate on NWS ID; inner-join NOAA station ids to RAWS NWS ID; compute mean(Elevation) excluding nulls; output stationsInNoaa, stationsMatchedRaws, avgElevationFeet",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "stationIdMappingProbe",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires, rawsStations) -> pd.DataFrame:\n    import pandas as pd\n\n    # Collect unique station ids from NOAA table\n    noaa_ids = (\n        noaaWildfires[['station_verified_in_psa']]\n        .dropna()\n        .astype({'station_verified_in_psa': 'int64'})\n        .rename(columns={'station_verified_in_psa': 'noaa_station_id'})\n        .drop_duplicates()\n    )\n\n    raws_ids = (\n        rawsStations[['Station ID', 'WX ID', 'MesoWest Station ID', 'NWS ID', 'Station Name', 'Elevation']]\n        .copy()\n    )\n\n    # Ensure numeric for id cols where possible\n    for c in ['Station ID', 'WX ID']:\n        if c in raws_ids.columns:\n            raws_ids[c] = pd.to_numeric(raws_ids[c], errors='coerce')\n\n    # Try matching NOAA ids against possible numeric id fields in RAWS\n    def match(col):\n        m = noaa_ids.merge(\n            raws_ids[[col, 'Elevation']].dropna(subset=[col]).drop_duplicates(subset=[col]),\n            left_on='noaa_station_id',\n            right_on=col,\n            how='inner'\n        )\n        return m['noaa_station_id'].nunique(), m.shape[0]\n\n    out = []\n    for col in ['Station ID', 'WX ID']:\n        uniq, rows = match(col)\n        out.append({'raws_id_col': col, 'matched_unique_noaa_ids': uniq, 'matched_rows': rows})\n\n    # Also show example NOAA ids and RAWS numeric id ranges\n    out.append({\n        'raws_id_col': 'noaa_id_examples',\n        'matched_unique_noaa_ids': int(noaa_ids['noaa_station_id'].head(5).tolist()[0]) if len(noaa_ids) else None,\n        'matched_rows': None\n    })\n\n    df = pd.DataFrame(out)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Probe mapping between NOAA station_verified_in_psa and RAWS identifiers: extract unique NOAA station ids (int) from noaa_wildfires.station_verified_in_psa; coerce RAWS Station ID and WX ID to numeric; inner-join NOAA ids to each candidate RAWS id column to count matches; output match counts per candidate column plus an example NOAA id",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectNoaaStationField",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires) -> pd.DataFrame:\n    import pandas as pd\n\n    s = noaaWildfires['station_verified_in_psa']\n    out = {\n        'count': [int(s.shape[0])],\n        'nunique': [int(s.nunique(dropna=True))],\n        'min': [float(s.min())],\n        'max': [float(s.max())],\n        'quantile_01': [float(s.quantile(0.01))],\n        'quantile_05': [float(s.quantile(0.05))],\n        'quantile_50': [float(s.quantile(0.50))],\n        'quantile_95': [float(s.quantile(0.95))],\n        'quantile_99': [float(s.quantile(0.99))],\n        'example_values': [', '.join(map(str, s.dropna().astype(int).unique()[:20]))],\n    }\n    return pd.DataFrame(out)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect distribution of noaa_wildfires.station_verified_in_psa: compute count, nunique, min/max, selected quantiles, and list first 20 unique integer example values to understand identifier format/range",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectRawsIds",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(rawsStations) -> pd.DataFrame:\n    import pandas as pd\n\n    # Coerce candidate ID columns to numeric (some may contain NaN)\n    df = rawsStations.copy()\n    for col in ['Station ID', 'WX ID', 'NESS ID', 'NWS ID', 'MesoWest Station ID']:\n        if col in df.columns:\n            if col in ['NESS ID', 'NWS ID', 'MesoWest Station ID']:\n                df[col + ' (str)'] = df[col].astype('string')\n            df[col + ' (num)'] = pd.to_numeric(df[col], errors='coerce')\n\n    out = []\n    for col in ['Station ID (num)', 'WX ID (num)', 'NESS ID (num)', 'NWS ID (num)', 'MesoWest Station ID (num)']:\n        if col in df.columns:\n            s = df[col]\n            out.append({\n                'col': col,\n                'count': int(s.shape[0]),\n                'nonNull': int(s.notna().sum()),\n                'nunique': int(s.nunique(dropna=True)),\n                'min': float(s.min()) if s.notna().any() else None,\n                'max': float(s.max()) if s.notna().any() else None,\n                'example_vals': ', '.join(map(lambda x: str(int(x)) if pd.notna(x) else 'NA', s.dropna().unique()[:10]))\n            })\n\n    return pd.DataFrame(out)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect RAWS station identifier columns to understand value ranges/formats: coerce Station ID, WX ID, NESS ID, NWS ID, and MesoWest Station ID to numeric; report non-null counts, nunique, min/max, and first 10 example values for each candidate id column",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "noaaWildfires": {
+        "x": 100,
+        "y": 340
+      },
+      "rawsStations": {
+        "x": 100,
+        "y": 520
+      },
+      "variableDescrip": {
+        "x": 100,
+        "y": 700
+      },
+      "stationElevationAvg": {
+        "x": 400,
+        "y": 40
+      },
+      "stationIdMappingProbe": {
+        "x": 400,
+        "y": 355
+      },
+      "inspectNoaaStationField": {
+        "x": 400,
+        "y": 670
+      },
+      "inspectRawsIds": {
+        "x": 400,
+        "y": 850
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaaWildfires-->stationIdMappingProbe",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stationIdMappingProbe",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "rawsStations-->stationIdMappingProbe",
+        "source": {
+          "operatorID": "rawsStations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stationIdMappingProbe",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "noaaWildfires-->inspectNoaaStationField",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectNoaaStationField",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "rawsStations-->inspectRawsIds",
+        "source": {
+          "operatorID": "rawsStations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectRawsIds",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaaWildfires-->stationElevationAvg",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stationElevationAvg",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "rawsStations-->stationElevationAvg",
+        "source": {
+          "operatorID": "rawsStations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stationElevationAvg",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

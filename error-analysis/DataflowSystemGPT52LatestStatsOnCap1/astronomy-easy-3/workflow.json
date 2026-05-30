@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-473-6-1779120499079",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "initialStates",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/STORM-AI/warmup/v2/wu001_to_wu715-initial_states.csv'\n    df = pd.read_csv(path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wu001_to_wu715-initial_states.csv via pd.read_csv (defaults: comma delimiter, header in first row, UTF-8) to obtain warmup initial state timestamps/conditions used to select 00:00 daily data points",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmDensity2015",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n\n    pattern = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-*2015*.csv'\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f'No files matched pattern: {pattern}')\n\n    dfs = []\n    for p in paths:\n        d = pd.read_csv(p)\n        d['sourceFile'] = p.split('/')[-1]\n        dfs.append(d)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all Swarm Alpha atmospheric density CSVs matching swarma-*2015*.csv (glob) from Sat_Density; read each via pd.read_csv, add sourceFile=basename, and concatenate into one table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "dailyMidnight2015",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(initialStates) -> pd.DataFrame:\n    import pandas as pd\n\n    df = initialStates.copy()\n    df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce', utc=False)\n    # Keep only year 2015 (all are at 00:00:00 already per file, but enforce)\n    df = df[df['Timestamp'].dt.year == 2015].copy()\n    df = df[df['Timestamp'].dt.strftime('%H:%M:%S') == '00:00:00'].copy()\n\n    # Altitude filter per question: between 450 and 500 km inclusive\n    df = df[(df['Altitude (km)'] >= 450) & (df['Altitude (km)'] <= 500)].copy()\n\n    # Use date as join key\n    df['date'] = df['Timestamp'].dt.floor('D')\n    return df[['File ID', 'Timestamp', 'date', 'Altitude (km)']].dropna(subset=['date'])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From initialStates: parse Timestamp to datetime; filter to year==2015 and time==00:00:00; keep rows with Altitude (km) between 450 and 500 inclusive; create join key date=Timestamp floored to day; output [File ID, Timestamp, date, Altitude (km)]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "midnightDensityJoinClean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(dailyMidnight2015, swarmDensity2015) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    d = dailyMidnight2015.copy()\n    s = swarmDensity2015.copy()\n\n    # Parse timestamps\n    d['date'] = pd.to_datetime(d['date'], errors='coerce').dt.floor('D')\n    s['Timestamp'] = pd.to_datetime(s['Timestamp'], errors='coerce')\n\n    # Keep 2015 midnight points only\n    s = s[(s['Timestamp'].dt.year == 2015) & (s['Timestamp'].dt.strftime('%H:%M:%S') == '00:00:00')].copy()\n    s['date'] = s['Timestamp'].dt.floor('D')\n\n    # Clean density: coerce to numeric, drop n/a, and sentinel 9.99E32 (and close variants)\n    dens_col = 'Orbit Mean Density (kg/m^3)'\n    s[dens_col] = pd.to_numeric(s[dens_col], errors='coerce')\n    sentinel = 9.99e32\n    s = s.dropna(subset=[dens_col, 'date'])\n    s = s[(s[dens_col] < sentinel * 0.5) & np.isfinite(s[dens_col])].copy()\n\n    # Join on day to get densities for the requested initial-state days\n    j = d.merge(s[['date', dens_col]], on='date', how='inner')\n\n    # Average over all available joined points\n    out = pd.DataFrame({\n        'nDays': [d['date'].nunique()],\n        'nDensityPoints': [len(j)],\n        'meanDensity': [j[dens_col].mean()]  # kg/m^3\n    })\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse dates from dailyMidnight2015 and swarmDensity2015; filter Swarm density to year 2015 and time 00:00:00; clean 'Orbit Mean Density (kg/m^3)' by numeric coercion, dropping NaNs/'n/a', and removing sentinel extreme values near 9.99E32 (keep only finite values < 0.5*9.99E32); inner join on floored daily 'date' to keep only days present in initial state (altitude 450\u2013500 km); output counts (nDays, nDensityPoints) and meanDensity",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "initialStates": {
+        "x": 100,
+        "y": 40
+      },
+      "swarmDensity2015": {
+        "x": 400,
+        "y": 220
+      },
+      "dailyMidnight2015": {
+        "x": 400,
+        "y": 40
+      },
+      "midnightDensityJoinClean": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "initialStates-->dailyMidnight2015",
+        "source": {
+          "operatorID": "initialStates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "dailyMidnight2015",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "dailyMidnight2015-->midnightDensityJoinClean",
+        "source": {
+          "operatorID": "dailyMidnight2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "midnightDensityJoinClean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "swarmDensity2015-->midnightDensityJoinClean",
+        "source": {
+          "operatorID": "swarmDensity2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "midnightDensityJoinClean",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-592-6-1779125019534",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadIdentityTheftCsvs",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*'\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f'No files matched glob: {pattern}')\n\n    dfs = []\n    for p in paths:\n        if p.lower().endswith(('.csv', '.tsv', '.txt')):\n            try:\n                df = pd.read_csv(p, dtype=str)\n            except Exception:\n                # fallback common delimiter\n                df = pd.read_csv(p, dtype=str, sep='\\t')\n        elif p.lower().endswith(('.xlsx', '.xls')):\n            df = pd.read_excel(p, dtype=str)\n        else:\n            # try csv as default\n            df = pd.read_csv(p, dtype=str)\n\n        df['__source_file'] = p.split('/')[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    # Normalize column names a bit\n    out.columns = [str(c).strip() for c in out.columns]\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all files matching glob pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*' (CSV/TSV/Excel supported), read all columns as strings, add provenance column '__source_file' (basename), concatenate into one table and strip column-name whitespace",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadMetroHtml",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/legal/input/metropolitan_statistics.html'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        html = f.read()\n\n    # Wrap raw HTML so downstream ops can parse as needed\n    return pd.DataFrame([{'path': path, 'html': html}])"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load metropolitan_statistics.html as raw text (UTF-8 with replacement on decode errors) into a single-row DataFrame with columns ['path','html'] for downstream parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanIdentityTheft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadIdentityTheftCsvs) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import re\n\n    df = loadIdentityTheftCsvs.copy()\n\n    # Identify columns (robust to minor naming differences)\n    area_candidates = [c for c in df.columns if 'metropolitan' in str(c).lower()]\n    colArea = area_candidates[0] if area_candidates else df.columns[0]\n\n    # reports column often 'Unnamed: 1' or '# of Reports'\n    colReports = None\n    for c in df.columns:\n        cl = str(c).lower().strip()\n        if cl in {'unnamed: 1', '# of reports', 'reports', 'number of reports'}:\n            colReports = c\n            break\n    if colReports is None:\n        # fallback: second column\n        colReports = df.columns[1] if len(df.columns) > 1 else df.columns[0]\n\n    out = df[[colArea, colReports, '__source_file']].rename(columns={colArea: 'metro_raw', colReports: 'reports_raw'})\n\n    out['metro_raw'] = out['metro_raw'].astype('string')\n    out['reports_raw'] = out['reports_raw'].astype('string')\n\n    # Drop blanks\n    out = out[out['metro_raw'].notna() & out['reports_raw'].notna()]\n    out = out[out['metro_raw'].str.strip().ne('')]\n\n    # Drop rows that are clearly headers/footers\n    header_footer_pat = re.compile(r'^(metropolitan area|\\# of reports|source:|consumer sentinel|total)$', re.I)\n    out = out[~out['metro_raw'].str.strip().map(lambda x: bool(header_footer_pat.match(str(x))))]\n\n    # Parse reports as numeric\n    def parse_reports(x):\n        if x is None or pd.isna(x):\n            return np.nan\n        s = str(x)\n        s = re.sub(r'\\[[^\\]]*\\]', '', s)\n        s = re.sub(r'[^0-9\\.-]', '', s)\n        return pd.to_numeric(s, errors='coerce')\n\n    out['reports'] = out['reports_raw'].map(parse_reports)\n    out = out[pd.notna(out['reports'])]\n\n    # Normalize: keep only city+state portion; remove trailing descriptors; normalize punctuation\n    def norm_metro(s: str) -> str:\n        s = str(s)\n        # keep left part before common suffixes\n        s = re.sub(r'\\s*(Metropolitan Statistical Area|Metropolitan Area|MSA)\\s*$', '', s, flags=re.I)\n        s = s.strip()\n        s = s.replace('\\u2013', '-').replace('\\u2014', '-')\n        s = re.sub(r'[\\.,]', '', s)\n        s = re.sub(r'\\s+', ' ', s).strip()\n        return s.lower()\n\n    out['metro_norm'] = out['metro_raw'].map(norm_metro)\n\n    # Extract state abbreviation OR state combo (NY-NJ, etc.) after last comma\n    def get_statepart(s: str):\n        parts = str(s).rsplit(',', 1)\n        if len(parts) == 2:\n            return parts[1].strip()\n        return None\n\n    out['state'] = out['metro_raw'].map(get_statepart)\n\n    # Keep only those with a comma+state part (more matchable)\n    out = out[out['state'].notna()]\n\n    return out[['metro_raw', 'metro_norm', 'state', 'reports', '__source_file']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft MSA CSVs (fix over-filtering): detect metro name column (contains 'metropolitan') and reports column (e.g., 'Unnamed: 1'/'# of Reports'); drop blank rows and header/footer rows matching {'Metropolitan Area','# of Reports','Source:','Consumer Sentinel','Total'}; parse reports to numeric; create normalized metro key by stripping suffixes (Metropolitan Statistical Area/Area/MSA), normalizing dashes/punctuation/whitespace and lowercasing; extract trailing state-part after last comma; output [metro_raw, metro_norm, state, reports, __source_file].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "parseMetroPopulations",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadMetroHtml) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import re\n\n    html = loadMetroHtml.loc[0, 'html']\n\n    # Read all tables from the Wikipedia HTML snapshot\n    tables = pd.read_html(html)\n\n    # Find the table that contains MSA names and at least one year column.\n    best = None\n    bestScore = -1\n    for t in tables:\n        cols = [str(c) for c in t.columns]\n        colstr = ' | '.join([c.lower() for c in cols])\n        score = 0\n        if any('metropolitan' in c.lower() and 'statistical' in c.lower() for c in cols):\n            score += 3\n        if any(re.search(r'\\b20\\d{2}\\b', c) for c in cols):\n            score += 2\n        if any('population' in c.lower() for c in cols):\n            score += 1\n        if score > bestScore and len(t) > 50:\n            best = t\n            bestScore = score\n\n    if best is None:\n        raise ValueError('Could not locate a suitable MSA population table in HTML')\n\n    df = best.copy()\n    # Flatten multiindex columns if any\n    if isinstance(df.columns, pd.MultiIndex):\n        df.columns = [' '.join([str(x) for x in tup if str(x) != 'nan']).strip() for tup in df.columns]\n\n    df.columns = [str(c).strip() for c in df.columns]\n\n    # Identify name column\n    nameCol = None\n    for c in df.columns:\n        cl = c.lower()\n        if 'metropolitan statistical area' in cl or cl in {'metropolitan area', 'metropolitan statistical area'}:\n            nameCol = c\n            break\n    if nameCol is None:\n        # fallback: first column\n        nameCol = df.columns[0]\n\n    # Identify year columns and coerce to numeric\n    yearCols = []\n    years = []\n    for c in df.columns:\n        m = re.search(r'\\b(19\\d{2}|20\\d{2})\\b', str(c))\n        if m:\n            yearCols.append(c)\n            years.append(int(m.group(1)))\n\n    if len(yearCols) < 2:\n        raise ValueError('Need at least two year columns for interpolation')\n\n    pop = df[[nameCol] + yearCols].copy()\n    pop = pop.rename(columns={nameCol: 'metro_raw_html'})\n\n    def to_num(x):\n        if x is None or (isinstance(x, float) and np.isnan(x)):\n            return np.nan\n        s = str(x)\n        s = re.sub(r'\\[[^\\]]*\\]', '', s)  # remove footnotes\n        s = re.sub(r'[^0-9\\.-]', '', s)\n        return pd.to_numeric(s, errors='coerce')\n\n    for c in yearCols:\n        pop[c] = pop[c].map(to_num)\n\n    # Normalize metro name in same way as identity theft\n    def norm_metro(s: str) -> str:\n        s = str(s)\n        s = re.sub(r'\\s*(Metropolitan Statistical Area|Metropolitan Area|MSA)\\s*$', '', s, flags=re.I)\n        s = s.strip()\n        s = s.replace('\\u2013', '-').replace('\\u2014', '-')\n        s = re.sub(r'[\\.,]', '', s)\n        s = re.sub(r'\\s+', ' ', s).strip()\n        return s.lower()\n\n    pop['metro_norm'] = pop['metro_raw_html'].map(norm_metro)\n\n    # Compute 2023 population using exact if present else linear interpolation between nearest known years\n    target = 2023\n    yearMap = dict(zip(yearCols, years))\n\n    def interp_row(row):\n        vals = []\n        for c in yearCols:\n            y = yearMap[c]\n            v = row[c]\n            if pd.notna(v):\n                vals.append((y, float(v)))\n        vals.sort()\n        if not vals:\n            return np.nan\n        # if exact year present\n        for y, v in vals:\n            if y == target:\n                return v\n        # find bracket years\n        before = [p for p in vals if p[0] < target]\n        after = [p for p in vals if p[0] > target]\n        if before and after:\n            y0, v0 = before[-1]\n            y1, v1 = after[0]\n            return v0 + (v1 - v0) * (target - y0) / (y1 - y0)\n        # if only one side available, cannot interpolate robustly\n        return np.nan\n\n    pop['pop2023'] = pop.apply(interp_row, axis=1)\n\n    out = pop[['metro_raw_html', 'metro_norm', 'pop2023']].copy()\n    out = out[pd.notna(out['pop2023'])]\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse metropolitan_statistics.html: read all HTML tables, select best candidate table containing MSA names and multiple year population columns; flatten headers; extract metro name column and year columns; clean population cells to numeric; normalize metro names by stripping MSA suffixes and punctuation; compute 2023 population using exact 2023 column if available else linear interpolation between nearest known years; output [metro_raw_html, metro_norm, pop2023] with non-null pop2023",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "computeHighestRate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanIdentityTheft, parseMetroPopulations) -> pd.DataFrame:\n    import pandas as pd\n\n    theft = cleanIdentityTheft.copy()\n    pop = parseMetroPopulations.copy()\n\n    # Join by normalized metro key; drop non-matches (as required)\n    merged = theft.merge(pop, on='metro_norm', how='inner', suffixes=('_theft', '_pop'))\n\n    # Compute rate per 100k\n    merged['ratePer100k'] = merged['reports'] / merged['pop2023'] * 100000\n\n    # For each metro_norm, keep the max rate row (in case duplicates from multiple source files)\n    # Also keep metro_raw from theft side (original format from CSV as requested)\n    bestPerMetro = (merged.sort_values(['metro_norm', 'ratePer100k'], ascending=[True, False])\n                          .groupby('metro_norm', as_index=False)\n                          .first())\n\n    top = bestPerMetro.sort_values('ratePer100k', ascending=False).head(1)\n    return top[['metro_raw', 'ratePer100k', 'reports', 'pop2023']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inner join identity theft report counts with MSA populations on normalized metro key (dropping non-matches); compute identity theft rate per 100,000 as reports/pop2023*100000; deduplicate by metro_norm keeping highest-rate row across possible duplicate sources; return top 1 metro with columns [metro_raw (exact from CSV), ratePer100k, reports, pop2023] sorted by highest rate",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadIdentityTheftCsvs": {
+        "x": 100,
+        "y": 40
+      },
+      "loadMetroHtml": {
+        "x": 100,
+        "y": 220
+      },
+      "cleanIdentityTheft": {
+        "x": 400,
+        "y": 40
+      },
+      "parseMetroPopulations": {
+        "x": 400,
+        "y": 220
+      },
+      "computeHighestRate": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadMetroHtml-->parseMetroPopulations",
+        "source": {
+          "operatorID": "loadMetroHtml",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parseMetroPopulations",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdentityTheft-->computeHighestRate",
+        "source": {
+          "operatorID": "cleanIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "computeHighestRate",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parseMetroPopulations-->computeHighestRate",
+        "source": {
+          "operatorID": "parseMetroPopulations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "computeHighestRate",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "loadIdentityTheftCsvs-->cleanIdentityTheft",
+        "source": {
+          "operatorID": "loadIdentityTheftCsvs",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdentityTheft",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

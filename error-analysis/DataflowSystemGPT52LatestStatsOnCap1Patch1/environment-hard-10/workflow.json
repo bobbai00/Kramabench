@@ -1,0 +1,332 @@
+{
+  "headId": "step-agent-73-6-1779139971880",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTesting2023",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/water-body-testing-2023.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2023.csv via pd.read_csv (defaults: comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "ejPopulations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/environmental-justice-populations.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load environmental-justice-populations.csv via pd.read_csv (defaults: comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wollastonBeachDatasheet",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/wollaston_beach_datasheet.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wollaston_beach_datasheet.csv via pd.read_csv (defaults: comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectWollastonRaw",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wollastonBeachDatasheet) -> pd.DataFrame:\n    import pandas as pd\n\n    # show the first 40 rows to identify header blocks/structure\n    return wollastonBeachDatasheet.head(40)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic preview of wollastonBeachDatasheet \u2014 return first 40 rows/12 columns as loaded (no transformations) to identify true header/metadata structure",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cleanWollastonBeachDatasheet",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wollastonBeachDatasheet) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = wollastonBeachDatasheet.copy()\n    df = df.rename(columns={df.columns[0]: 'sample_date_raw'})\n\n    # Keep only rows that look like dates; this drops header/label rows like \"Tag\".\n    df['sample_date'] = pd.to_datetime(df['sample_date_raw'], errors='coerce')\n    df = df[df['sample_date'].notna()].copy()\n\n    # Rainfall appears in the next 3 columns after date (past 1/2/3 days). Coerce to numeric.\n    for i, col in enumerate(['Unnamed: 1', 'Unnamed: 2', 'Unnamed: 3'], start=1):\n        df[f'rain_day{i}'] = pd.to_numeric(df[col], errors='coerce')\n\n    df['rain_past_3_days'] = df[['rain_day1', 'rain_day2', 'rain_day3']].sum(axis=1, min_count=1)\n\n    # Enterococcus columns for stations are spread across value and a comparator column.\n    # Pattern (from preview):\n    # Milton Road: comparator in Unnamed: 4, value in Unnamed: 5\n    # Channing Street: comparator in Unnamed: 6, value in Unnamed: 7\n    # Sachem Street: comparator in Unnamed: 8, value in Unnamed: 9\n    # Rice Road: comparator in Unnamed: 10, value in Unnamed: 11\n    stations = [\n        ('Milton Road', 'Unnamed: 4', 'Unnamed: 5'),\n        ('Channing Street', 'Unnamed: 6', 'Unnamed: 7'),\n        ('Sachem Street', 'Unnamed: 8', 'Unnamed: 9'),\n        ('Rice Road', 'Unnamed: 10', 'Unnamed: 11'),\n    ]\n\n    out = []\n    for station, comp_col, val_col in stations:\n        tmp = df[['sample_date', 'rain_past_3_days', comp_col, val_col]].copy()\n        tmp = tmp.rename(columns={comp_col: 'comparator', val_col: 'enterococcus_raw'})\n        tmp['station'] = station\n\n        # comparator could be '<', '>', NaN; enterococcus values may be numeric strings.\n        tmp['enterococcus_num'] = pd.to_numeric(tmp['enterococcus_raw'], errors='coerce')\n\n        # Apply estimation rules\n        tmp['enterococcus_est'] = tmp['enterococcus_num']\n        lt_mask = tmp['comparator'].astype(str).str.strip().eq('<') & tmp['enterococcus_num'].notna()\n        gt_mask = tmp['comparator'].astype(str).str.strip().eq('>') & tmp['enterococcus_num'].notna()\n        tmp.loc[lt_mask, 'enterococcus_est'] = tmp.loc[lt_mask, 'enterococcus_num'] / 2.0\n        tmp.loc[gt_mask, 'enterococcus_est'] = tmp.loc[gt_mask, 'enterococcus_num']\n\n        out.append(tmp[['sample_date', 'station', 'rain_past_3_days', 'enterococcus_est']])\n\n    tidy = pd.concat(out, ignore_index=True)\n\n    # Drop rows where either variable is missing\n    tidy = tidy[tidy['rain_past_3_days'].notna() & tidy['enterococcus_est'].notna()].copy()\n\n    tidy['beach_name'] = 'Wollaston Beach'\n    tidy['community'] = 'Quincy'\n    return tidy"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean wollaston_beach_datasheet.csv into tidy long format: parse sample_date from first column; compute rain_past_3_days as sum of Unnamed:1-3 (past 1/2/3 days); unpivot Enterococcus by station (Milton Road/Channing Street/Sachem Street/Rice Road) using comparator columns (Unnamed:4/6/8/10) and value columns (Unnamed:5/7/9/11); estimate enterococcus_est with rules '<x' -> x/2 and '>x' -> x; output columns [sample_date, station, rain_past_3_days, enterococcus_est, beach_name='Wollaston Beach', community='Quincy'] and drop rows with missing rain or enterococcus.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "ej90Communities",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(ejPopulations) -> pd.DataFrame:\n    import pandas as pd\n\n    df = ejPopulations.copy()\n    # Use percent of population in EJ block groups as EJ population %\n    df['ejPopPct'] = pd.to_numeric(df['Percent of population in EJ BGs'], errors='coerce')\n    out = df[df['ejPopPct'] > 90].copy()\n    out['Municipality_norm'] = out['Municipality'].astype(str).str.strip().str.upper()\n    return out[['Municipality', 'Municipality_norm', 'ejPopPct']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter environmental-justice-populations.csv to communities where Percent of population in EJ BGs > 90; add normalized municipality name (upper/trim) as Municipality_norm; output [Municipality, Municipality_norm, ejPopPct].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "ej90WollastonOnly",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanWollastonBeachDatasheet, ej90Communities) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanWollastonBeachDatasheet.copy()\n    df['community_norm'] = df['community'].astype(str).str.strip().str.upper()\n\n    ej = ej90Communities.copy()\n    merged = df.merge(ej, left_on='community_norm', right_on='Municipality_norm', how='inner')\n    return merged[['sample_date', 'beach_name', 'station', 'community', 'ejPopPct', 'rain_past_3_days', 'enterococcus_est']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inner join cleaned Wollaston Beach samples to EJ>90% communities by normalized community name (Quincy) = Municipality_norm; retain sample_date, beach_name, station, community, ejPopPct, rain_past_3_days, enterococcus_est.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "corrRainEnterococcus",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(ej90WollastonOnly) -> pd.DataFrame:\n    import pandas as pd\n\n    df = ej90WollastonOnly.copy()\n    r = df['rain_past_3_days'].corr(df['enterococcus_est'], method='pearson')\n    return pd.DataFrame([{'pearson_correlation': r}])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute Pearson correlation between rain_past_3_days and enterococcus_est on Boston Harbor beach samples restricted to EJ>90% communities (from ej90WollastonOnly); return single-row DataFrame with pearson_correlation.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTesting2023": {
+        "x": 100,
+        "y": 40
+      },
+      "ejPopulations": {
+        "x": 100,
+        "y": 490
+      },
+      "wollastonBeachDatasheet": {
+        "x": 100,
+        "y": 220
+      },
+      "inspectWollastonRaw": {
+        "x": 400,
+        "y": 130
+      },
+      "cleanWollastonBeachDatasheet": {
+        "x": 400,
+        "y": 310
+      },
+      "ej90Communities": {
+        "x": 400,
+        "y": 490
+      },
+      "ej90WollastonOnly": {
+        "x": 700,
+        "y": 400
+      },
+      "corrRainEnterococcus": {
+        "x": 1000,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "wollastonBeachDatasheet-->inspectWollastonRaw",
+        "source": {
+          "operatorID": "wollastonBeachDatasheet",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectWollastonRaw",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wollastonBeachDatasheet-->cleanWollastonBeachDatasheet",
+        "source": {
+          "operatorID": "wollastonBeachDatasheet",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanWollastonBeachDatasheet",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "ejPopulations-->ej90Communities",
+        "source": {
+          "operatorID": "ejPopulations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ej90Communities",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanWollastonBeachDatasheet-->ej90WollastonOnly",
+        "source": {
+          "operatorID": "cleanWollastonBeachDatasheet",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ej90WollastonOnly",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "ej90Communities-->ej90WollastonOnly",
+        "source": {
+          "operatorID": "ej90Communities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ej90WollastonOnly",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "ej90WollastonOnly-->corrRainEnterococcus",
+        "source": {
+          "operatorID": "ej90WollastonOnly",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "corrRainEnterococcus",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

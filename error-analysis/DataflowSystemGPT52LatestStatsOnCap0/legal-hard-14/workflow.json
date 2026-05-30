@@ -1,0 +1,261 @@
+{
+  "headId": "step-agent-51-7-1779100293241",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "newEnglandStates",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/new_england_states.csv'\n    return pd.read_csv(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load new_england_states.csv via pd.read_csv with dtype=str to preserve state abbreviations/names exactly as text",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import os\n    import pandas as pd\n\n    pattern = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f'No files matched pattern: {pattern}')\n\n    return pd.DataFrame({'path': paths, 'filename': [os.path.basename(p) for p in paths]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all CSV files matching pattern '.../State MSA Identity Theft data/*.csv' into a DataFrame with columns [path, filename] (sorted) to drive downstream batch loading",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadIdentityTheftAll",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identityTheftFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    dfs = []\n    for p in identityTheftFiles['path'].tolist():\n        df = pd.read_csv(p, dtype=str)\n        df['__source_path'] = p\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Read and concatenate all State MSA Identity Theft CSVs (from identityTheftFiles.path) with pd.read_csv(dtype=str); add provenance column '__source_path'; return combined table",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cleanIdentityTheft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadIdentityTheftAll) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    df = loadIdentityTheftAll.copy()\n\n    # Standardize column names from the raw concatenation\n    col1 = 'Metropolitan Areas: Identity Theft Reports'\n    col2 = 'Unnamed: 1'\n    out = df.rename(columns={col1: 'metropolitanArea', col2: 'reportsRaw'})[['metropolitanArea', 'reportsRaw', '__source_path']]\n\n    # Drop non-data rows (headers, blanks, sources)\n    out['metropolitanArea'] = out['metropolitanArea'].astype('string')\n    out['reportsRaw'] = out['reportsRaw'].astype('string')\n\n    mask_bad_area = (\n        out['metropolitanArea'].isna() |\n        out['metropolitanArea'].str.strip().eq('') |\n        out['metropolitanArea'].str.contains(r'^(Metropolitan Area|Source:)', case=False, regex=True)\n    )\n    out = out[~mask_bad_area].copy()\n\n    # Parse report counts; keep only rows with a valid integer count\n    out['reports'] = (\n        out['reportsRaw']\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+)', expand=False)\n    )\n    out['reports'] = pd.to_numeric(out['reports'], errors='coerce')\n    out = out[out['reports'].notna()].copy()\n    out['reports'] = out['reports'].astype('int64')\n\n    # Derive state name from filename (e.g., .../Massachusetts.csv -> Massachusetts)\n    out['state'] = out['__source_path'].str.replace('\\\\\\\\', '/', regex=False).str.split('/').str[-1].str.replace('.csv', '', regex=False)\n\n    return out[['state', 'metropolitanArea', 'reports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean concatenated State MSA Identity Theft raw table: rename columns to [metropolitanArea, reportsRaw]; drop header/blank/source rows where metropolitanArea is null/empty or equals 'Metropolitan Area' or starts with 'Source:'; parse integer report counts from reportsRaw (remove commas, extract digits) into 'reports'; derive 'state' from __source_path filename (strip .csv); return columns [state, metropolitanArea, reports].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "newEnglandStateSet",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(newEnglandStates) -> pd.DataFrame:\n    import pandas as pd\n\n    # Build a normalized lookup set for matching against the identity theft 'state' column\n    states = (\n        newEnglandStates[['Name']]\n        .dropna()\n        .assign(state=lambda d: d['Name'].astype(str).str.strip())\n    )\n\n    return states[['state']].drop_duplicates().sort_values('state').reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From newEnglandStates.Name, create a distinct, trimmed list of New England state names as column 'state' for filtering identity theft data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "top5NewEnglandMetroAreas",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanIdentityTheft, newEnglandStateSet) -> pd.DataFrame:\n    import pandas as pd\n\n    ne_states = set(newEnglandStateSet['state'].astype(str).str.strip())\n\n    df = cleanIdentityTheft.copy()\n    df['state'] = df['state'].astype(str).str.strip()\n    df_ne = df[df['state'].isin(ne_states)].copy()\n\n    # In case a metro area appears in multiple states (e.g., multi-state MSAs), sum reports across NE states.\n    out = (\n        df_ne.groupby('metropolitanArea', as_index=False)['reports']\n        .sum()\n        .sort_values(['reports', 'metropolitanArea'], ascending=[False, True])\n        .head(5)\n    )\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter cleanIdentityTheft to New England states (matching newEnglandStateSet.state); groupby metropolitanArea and sum reports across included states; sort by reports desc then metropolitanArea asc; return top 5 metropolitanArea rows with summed 2024 identity theft report counts",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "newEnglandStates": {
+        "x": 400,
+        "y": 220
+      },
+      "identityTheftFiles": {
+        "x": 100,
+        "y": 40
+      },
+      "loadIdentityTheftAll": {
+        "x": 400,
+        "y": 40
+      },
+      "cleanIdentityTheft": {
+        "x": 700,
+        "y": 40
+      },
+      "newEnglandStateSet": {
+        "x": 700,
+        "y": 220
+      },
+      "top5NewEnglandMetroAreas": {
+        "x": 1000,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "identityTheftFiles-->loadIdentityTheftAll",
+        "source": {
+          "operatorID": "identityTheftFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "loadIdentityTheftAll",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadIdentityTheftAll-->cleanIdentityTheft",
+        "source": {
+          "operatorID": "loadIdentityTheftAll",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdentityTheft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "newEnglandStates-->newEnglandStateSet",
+        "source": {
+          "operatorID": "newEnglandStates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "newEnglandStateSet",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdentityTheft-->top5NewEnglandMetroAreas",
+        "source": {
+          "operatorID": "cleanIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top5NewEnglandMetroAreas",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "newEnglandStateSet-->top5NewEnglandMetroAreas",
+        "source": {
+          "operatorID": "newEnglandStateSet",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top5NewEnglandMetroAreas",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

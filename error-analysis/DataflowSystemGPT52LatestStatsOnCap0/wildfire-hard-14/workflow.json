@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-640-7-1779125572422",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wildfireAcres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Wildfire_Acres_by_State.csv'\n    df = pd.read_csv(path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Wildfire_Acres_by_State.csv via pd.read_csv (comma-delimited, header in first row, UTF-8 defaults) from data/wildfire/input/Wildfire_Acres_by_State.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "annualAqiCounty2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/annual_aqi_by_county_2024.csv'\n    df = pd.read_csv(path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load annual_aqi_by_county_2024.csv via pd.read_csv (comma-delimited, header in first row, UTF-8 defaults) from data/wildfire/input/annual_aqi_by_county_2024.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stateUnsafeProportion2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(annualAqiCounty2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = annualAqiCounty2024.copy()\n\n    # Treat all non-Good categories as \"generally unsafe\" (i.e., AQI > 50)\n    unsafe_cols = [\n        'Moderate Days',\n        'Unhealthy for Sensitive Groups Days',\n        'Unhealthy Days',\n        'Very Unhealthy Days',\n        'Hazardous Days'\n    ]\n\n    for c in ['Days with AQI'] + unsafe_cols:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    state = (\n        df.groupby('State', as_index=False)[['Days with AQI'] + unsafe_cols]\n          .sum(min_count=1)\n    )\n\n    state['unsafe_days'] = state[unsafe_cols].sum(axis=1, min_count=1)\n    state['unsafe_prop'] = state['unsafe_days'] / state['Days with AQI']\n\n    return state[['State', 'Days with AQI', 'unsafe_days', 'unsafe_prop']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Aggregate annual_aqi_by_county_2024.csv from county to state for 2024 by summing Days with AQI plus AQI-category day counts; define 'generally unsafe' days as (Moderate + Unhealthy for Sensitive Groups + Unhealthy + Very Unhealthy + Hazardous); compute unsafe_prop = unsafe_days / Days with AQI; output [State, Days with AQI, unsafe_days, unsafe_prop].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "stateAcres2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfireAcres) -> pd.DataFrame:\n    import pandas as pd\n\n    df = wildfireAcres.copy()\n\n    # Coerce numeric\n    df['Total Acres Burned'] = pd.to_numeric(df['Total Acres Burned'], errors='coerce')\n\n    # Standardize state naming for join\n    df['State'] = df['State'].astype(str).str.strip()\n\n    return df[['State', 'Total Acres Burned']].rename(columns={'Total Acres Burned': 'acres_burned'})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Prepare wildfire acreage-by-state for correlation: coerce 'Total Acres Burned' to numeric; strip whitespace in 'State'; output columns [State, acres_burned] from Wildfire_Acres_by_State.csv.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "corrUnsafeVsAcres2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(stateUnsafeProportion2024, stateAcres2024) -> pd.DataFrame:\n    import pandas as pd\n\n    aqi = stateUnsafeProportion2024.copy()\n    fire = stateAcres2024.copy()\n\n    # Normalize state names for join\n    aqi['State'] = aqi['State'].astype(str).str.strip()\n    fire['State'] = fire['State'].astype(str).str.strip()\n\n    merged = aqi.merge(fire, on='State', how='inner')\n\n    # Ensure numeric and drop nulls\n    merged['unsafe_prop'] = pd.to_numeric(merged['unsafe_prop'], errors='coerce')\n    merged['acres_burned'] = pd.to_numeric(merged['acres_burned'], errors='coerce')\n    merged = merged.dropna(subset=['unsafe_prop', 'acres_burned'])\n\n    corr = merged['unsafe_prop'].corr(merged['acres_burned'])\n\n    return pd.DataFrame([\n        {\n            'n_states': int(len(merged)),\n            'pearson_corr': float(corr),\n            'pearson_corr_rounded_2dp': round(float(corr), 2),\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inner join state-level unsafe air quality proportion (unsafe_prop) with wildfire acres burned (acres_burned) on stripped 'State'; coerce both metrics to numeric and drop nulls; compute Pearson correlation corr(unsafe_prop, acres_burned); return n_states and correlation (raw and rounded to 2 decimals).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wildfireAcres": {
+        "x": 100,
+        "y": 220
+      },
+      "annualAqiCounty2024": {
+        "x": 100,
+        "y": 40
+      },
+      "stateUnsafeProportion2024": {
+        "x": 400,
+        "y": 40
+      },
+      "stateAcres2024": {
+        "x": 400,
+        "y": 220
+      },
+      "corrUnsafeVsAcres2024": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "annualAqiCounty2024-->stateUnsafeProportion2024",
+        "source": {
+          "operatorID": "annualAqiCounty2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateUnsafeProportion2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfireAcres-->stateAcres2024",
+        "source": {
+          "operatorID": "wildfireAcres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateAcres2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "stateUnsafeProportion2024-->corrUnsafeVsAcres2024",
+        "source": {
+          "operatorID": "stateUnsafeProportion2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "corrUnsafeVsAcres2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "stateAcres2024-->corrUnsafeVsAcres2024",
+        "source": {
+          "operatorID": "stateAcres2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "corrUnsafeVsAcres2024",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

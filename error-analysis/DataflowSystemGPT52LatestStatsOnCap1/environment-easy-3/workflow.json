@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-560-5-1779124091392",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTesting2012",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/environment/input/water-body-testing-2012.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2012.csv via pd.read_csv with default parameters (comma delimiter, header inferred from first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyTesting2013",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/environment/input/water-body-testing-2013.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2013.csv via pd.read_csv with default parameters (comma delimiter, header inferred from first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "beachExceedanceComparison",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTesting2012, waterBodyTesting2013) -> pd.DataFrame:\n    import pandas as pd\n\n    beach_col = \"Beach Name\"\n    exceed_col = \"Violation\"  # yes/no\n\n    def to_bool_violation(s: pd.Series) -> pd.Series:\n        if pd.api.types.is_bool_dtype(s):\n            return s\n        if pd.api.types.is_numeric_dtype(s):\n            return s.fillna(0).astype(float) != 0\n        x = s.astype(str).str.strip().str.lower()\n        return x.isin({\"yes\", \"y\", \"true\", \"t\", \"1\"})\n\n    df12 = waterBodyTesting2012[[beach_col, exceed_col]].copy()\n    df13 = waterBodyTesting2013[[beach_col, exceed_col]].copy()\n\n    df12.columns = [\"beach\", \"exceed\"]\n    df13.columns = [\"beach\", \"exceed\"]\n\n    df12[\"beach\"] = df12[\"beach\"].astype(str).str.strip()\n    df13[\"beach\"] = df13[\"beach\"].astype(str).str.strip()\n\n    df12[\"exceed\"] = to_bool_violation(df12[\"exceed\"])\n    df13[\"exceed\"] = to_bool_violation(df13[\"exceed\"])\n\n    agg12 = df12.groupby(\"beach\").agg(samples12=(\"exceed\", \"size\"), exceedRate12=(\"exceed\", \"mean\")).reset_index()\n    agg13 = df13.groupby(\"beach\").agg(samples13=(\"exceed\", \"size\"), exceedRate13=(\"exceed\", \"mean\")).reset_index()\n\n    comp = agg12.merge(agg13, on=\"beach\", how=\"inner\")\n    comp = comp[comp[\"samples12\"] > 0]\n\n    higher = int((comp[\"exceedRate13\"] > comp[\"exceedRate12\"]).sum())\n    return pd.DataFrame([{\"higherCount\": higher}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute per-beach bacterial exceedance rates for 2012 vs 2013 using columns: beach='Beach Name' and exceedance indicator='Violation' (map {'yes','y','true','t','1'}\u2192True else False); aggregate by beach to get samples12/13 (count) and exceedRate12/13 (mean of exceed); inner-join beaches present in both years (thereby excluding beaches with no 2012 samples; also enforce samples12>0), then count beaches where exceedRate13 > exceedRate12; return single-row DataFrame with higherCount.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTesting2012": {
+        "x": 100,
+        "y": 40
+      },
+      "waterBodyTesting2013": {
+        "x": 100,
+        "y": 220
+      },
+      "beachExceedanceComparison": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyTesting2012-->beachExceedanceComparison",
+        "source": {
+          "operatorID": "waterBodyTesting2012",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beachExceedanceComparison",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2013-->beachExceedanceComparison",
+        "source": {
+          "operatorID": "waterBodyTesting2013",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beachExceedanceComparison",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

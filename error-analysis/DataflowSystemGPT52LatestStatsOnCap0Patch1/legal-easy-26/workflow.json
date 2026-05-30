@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-93-7-1779140207609",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n    # File has a title row above the true header.\n    # Use header=1 so row index 1 becomes column names.\n    return pd.read_csv(path, header=1)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv from data/legal/input/csn-data-book-2024-csv/CSVs/ via pd.read_csv with header=1 (skip the initial title row so the next row becomes the column header: State, Category, # of Reports, Percentage).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftTopStates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories):\n    import pandas as pd\n\n    df = topTenCategories.copy()\n    # Fix header that appears as first data row due to file structure\n    header_row = df.iloc[0].tolist()\n    df = df.iloc[1:].copy()\n    df.columns = header_row\n\n    # Drop trailing footnote / blank rows\n    df = df.dropna(subset=['State', 'Category'])\n\n    # The first category listed per state is the \"top\" category\n    df['_rowWithinState'] = df.groupby('State').cumcount()\n    top_per_state = df[df['_rowWithinState'] == 0]\n\n    out = (\n        top_per_state[top_per_state['Category'] == 'Identity Theft'][['State']]\n        .drop_duplicates()\n        .sort_values('State')\n        .reset_index(drop=True)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Determine states whose top (rank-1) report category is 'Identity Theft': treat first data row as header (set columns to [State, Category, # of Reports, Percentage]); drop rows with null State/Category (footnotes/blanks); within each State, take the first listed category (groupby State cumcount==0) as top; filter top rows where Category=='Identity Theft'; return sorted unique State names.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "identityTheftTopStates": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories-->identityTheftTopStates",
+        "source": {
+          "operatorID": "topTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identityTheftTopStates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

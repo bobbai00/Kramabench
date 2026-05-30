@@ -1,0 +1,220 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_mmc7",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    xls = pd.ExcelFile(path)\n    rows = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh)\n        rows.append({\n            'sheet': sh,\n            'nrows': df.shape[0],\n            'ncols': df.shape[1],\n            'columns': list(df.columns)[:30]\n        })\n    return pd.DataFrame(rows)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect sheet names, shapes, and first ~30 column names for each sheet in mmc7.xlsx to locate APP-Z and age fields",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_mmc1",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path='data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xls=pd.ExcelFile(path)\n    rows=[]\n    for sheet in xls.sheet_names:\n        df=pd.read_excel(path, sheet_name=sheet)\n        cols=list(df.columns)\n        rows.append({\n            'sheet': sheet,\n            'nrows': df.shape[0],\n            'ncols': df.shape[1],\n            'columns': cols[:40]\n        })\n    return pd.DataFrame(rows)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect sheet names, shapes, and first ~40 column names for each sheet in mmc1.xlsx to locate patient age and a key to join with APP_Z_score in mmc7",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "mmc7_bapm_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    df = pd.read_excel(path, sheet_name='B-APM subtypes')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 'B-APM subtypes' sheet from mmc7.xlsx containing APP_Z_score and idx for samples",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "mmc1_meta_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    df = pd.read_excel(path, sheet_name='UCEC_CPTAC3_meta_table_V2.1')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full UCEC_CPTAC3_meta_table_V2.1 sheet from mmc1.xlsx containing Proteomics_Participant_ID, Age, and other clinical metadata",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "min_appz",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(mmc7_bapm_full):\n    import pandas as pd\n    df = mmc7_bapm_full.copy()\n    df['APP_Z_score'] = pd.to_numeric(df['APP_Z_score'], errors='coerce')\n    df = df.dropna(subset=['APP_Z_score'])\n    m = df['APP_Z_score'].min()\n    out = df.loc[df['APP_Z_score'] == m, ['idx','APP_Z_score']].sort_values('idx').reset_index(drop=True)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Find minimum APP_Z_score in mmc7_bapm_full (coerce to numeric) and return the idx sample(s) achieving that minimum",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "age_lowest_appz",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(min_appz, mmc1_meta_full):\n    import pandas as pd\n    # Ensure consistent key type\n    key = min_appz.copy()\n    key['idx'] = key['idx'].astype(str)\n\n    meta = mmc1_meta_full.copy()\n    meta['idx'] = meta['idx'].astype(str)\n\n    out = key.merge(meta[['idx','Age']], on='idx', how='left')\n    # Coerce age to numeric where possible\n    out['Age'] = pd.to_numeric(out['Age'], errors='coerce')\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Join min APP_Z_score sample idx from mmc7 to clinical metadata in mmc1 on idx to retrieve Age (coerce to numeric)",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_mmc7": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_mmc1": {
+      "x": 100,
+      "y": 220
+    },
+    "mmc7_bapm_full": {
+      "x": 100,
+      "y": 400
+    },
+    "mmc1_meta_full": {
+      "x": 430,
+      "y": 580
+    },
+    "min_appz": {
+      "x": 430,
+      "y": 400
+    },
+    "age_lowest_appz": {
+      "x": 760,
+      "y": 490
+    }
+  },
+  "links": [
+    {
+      "linkID": "mmc7_bapm_full-->min_appz",
+      "source": {
+        "operatorID": "mmc7_bapm_full",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "min_appz",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "min_appz-->age_lowest_appz",
+      "source": {
+        "operatorID": "min_appz",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "age_lowest_appz",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "mmc1_meta_full-->age_lowest_appz",
+      "source": {
+        "operatorID": "mmc1_meta_full",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "age_lowest_appz",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

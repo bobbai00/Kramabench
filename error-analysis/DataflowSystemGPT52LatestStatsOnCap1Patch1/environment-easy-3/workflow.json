@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-28-5-1779139241844",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTesting2012",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2012.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/environment/input/water-body-testing-2012.csv via pd.read_csv (comma delimiter, header row inferred, UTF-8 defaults)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyTesting2013",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2013.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/environment/input/water-body-testing-2013.csv via pd.read_csv (comma delimiter, header row inferred, UTF-8 defaults)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "beachExceedanceCompare",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTesting2012, waterBodyTesting2013) -> pd.DataFrame:\n    import pandas as pd\n\n    def normalize(df: pd.DataFrame) -> pd.DataFrame:\n        out = df.copy()\n        out.columns = [c.strip() for c in out.columns]\n\n        # beach/site column\n        beach_col = 'Beach Name' if 'Beach Name' in out.columns else None\n        if beach_col is None:\n            # fallback: first object column\n            obj_cols = [c for c in out.columns if out[c].dtype == 'object']\n            beach_col = obj_cols[0] if obj_cols else out.columns[0]\n        out = out.rename(columns={beach_col: 'beach'})\n\n        # exceedance indicator: use Violation if present (yes/no)\n        exc_col = None\n        for cand in ['Violation', 'VIOLATION', 'Exceedance', 'EXCEEDANCE']:\n            if cand in out.columns:\n                exc_col = cand\n                break\n        if exc_col is None:\n            for c in out.columns:\n                if 'violat' in c.lower() or 'exceed' in c.lower():\n                    exc_col = c\n                    break\n        if exc_col is None:\n            raise ValueError('Could not find violation/exceedance indicator column')\n\n        s = out[exc_col]\n        if pd.api.types.is_bool_dtype(s):\n            exc = s\n        elif pd.api.types.is_numeric_dtype(s):\n            exc = s.fillna(0).astype(float) > 0\n        else:\n            sl = s.astype(str).str.strip().str.lower()\n            exc = sl.isin(['yes', 'y', 'true', 't', '1', 'violation', 'violated', 'exceed', 'exceeds', 'exceeded']) | sl.str.contains('violat|exceed', regex=True)\n            # remove explicit non-violation labels\n            exc = exc & (~sl.isin(['no', 'n', 'false', 'f', '0', 'none']))\n\n        out['exceed'] = exc.astype(int)\n        return out[['beach', 'exceed']]\n\n    d12 = normalize(waterBodyTesting2012)\n    d13 = normalize(waterBodyTesting2013)\n\n    r12 = d12.groupby('beach', dropna=False).agg(nSamples12=('exceed', 'size'), nExceed12=('exceed', 'sum'))\n    r12['rate12'] = r12['nExceed12'] / r12['nSamples12']\n\n    r13 = d13.groupby('beach', dropna=False).agg(nSamples13=('exceed', 'size'), nExceed13=('exceed', 'sum'))\n    r13['rate13'] = r13['nExceed13'] / r13['nSamples13']\n\n    merged = r12.join(r13, how='inner')\n    count = int((merged['rate13'] > merged['rate12']).sum())\n    return pd.DataFrame([{'higherExceedanceRateCount': count}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize 2012/2013 water testing tables by using 'Beach Name' as beach identifier and 'Violation' (yes/no) as bacterial exceedance indicator (fallback to columns containing 'violat'/'exceed'); map to binary exceed; compute per-beach exceedance rate for each year (sum(exceed)/count); inner join rates on beach to exclude beaches with no 2012 samples (and requires 2013 samples); count beaches where 2013 exceedance rate > 2012; return single-row table with higherExceedanceRateCount",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTesting2012": {
+        "x": 100,
+        "y": 40
+      },
+      "waterBodyTesting2013": {
+        "x": 100,
+        "y": 220
+      },
+      "beachExceedanceCompare": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyTesting2012-->beachExceedanceCompare",
+        "source": {
+          "operatorID": "waterBodyTesting2012",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beachExceedanceCompare",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2013-->beachExceedanceCompare",
+        "source": {
+          "operatorID": "waterBodyTesting2013",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beachExceedanceCompare",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

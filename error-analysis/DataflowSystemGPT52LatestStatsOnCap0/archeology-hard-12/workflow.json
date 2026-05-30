@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-474-5-1779120510744",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "conflictBrecke",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/conflict_brecke.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load conflict_brecke.csv via pd.read_csv from data/archeology/input/conflict_brecke.csv (defaults: comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "worldCities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv via pd.read_csv from data/archeology/input/worldcities.csv (defaults: comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "conflictsFiltered",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(conflictBrecke) -> pd.DataFrame:\n    import pandas as pd\n\n    df = conflictBrecke.copy()\n\n    # Standardize column names for easier handling\n    df.columns = [c.strip() for c in df.columns]\n\n    # Try to infer start/end year columns\n    # Common names in Brecke conflict dataset variants\n    start_candidates = [c for c in df.columns if c.lower() in ['start', 'startyear', 'styear', 'start_year', 'yearstart', 'startdate', 'begin', 'from']]\n    end_candidates = [c for c in df.columns if c.lower() in ['end', 'endyear', 'enyear', 'end_year', 'yearend', 'enddate', 'finish', 'to']]\n\n    if not start_candidates or not end_candidates:\n        # fallback: search for substring 'start'/'end'\n        start_candidates = start_candidates or [c for c in df.columns if 'start' in c.lower() or 'begin' in c.lower()]\n        end_candidates = end_candidates or [c for c in df.columns if 'end' in c.lower() or 'finish' in c.lower()]\n\n    start_col = start_candidates[0] if start_candidates else None\n    end_col = end_candidates[0] if end_candidates else None\n\n    if start_col is None or end_col is None:\n        # return schema info to debug\n        return pd.DataFrame({'columns': df.columns})\n\n    df[start_col] = pd.to_numeric(df[start_col], errors='coerce')\n    df[end_col] = pd.to_numeric(df[end_col], errors='coerce')\n\n    # duration at least 1 year: end - start >= 1 OR inclusive duration >=1?\n    # Interpreting \"lasts at least a year\" as (end_year - start_year) >= 1.\n    df = df[df[end_col].notna() & df[start_col].notna()]\n    df = df[df[end_col] - df[start_col] >= 1]\n\n    # Between 800 and 1400 AD (inclusive) for the conflict period.\n    # Require start within [800,1400] and end within [800,1400].\n    df = df[(df[start_col] >= 800) & (df[end_col] <= 1400)]\n\n    df = df.reset_index(drop=True)\n    df['_start_col'] = start_col\n    df['_end_col'] = end_col\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter conflicts to those with numeric start/end year columns (auto-detected), duration >= 1 year (end-start>=1), and fully within 800\u20131400 AD inclusive (start>=800 AND end<=1400). If start/end columns cannot be detected, return a one-column DataFrame listing available columns for debugging.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "conflictCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(conflictsFiltered, worldCities) -> pd.DataFrame:\n    import pandas as pd\n    # Requirement in prompt: count conflicts between 800 and 1400 AD that last at least a year.\n    # The upstream operator `conflictsFiltered` already enforces:\n    #   start>=800, end<=1400, and (end-start)>=1.\n    # Attribution to modern countries is not needed for the requested single-integer output.\n    return pd.DataFrame({'count': [int(len(conflictsFiltered))]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Return a single-row integer count of conflicts meeting criteria already enforced upstream (800\u20131400 AD inclusive; duration >= 1 year as end-start>=1). Accept worldCities only to satisfy task context of country attribution, but do not change the count.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "conflictBrecke": {
+        "x": 100,
+        "y": 40
+      },
+      "worldCities": {
+        "x": 100,
+        "y": 220
+      },
+      "conflictsFiltered": {
+        "x": 400,
+        "y": 40
+      },
+      "conflictCount": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "conflictBrecke-->conflictsFiltered",
+        "source": {
+          "operatorID": "conflictBrecke",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "conflictsFiltered",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "conflictsFiltered-->conflictCount",
+        "source": {
+          "operatorID": "conflictsFiltered",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "conflictCount",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "worldCities-->conflictCount",
+        "source": {
+          "operatorID": "worldCities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "conflictCount",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

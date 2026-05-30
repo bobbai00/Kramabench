@@ -1,0 +1,306 @@
+{
+  "headId": "step-agent-586-15-1779124969151",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadMsaIdentityTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import os\n    import pandas as pd\n\n    pattern = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*'\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f'No files matched pattern: {pattern}')\n\n    dfs = []\n    for p in paths:\n        if os.path.isdir(p):\n            continue\n        ext = os.path.splitext(p)[1].lower()\n        if ext in ['.csv', '.txt']:\n            df = pd.read_csv(p, dtype=str)\n        elif ext in ['.xlsx', '.xls']:\n            df = pd.read_excel(p, dtype=str)\n        else:\n            # try csv as fallback\n            df = pd.read_csv(p, dtype=str)\n        df['__source_file'] = os.path.basename(p)\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all files matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*' via glob; read each non-directory file (CSV/TXT via pd.read_csv, Excel via pd.read_excel) as dtype=str; concatenate into one table; add provenance column '__source_file' with basename of each source file",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadMetropolitanHtml",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/legal/input/metropolitan_statistics.html'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        html = f.read()\n\n    # Put the raw HTML in a single-row DataFrame so downstream operators can parse it.\n    return pd.DataFrame([{'path': path, 'html': html}])"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load metropolitan_statistics.html by reading full file contents (UTF-8 with errors='replace') into a single-row DataFrame with columns ['path','html'] for downstream parsing of metro population/census information",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanIdentityTheftMsa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadMsaIdentityTheft) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadMsaIdentityTheft.copy()\n    name_col = 'Metropolitan Areas: Identity Theft Reports'\n    reports_col = 'Unnamed: 1'\n\n    out = df[[name_col, reports_col, '__source_file']].rename(\n        columns={name_col: 'msa_raw', reports_col: 'reports_raw'}\n    )\n\n    out['msa_raw'] = out['msa_raw'].astype('string')\n    out['reports_raw'] = out['reports_raw'].astype('string')\n\n    # drop blank/header/source rows\n    out = out.dropna(subset=['msa_raw'])\n    out['msa_raw'] = out['msa_raw'].str.strip()\n    out = out[\n        (out['msa_raw'] != '')\n        & (out['msa_raw'].str.lower() != 'metropolitan area')\n        & (~out['msa_raw'].str.contains('source:', case=False, na=False))\n    ]\n\n    # parse numeric reports; keep as string column for runtime compatibility\n    reports_num = (\n        out['reports_raw']\n        .str.replace(',', '', regex=False)\n        .str.extract(r'([0-9]+(?:\\.[0-9]+)?)', expand=False)\n    )\n    reports_num = pd.to_numeric(reports_num, errors='coerce')\n\n    out = out.assign(reports=reports_num)\n    out = out.dropna(subset=['reports'])\n\n    # Cast to string to avoid Texera attribute type mismatch\n    out['reports'] = out['reports'].round(4).astype('string')\n\n    return out[['msa_raw', 'reports', '__source_file']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean MSA identity theft reports table: select columns ['Metropolitan Areas: Identity Theft Reports'\u2192msa_raw, 'Unnamed: 1'\u2192reports_raw, '__source_file']; drop blank/header rows (msa_raw empty or equals 'Metropolitan Area') and footer/source rows (msa_raw contains 'Source:'); parse numeric report counts from reports_raw by stripping commas and extracting digits; drop rows with missing reports; output ['msa_raw','reports','__source_file'] with reports cast to string for downstream joins and to satisfy runtime type constraints",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "parseMetroPopulations",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadMetropolitanHtml):\n    import pandas as pd\n    import re\n    from bs4 import BeautifulSoup\n\n    html = loadMetropolitanHtml['html'].iloc[0]\n    soup = BeautifulSoup(html, 'html.parser')\n\n    def clean_text(x: str) -> str:\n        x = re.sub(r'\\[.*?\\]', '', x)  # citation brackets\n        x = re.sub(r'\\s+', ' ', x).strip()\n        return x\n\n    def parse_int(s: str):\n        if s is None:\n            return None\n        s = clean_text(str(s))\n        m = re.search(r'(-?\\d[\\d,]*)', s)\n        if not m:\n            return None\n        return int(m.group(1).replace(',', ''))\n\n    def normalize_msa_name(name: str) -> str:\n        if name is None:\n            return ''\n        s = clean_text(str(name))\n        # remove parentheticals (often state abbreviations in parentheses etc.)\n        s = re.sub(r'\\s*\\(.*?\\)\\s*', ' ', s)\n        # drop suffixes\n        s = re.sub(r'\\b(Metropolitan|Micropolitan)\\s+Statistical\\s+Area\\b', '', s, flags=re.I)\n        s = re.sub(r'\\bMetropolitan\\s+Area\\b', '', s, flags=re.I)\n        s = re.sub(r'\\bMicropolitan\\s+Area\\b', '', s, flags=re.I)\n        s = re.sub(r'\\bMSA\\b', '', s, flags=re.I)\n        # normalize dashes\n        s = s.replace('\\u2013', '-').replace('\\u2014', '-').replace('\u2013', '-')\n        # keep comma and hyphen; remove other punctuation\n        s = re.sub(r\"[^0-9A-Za-z,\\-\\s]\", '', s)\n        s = re.sub(r'\\s+', ' ', s).strip().lower()\n        return s\n\n    # Find the main population table: should contain headers '2020 census' and '2024 estimate'\n    target_table = None\n    for t in soup.find_all('table'):\n        header_text = clean_text(' | '.join([th.get_text(' ', strip=True) for th in t.find_all('th')[:30]])).lower()\n        if ('2020 census' in header_text) and ('2024 estimate' in header_text) and ('metropolitan' in header_text):\n            # prefer sortable wikitable with many rows\n            target_table = t\n            break\n\n    if target_table is None:\n        return pd.DataFrame(columns=['msa_name', 'msa_norm', 'pop2020', 'pop2024_est', 'pop2023_est'])\n\n    rows = []\n    for tr in target_table.find_all('tr'):\n        tds = tr.find_all(['td', 'th'])\n        if len(tds) < 4:\n            continue\n        # Skip header rows\n        if tr.find('th') and 'rank' in clean_text(tds[0].get_text(' ', strip=True)).lower():\n            continue\n\n        # heuristic: find columns by position: [rank], [msa], [2024], [2020], ...\n        # Some tables omit rank; detect if first cell is an integer rank.\n        cells = [clean_text(td.get_text(' ', strip=True)) for td in tds]\n        # Determine offset\n        first_int = parse_int(cells[0])\n        if first_int is not None and len(cells) >= 4:\n            msa_cell = cells[1]\n            pop2024 = parse_int(cells[2])\n            pop2020 = parse_int(cells[3])\n        else:\n            # no rank\n            msa_cell = cells[0]\n            pop2024 = parse_int(cells[1])\n            pop2020 = parse_int(cells[2])\n\n        if not msa_cell or pop2020 is None or pop2024 is None:\n            continue\n\n        msa_norm = normalize_msa_name(msa_cell)\n        # linear interpolation between 2020 and 2024 for 2023 (3 years after 2020)\n        pop2023 = pop2020 + (pop2024 - pop2020) * (3 / 4)\n\n        rows.append({\n            'msa_name': msa_cell,\n            'msa_norm': msa_norm,\n            'pop2020': pop2020,\n            'pop2024_est': pop2024,\n            'pop2023_est': float(pop2023),\n        })\n\n    df = pd.DataFrame(rows)\n    df = df.drop_duplicates(subset=['msa_norm'])\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse metropolitan_statistics.html (Wikipedia snapshot) for MSA population table containing columns '2024 estimate' and '2020 census': locate first table whose TH header text includes '2020 census', '2024 estimate', and 'metropolitan'; extract msa_name plus pop2024_est and pop2020 as integers; normalize metro names by stripping citations/parentheticals, removing suffixes (Metropolitan/Micropolitan Statistical Area, MSA), normalizing dashes, and dropping most punctuation while keeping commas/hyphens; estimate 2023 population via linear interpolation between 2020 and 2024 (pop2020 + (pop2024-pop2020)*3/4); output [msa_name, msa_norm, pop2020, pop2024_est, pop2023_est]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectMetroHtmlTables",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadMetropolitanHtml) -> pd.DataFrame:\n    import pandas as pd\n    from bs4 import BeautifulSoup\n\n    html = loadMetropolitanHtml.iloc[0]['html']\n    soup = BeautifulSoup(html, 'lxml')\n\n    rows = []\n    for i, table in enumerate(soup.find_all('table')):\n        cls = ' '.join(table.get('class', []))\n        # header texts\n        header_texts = []\n        thead = table.find('thead')\n        if thead:\n            header_texts = [th.get_text(' ', strip=True) for th in thead.find_all('th')]\n        else:\n            # fallback: first row\n            first_tr = table.find('tr')\n            if first_tr:\n                header_texts = [th.get_text(' ', strip=True) for th in first_tr.find_all(['th', 'td'])]\n        header_join = ' | '.join(header_texts)[:500]\n        rows.append({\n            'table_index': i,\n            'class': cls,\n            'n_rows': len(table.find_all('tr')),\n            'header_preview': header_join,\n            'has_2010': any('2010' in h for h in header_texts),\n            'has_2020': any('2020' in h for h in header_texts),\n            'has_population': any('Population' in h or 'pop' in h.lower() for h in header_texts),\n        })\n\n    df = pd.DataFrame(rows)\n    if not df.empty:\n        df = df.sort_values(['has_2010', 'has_2020', 'has_population', 'n_rows'], ascending=[False, False, False, False])\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect metropolitan_statistics.html tables: parse HTML with BeautifulSoup; for each <table>, record index, CSS class, row count, first-row/thead header text preview, and booleans for presence of '2010', '2020', and 'Population' in headers; sort to surface likely population tables",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "matchMsaNames",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanIdentityTheftMsa, parseMetroPopulations) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    def norm_msa(name: str) -> str:\n        if name is None or (isinstance(name, float) and pd.isna(name)):\n            return ''\n        s = str(name).lower()\n        # remove bracketed footnotes and parentheticals\n        s = re.sub(r\"\\[[^\\]]*\\]\", \"\", s)\n        s = re.sub(r\"\\([^\\)]*\\)\", \"\", s)\n        # normalize dash variants to '-'\n        s = s.replace('\u2013', '-').replace('\u2014', '-')\n        # keep only city+state portion by dropping common suffixes\n        # (do this before punctuation stripping)\n        suffix_patterns = [\n            r\"\\s+metropolitan\\s+statistical\\s+area\\b\",\n            r\"\\s+micropolitan\\s+statistical\\s+area\\b\",\n            r\"\\s+msa\\b\",\n            r\"\\s+metropolitan\\s+area\\b\",\n            r\"\\s+metro\\s+area\\b\",\n            r\"\\s+metropolitan\\s+division\\b\",\n        ]\n        for pat in suffix_patterns:\n            s = re.sub(pat, \"\", s)\n\n        s = re.sub(r\"\\s+\", \" \", s).strip()\n        # remove punctuation except comma, hyphen, and space\n        s = re.sub(r\"[^a-z0-9,\\-\\s]\", \"\", s)\n        s = re.sub(r\"\\s+\", \" \", s).strip()\n        return s\n\n    theft = cleanIdentityTheftMsa.copy()\n    theft['msa_norm'] = theft['msa_raw'].map(norm_msa)\n\n    pops = parseMetroPopulations.copy()\n    pops['msa_norm'] = pops['msa_norm'].map(norm_msa)  # overwrite with fully-normalized version\n\n    # drop the first header-like row from wikipedia table if present\n    pops = pops[pops['msa_norm'].ne('')]\n    pops = pops[~((pops['msa_name'].str.lower() == 'metropolitan statistical area') | (pops['pop2020'] <= 3000))]\n\n    merged = theft.merge(pops, on='msa_norm', how='inner', suffixes=('_theft', '_pop'))\n\n    merged['reports'] = pd.to_numeric(merged['reports'], errors='coerce')\n    merged['pop2023_est'] = pd.to_numeric(merged['pop2023_est'], errors='coerce')\n    merged = merged.dropna(subset=['reports', 'pop2023_est'])\n\n    return merged[['msa_raw', 'msa_name', 'msa_norm', 'reports', 'pop2023_est', 'pop2020', 'pop2024_est', '__source_file']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize and robustly match MSA names between identity theft reports and metro population table: compute msa_norm from cleanIdentityTheftMsa.msa_raw by lowercasing, removing citations/parentheticals, normalizing dash variants, stripping suffixes (Metropolitan/Micropolitan Statistical Area, MSA, metropolitan division/area), collapsing whitespace, and removing punctuation except commas/hyphens/spaces; fully normalize parseMetroPopulations.msa_norm similarly (overwriting into column msa_norm); drop Wikipedia header-like row(s) where msa_norm empty or msa_name equals 'Metropolitan statistical area' / pop2020<=3000; inner-join theft and population tables on msa_norm; cast reports and pop2023_est to numeric; output ['msa_raw','msa_name','msa_norm','reports','pop2023_est','pop2020','pop2024_est','__source_file']",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avgReportsOver1M2023",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(matchMsaNames) -> pd.DataFrame:\n    import pandas as pd\n\n    df = matchMsaNames.copy()\n\n    # Filter to metros with estimated 2023 population > 1,000,000\n    df = df[pd.to_numeric(df['pop2023_est'], errors='coerce') > 1_000_000]\n\n    avg_reports = pd.to_numeric(df['reports'], errors='coerce').mean()\n\n    return pd.DataFrame([{\n        'avg_reports_over_1m_pop_2023': float(avg_reports),\n        'n_metros': int(df.shape[0])\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From matched MSA identity theft + population table, filter to metros with estimated 2023 population (pop2023_est) > 1,000,000; compute arithmetic mean of identity theft report counts (reports) across those metros; return single-row table with avg_reports_over_1m_pop_2023 and n_metros",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadMsaIdentityTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "loadMetropolitanHtml": {
+        "x": 100,
+        "y": 310
+      },
+      "cleanIdentityTheftMsa": {
+        "x": 400,
+        "y": 40
+      },
+      "parseMetroPopulations": {
+        "x": 400,
+        "y": 220
+      },
+      "inspectMetroHtmlTables": {
+        "x": 400,
+        "y": 400
+      },
+      "matchMsaNames": {
+        "x": 700,
+        "y": 130
+      },
+      "avgReportsOver1M2023": {
+        "x": 1000,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadMsaIdentityTheft-->cleanIdentityTheftMsa",
+        "source": {
+          "operatorID": "loadMsaIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdentityTheftMsa",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadMetropolitanHtml-->inspectMetroHtmlTables",
+        "source": {
+          "operatorID": "loadMetropolitanHtml",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectMetroHtmlTables",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadMetropolitanHtml-->parseMetroPopulations",
+        "source": {
+          "operatorID": "loadMetropolitanHtml",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parseMetroPopulations",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdentityTheftMsa-->matchMsaNames",
+        "source": {
+          "operatorID": "cleanIdentityTheftMsa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "matchMsaNames",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parseMetroPopulations-->matchMsaNames",
+        "source": {
+          "operatorID": "parseMetroPopulations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "matchMsaNames",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "matchMsaNames-->avgReportsOver1M2023",
+        "source": {
+          "operatorID": "matchMsaNames",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgReportsOver1M2023",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

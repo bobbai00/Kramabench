@@ -1,0 +1,240 @@
+{
+  "headId": "step-agent-485-25-1779121357407",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "omniFlowPressure",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2/omni2_Flow_Pressure.lst'\n    # OMNI2 .lst files are typically space-delimited with possible comment/header lines.\n    # Read as fixed-width/whitespace-delimited; treat common missing-value flags as NaN.\n    df = pd.read_csv(\n        path,\n        delim_whitespace=True,\n        header=None,\n        comment='#',\n        na_values=[9999, 999.9, 99.99, 999.99, 1e31, 99999, 999999, -9999, -999.9],\n        dtype=float,\n        engine='python'\n    )\n    # Keep as-is; downstream operator will infer column mapping once we inspect shape.\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load omni2_Flow_Pressure.lst (OMNI2 Flow & Pressure) using pd.read_csv with whitespace delimiter, no header inference (header=None), comment lines starting with '#', and common OMNI missing-value flags mapped to NaN; returns raw numeric columns for downstream schema inference/inspection",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omniKp",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2/omni2_Kp_Index.lst'\n    df = pd.read_csv(\n        path,\n        delim_whitespace=True,\n        header=None,\n        comment='#',\n        na_values=[9999, 999.9, 99.99, 999.99, 1e31, 99999, 999999, -9999, -999.9],\n        dtype=float,\n        engine='python'\n    )\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load omni2_Kp_Index.lst (OMNI2 Kp index) using pd.read_csv with whitespace delimiter, header=None, comment lines '#', and common missing-value flags mapped to NaN; returns raw numeric columns for downstream schema inference/inspection",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmAcc",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    from cdflib import CDF\n    from cdflib import epochs\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n\n    info = cdf.cdf_info()\n    zvars = list(getattr(info, 'zVariables', []) or [])\n\n    # Pick time and along-track acceleration variables\n    def pick_var(candidates, contains=None):\n        for v in candidates:\n            if v in zvars:\n                return v\n        if contains:\n            for v in zvars:\n                vv = v.lower()\n                if any(c in vv for c in contains):\n                    return v\n        return None\n\n    time_var = pick_var(['time', 'epoch', 'Epoch', 'TT2000', 'tt2000'], contains=['time', 'epoch', 'tt2000'])\n    acc_var = pick_var(['a_aa', 'A_AA', 'accAlong', 'acc_along', 'along_acc'], contains=['a_aa', 'acc'])\n    if time_var is None:\n        raise ValueError(f'Could not find time variable in zVariables={zvars}')\n    if acc_var is None:\n        raise ValueError(f'Could not find along-track acceleration variable in zVariables={zvars}')\n\n    t_raw = cdf.varget(time_var)\n    acc_raw = cdf.varget(acc_var)\n\n    # Flatten to 1D where possible\n    t_raw = np.asarray(t_raw)\n    acc_raw = np.asarray(acc_raw)\n\n    # time should be 1D already\n    if t_raw.ndim != 1:\n        t_raw = t_raw.reshape(-1)\n\n    # acceleration may be (N,1) or (N,) \u2014 squeeze\n    acc = np.squeeze(acc_raw)\n    if acc.ndim != 1:\n        acc = acc.reshape(-1)\n\n    # Align lengths robustly (truncate to min)\n    n = min(len(t_raw), len(acc))\n    t_raw = t_raw[:n]\n    acc = acc[:n]\n\n    # Convert times\n    try:\n        t_dt = epochs.CDFepoch.to_datetime(t_raw)\n    except Exception:\n        try:\n            t_dt = epochs.CDFepoch.to_datetime(epochs.CDFepoch.convert_to_cdfepoch(t_raw))\n        except Exception:\n            t_dt = pd.to_datetime(t_raw, errors='coerce')\n\n    time = pd.to_datetime(t_dt, errors='coerce')\n\n    # Handle fill values for acceleration\n    try:\n        atts = cdf.varattsget(acc_var)\n    except Exception:\n        atts = {}\n\n    fill_keys = [k for k in ['FILLVAL', 'FillVal', '_FillValue', 'VALIDMIN', 'VALIDMAX'] if k in atts]\n    for k in ['FILLVAL', 'FillVal', '_FillValue']:\n        if k in atts:\n            fv = atts[k]\n            try:\n                fv = float(np.array(fv).reshape(-1)[0])\n                acc = np.where(acc == fv, np.nan, acc)\n            except Exception:\n                pass\n\n    # Common sentinels\n    for s in [1e30, -1e30, 1e31, -1e31, 9.99e30, -9.99e30, 99999, -99999]:\n        acc = np.where(acc == s, np.nan, acc)\n\n    df = pd.DataFrame({'time': time, 'accAlong': pd.to_numeric(acc, errors='coerce')})\n    df = df.dropna(subset=['time']).sort_values('time').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Swarm Alpha ACCACAL CDF SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf using cdflib.CDF; select zVariables time='time' (fallback: contains time/epoch/tt2000) and along-track acceleration='a_aa' (fallback: contains a_aa/acc); squeeze/reshape arrays to 1D, truncate both to common min length to avoid mismatch; convert CDF epoch to pandas datetime via cdflib.epochs.CDFepoch.to_datetime; map FillVal/_FillValue and common sentinel values (\u00b11e30, \u00b11e31, \u00b19.99e30, \u00b199999) to NaN; return sorted DataFrame columns [time, accAlong].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmAccInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import cdflib\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = cdflib.CDF(path)\n    info = cdf.cdf_info()\n\n    # cdflib returns a CDFInfo object; introspect via __dict__ and dir\n    d = {}\n    if hasattr(info, '__dict__'):\n        for k, v in info.__dict__.items():\n            try:\n                d[k] = str(v)\n            except Exception:\n                d[k] = repr(v)\n\n    rows = []\n    rows.append({'section': 'cdf_info_dir', 'key': 'dir', 'value': ','.join([x for x in dir(info) if not x.startswith('_')])})\n    for k, v in d.items():\n        rows.append({'section': 'cdf_info_dict', 'key': k, 'value': v[:2000]})\n\n    # try common attribute names for variable lists\n    for attr in ['rVariables', 'zVariables', 'rvariables', 'zvariables']:\n        if hasattr(info, attr):\n            val = getattr(info, attr)\n            rows.append({'section': 'cdf_info_attr', 'key': attr, 'value': str(val)[:4000]})\n\n    # also show cdf varget list, if possible\n    try:\n        rows.append({'section': 'cdf', 'key': 'cdf_info_raw', 'value': str(info)[:4000]})\n    except Exception:\n        pass\n\n    return pd.DataFrame(rows)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect Swarm ACCACAL CDF metadata using cdflib: capture cdf_info() object attributes/dir/__dict__ to determine how to list variable names (rVariables/zVariables) and diagnose loader AttributeError",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "prepareHourly",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omniKp, omniFlowPressure, swarmAcc) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    # Defensive: OMNI tables can arrive with int or str column names\n    def _rename_cols(df, mapping):\n        cols = list(df.columns)\n        # if columns are strings like '0','1',... map those too\n        mapping2 = mapping.copy()\n        mapping2.update({str(k): v for k, v in mapping.items()})\n        return df.rename(columns=mapping2)\n\n    # --- OMNI Kp ---\n    kp = _rename_cols(omniKp.copy(), {0: 'year', 1: 'doy', 2: 'hour', 3: 'kpRaw'})\n    if 'kpRaw' not in kp.columns:\n        raise KeyError(f\"kpRaw not found after rename; columns={list(kp.columns)}\")\n    kp['kp'] = pd.to_numeric(kp['kpRaw'], errors='coerce') / 10.0\n\n    # --- OMNI Flow/Pressure (assume col 3 is Pdyn) ---\n    fp = _rename_cols(omniFlowPressure.copy(), {0: 'year', 1: 'doy', 2: 'hour', 3: 'pdyn'})\n    if 'pdyn' not in fp.columns:\n        raise KeyError(f\"pdyn not found after rename; columns={list(fp.columns)}\")\n    fp['pdyn'] = pd.to_numeric(fp['pdyn'], errors='coerce')\n\n    def omni_time(df):\n        year = pd.to_numeric(df['year'], errors='coerce').astype('Int64')\n        doy = pd.to_numeric(df['doy'], errors='coerce').astype('Int64')\n        hour = pd.to_numeric(df['hour'], errors='coerce')\n        base = pd.to_datetime(year.astype(str) + '-01-01', utc=True, errors='coerce')\n        return base + pd.to_timedelta(doy - 1, unit='D') + pd.to_timedelta(hour, unit='h')\n\n    kp['time'] = omni_time(kp)\n    fp['time'] = omni_time(fp)\n\n    omni = kp[['time', 'kp']].merge(fp[['time', 'pdyn']], on='time', how='inner').sort_values('time')\n\n    # --- Swarm hourly mean ---\n    sw = swarmAcc.copy()\n    sw['time'] = pd.to_datetime(sw['time'], utc=True, errors='coerce')\n    sw['accAlong'] = pd.to_numeric(sw['accAlong'], errors='coerce')\n    sw = sw.dropna(subset=['time'])\n\n    # Hourly mean (will ignore NaNs)\n    sw_hourly = (\n        sw.set_index('time')\n          .sort_index()\n          .resample('1h')\n          .mean(numeric_only=True)\n          .reset_index()\n    )\n\n    df = omni.merge(sw_hourly, on='time', how='left')\n\n    # 3-hour ahead target: value at t+3h\n    df = df.sort_values('time')\n    df['accLead3h'] = df['accAlong'].shift(-3)\n\n    # Keep only May 11, 2024 (UTC) hours\n    start = pd.Timestamp('2024-05-11T00:00:00Z')\n    end = pd.Timestamp('2024-05-12T00:00:00Z')\n    df = df[(df['time'] >= start) & (df['time'] < end)]\n\n    # Drop rows missing predictors or target\n    df = df.dropna(subset=['kp', 'pdyn', 'accLead3h'])\n\n    return df[['time', 'kp', 'pdyn', 'accAlong', 'accLead3h']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Prepare aligned hourly modeling dataset for May 11, 2024 (UTC). Robustly rename OMNI numeric columns whether they are int {0..3} or string {'0'..'3'}: Kp\u2192[year,doy,hour,kpRaw] then kp=kpRaw/10; Flow/Pressure\u2192[year,doy,hour,pdyn] (assume column 3 is Pdyn). Construct hourly UTC timestamps from (year,doy,hour), inner-merge OMNI kp+pydn on time. Parse Swarm time as UTC datetime, accAlong numeric; resample to hourly mean accAlong; left-join to OMNI hours. Create 3-hour-ahead target accLead3h by shifting accAlong by -3 hours; filter to [2024-05-11, 2024-05-12) and drop rows missing {kp,pdyn,accLead3h}. Output columns [time,kp,pdyn,accAlong,accLead3h].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "rmseModels",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(prepareHourly) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    df = prepareHourly.copy()\n    if df is None or len(df) == 0:\n        raise ValueError('prepareHourly produced 0 rows; cannot train/test models.')\n\n    df = df.sort_values('time').reset_index(drop=True)\n    n = len(df)\n    split = int(np.floor(0.8 * n))\n    split = max(1, min(split, n - 1))\n    train = df.iloc[:split].copy()\n    test = df.iloc[split:].copy()\n\n    def fit_and_rmse(xcol: str) -> float:\n        tr = train[[xcol, 'accLead3h']].dropna()\n        te = test[[xcol, 'accLead3h']].dropna()\n        if len(tr) < 2 or len(te) < 1:\n            return np.nan\n        x = tr[xcol].to_numpy(dtype=float)\n        y = tr['accLead3h'].to_numpy(dtype=float)\n        # OLS with intercept\n        X = np.column_stack([np.ones(len(x)), x])\n        beta, *_ = np.linalg.lstsq(X, y, rcond=None)\n        te_x = te[xcol].to_numpy(dtype=float)\n        te_y = te['accLead3h'].to_numpy(dtype=float)\n        te_X = np.column_stack([np.ones(len(te_x)), te_x])\n        yhat = te_X @ beta\n        rmse = float(np.sqrt(np.mean((te_y - yhat) ** 2)))\n        return rmse\n\n    rmse_kp = fit_and_rmse('kp')\n    rmse_pdyn = fit_and_rmse('pdyn')\n\n    return pd.DataFrame([{\n        'rmseKp': rmse_kp,\n        'rmsePdyn': rmse_pdyn,\n        'nTotal': n,\n        'nTrain': len(train),\n        'nTest': len(test)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Train/test evaluation of two single-variable OLS linear regression models forecasting 3-hour-ahead Swarm hourly along-track acceleration (accLead3h) from prepareHourly. Steps: sort by time; chronological 80/20 split; for each predictor {kp, pdyn} fit y=\u03b20+\u03b21*x on train (dropna), predict on test, compute RMSE = sqrt(mean((y\u2212yhat)^2)). Return rmseKp, rmsePdyn plus nTotal/nTrain/nTest.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "omniFlowPressure": {
+        "x": 100,
+        "y": 220
+      },
+      "omniKp": {
+        "x": 100,
+        "y": 40
+      },
+      "swarmAcc": {
+        "x": 100,
+        "y": 400
+      },
+      "swarmAccInspect": {
+        "x": 100,
+        "y": 580
+      },
+      "prepareHourly": {
+        "x": 400,
+        "y": 220
+      },
+      "rmseModels": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "prepareHourly-->rmseModels",
+        "source": {
+          "operatorID": "prepareHourly",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "rmseModels",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omniKp-->prepareHourly",
+        "source": {
+          "operatorID": "omniKp",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prepareHourly",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omniFlowPressure-->prepareHourly",
+        "source": {
+          "operatorID": "omniFlowPressure",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prepareHourly",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "swarmAcc-->prepareHourly",
+        "source": {
+          "operatorID": "swarmAcc",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prepareHourly",
+          "portID": "input-2"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

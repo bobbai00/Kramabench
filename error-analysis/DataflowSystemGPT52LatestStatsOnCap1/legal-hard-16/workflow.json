@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-44-6-1779100188934",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadStateMsaIdentityTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files matching pattern \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\" via glob; read each with pd.read_csv (comma delimiter, header=0); concatenate into one DataFrame; add provenance column __source_file with basename",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanStateMsaIdentityTheft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadStateMsaIdentityTheft) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadStateMsaIdentityTheft.copy()\n\n    # Rename columns to stable names\n    df = df.rename(\n        columns={\n            \"Metropolitan Areas: Identity Theft Reports\": \"metro_area\",\n            \"Unnamed: 1\": \"reports\",\n        }\n    )\n\n    # Drop obvious non-data rows\n    df = df.dropna(subset=[\"metro_area\"], how=\"any\")\n    df = df[~df[\"metro_area\"].astype(str).str.strip().isin([\n        \"Metropolitan Area\",\n    ])]\n    df = df[~df[\"metro_area\"].astype(str).str.startswith(\"Source:\")]\n\n    # Parse state from filename (e.g., 'Alabama.csv' -> 'Alabama')\n    df[\"state\"] = df[\"__source_file\"].str.replace(\".csv\", \"\", regex=False)\n\n    # Clean reports to numeric\n    df[\"reports\"] = (\n        df[\"reports\"]\n        .astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.strip()\n    )\n    df[\"reports\"] = pd.to_numeric(df[\"reports\"], errors=\"coerce\")\n\n    # Keep only valid metro rows\n    df = df.dropna(subset=[\"reports\"])\n\n    # Keep relevant columns\n    df = df[[\"state\", \"metro_area\", \"reports\"]].reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean concatenated State MSA identity theft tables from loadStateMsaIdentityTheft: rename columns to [metro_area, reports]; drop header/blank/source rows (metro_area is null, equals 'Metropolitan Area', or startswith 'Source:'); derive state name from __source_file basename (strip .csv); coerce reports to numeric (strip commas, to_numeric errors->NaN) and drop non-numeric; output columns [state, metro_area, reports]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "stateConcentration",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanStateMsaIdentityTheft) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    df = cleanStateMsaIdentityTheft.copy()\n\n    # Keep only states with at least 2 metropolitan areas\n    stateCounts = df.groupby('state')['metro_area'].nunique().reset_index(name='n_metros')\n    eligibleStates = stateCounts[stateCounts['n_metros'] >= 2][['state']]\n    df = df.merge(eligibleStates, on='state', how='inner')\n\n    # For each state, compute concentration = max(metro reports) / total reports across metros in that state\n    stateAgg = (\n        df.groupby('state')\n          .agg(total_reports=('reports', 'sum'), max_metro_reports=('reports', 'max'))\n          .reset_index()\n    )\n    stateAgg['concentration'] = stateAgg['max_metro_reports'] / stateAgg['total_reports']\n\n    # Pick the state with highest concentration\n    out = stateAgg.sort_values(['concentration', 'max_metro_reports'], ascending=[False, False]).head(1)\n    return out[['state', 'concentration', 'max_metro_reports', 'total_reports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For each state in cleanStateMsaIdentityTheft: require at least 2 distinct metro_area entries (groupby state nunique metro_area >= 2); compute total_reports=sum(reports) and max_metro_reports=max(reports); derive concentration = max_metro_reports/total_reports; return the single state with highest concentration (ties broken by higher max_metro_reports) along with concentration diagnostics",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadStateMsaIdentityTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanStateMsaIdentityTheft": {
+        "x": 400,
+        "y": 40
+      },
+      "stateConcentration": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadStateMsaIdentityTheft-->cleanStateMsaIdentityTheft",
+        "source": {
+          "operatorID": "loadStateMsaIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanStateMsaIdentityTheft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanStateMsaIdentityTheft-->stateConcentration",
+        "source": {
+          "operatorID": "cleanStateMsaIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateConcentration",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

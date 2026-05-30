@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-90-11-1779140167363",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudByMilitaryConsumers2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv\"\n    # Row 0 is blank; row 1 contains the true header.\n    return pd.read_csv(path, header=1)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv via pd.read_csv with header=1 (row 0 is blank; row 1 contains the true column headers, including 'Military Status' and 'Median Fraud Loss')",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "militaryBranchMaxMedianFraudLoss2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudByMilitaryConsumers2024):\n    import pandas as pd\n    import re\n\n    df = fraudByMilitaryConsumers2024.copy()\n\n    # Promote first row to header\n    df.columns = df.iloc[0].tolist()\n    df = df.iloc[1:].reset_index(drop=True)\n\n    # Keep only rows where Military Status is populated\n    df['Military Status'] = df['Military Status'].astype(str).str.strip()\n\n    # Candidate branch labels as they appear in this table\n    branch_labels = [\n        'U.S. Army', 'U.S. Navy', 'U.S. Air Force', 'U.S. Marines', 'U.S. Coast Guard', 'U.S. Space Force'\n    ]\n    branches = df[df['Military Status'].isin(branch_labels)].copy()\n\n    def parse_money(x):\n        if x is None or (isinstance(x, float) and pd.isna(x)):\n            return pd.NA\n        s = str(x).strip()\n        if s == '' or s.lower() == 'none' or s.lower() == 'nan':\n            return pd.NA\n        s = re.sub(r'[^0-9,\\.\\-]', '', s)  # keep digits, comma, dot, minus\n        s = s.replace(',', '')\n        if s in ('', '-', '.', '-.'):\n            return pd.NA\n        try:\n            return float(s)\n        except Exception:\n            return pd.NA\n\n    branches['Median Fraud Loss (num)'] = branches['Median Fraud Loss'].apply(parse_money)\n    branchesValid = branches.dropna(subset=['Median Fraud Loss (num)']).copy()\n\n    if branchesValid.empty:\n        # Diagnostics\n        out = pd.DataFrame([{\n            'error': 'No branch rows with numeric Median Fraud Loss after parsing',\n            'branchRows': '; '.join(branches['Military Status'].astype(str).tolist()) if not branches.empty else '(no rows matched branch labels)',\n            'medianValues': '; '.join(branches['Median Fraud Loss'].astype(str).tolist()) if not branches.empty else '(no rows matched branch labels)'\n        }])\n        return out\n\n    maxRow = branchesValid.sort_values('Median Fraud Loss (num)', ascending=False).head(1)\n    return maxRow[['Military Status', 'Median Fraud Loss', 'Median Fraud Loss (num)']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Promote first row to header and drop it; filter to the military branch rows where 'Military Status' is exactly one of ['U.S. Army','U.S. Navy','U.S. Air Force','U.S. Marines','U.S. Coast Guard','U.S. Space Force']; parse 'Median Fraud Loss' currency strings to numeric by stripping non-numeric chars and removing commas; return the branch row with the maximum numeric median fraud loss (columns: Military Status, Median Fraud Loss, Median Fraud Loss (num)); if no valid rows, return diagnostics (matched branch rows + their raw median values).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudByMilitaryConsumers2024": {
+        "x": 100,
+        "y": 40
+      },
+      "militaryBranchMaxMedianFraudLoss2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudByMilitaryConsumers2024-->militaryBranchMaxMedianFraudLoss2024",
+        "source": {
+          "operatorID": "fraudByMilitaryConsumers2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "militaryBranchMaxMedianFraudLoss2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

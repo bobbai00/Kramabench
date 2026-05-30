@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-634-5-1779125497251",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fireWeather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Fire_Weather_Data_2002-2014_2016.csv via pd.read_csv from data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv (defaults: comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fatalitiesHumidityDiff",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fireWeather) -> pd.DataFrame:\n    import pandas as pd\n\n    df = fireWeather.copy()\n\n    # Overall average fatalities per record/day\n    overall_avg = df['fatalities_last'].mean()\n\n    low_hum_avg = df.loc[df['avrh_mean'] < 30, 'fatalities_last'].mean()\n\n    diff = low_hum_avg - overall_avg\n\n    return pd.DataFrame([\n        {\n            'overall_avg_fatalities': overall_avg,\n            'lowHumidity_avg_fatalities': low_hum_avg,\n            'diff_lowMinusOverall': diff,\n            'diff_rounded_4dp': round(diff, 4),\n            'n_total': len(df),\n            'n_lowHumidity': int((df['avrh_mean'] < 30).sum()),\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute overall mean of fatalities_last across all records; compute mean fatalities_last for subset with avrh_mean (average relative humidity) < 30%; calculate difference (low-humidity mean minus overall mean) and round to 4 decimals; also return counts of total records and low-humidity records for context",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fireWeather": {
+        "x": 100,
+        "y": 40
+      },
+      "fatalitiesHumidityDiff": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fireWeather-->fatalitiesHumidityDiff",
+        "source": {
+          "operatorID": "fireWeather",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fatalitiesHumidityDiff",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

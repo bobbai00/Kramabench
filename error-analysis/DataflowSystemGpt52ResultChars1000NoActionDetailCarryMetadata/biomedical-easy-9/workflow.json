@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_xlsx",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    xl = pd.ExcelFile(path)\n    sheets = xl.sheet_names\n    rows = []\n    for sh in sheets:\n        df = xl.parse(sh)\n        rows.append({\n            'sheet': sh,\n            'nrows': df.shape[0],\n            'ncols': df.shape[1],\n            'columns': list(df.columns)[:20]\n        })\n    return pd.DataFrame(rows)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect workbook sheets in data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx and report shapes/column names preview for each sheet.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "load_F_SS_phospho",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    return pd.read_excel(path, sheet_name='F-SS-phospho')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full sheet 'F-SS-phospho' from data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx (contains Gene and FDR columns).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "cbx3_fdr_diff",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(load_F_SS_phospho):\n    import pandas as pd\n    df = load_F_SS_phospho.copy()\n\n    # Ensure numeric\n    for col in [\"FDR.phos\", \"FDR.prot\"]:\n        if col in df.columns:\n            df[col] = pd.to_numeric(df[col], errors='coerce')\n\n    # Use phospho FDR as the primary 'FDR' since it's explicitly present; fall back to prot if needed\n    fdr_col = \"FDR.phos\" if \"FDR.phos\" in df.columns else \"FDR.prot\"\n    d = df[[\"Gene\", fdr_col]].rename(columns={fdr_col: \"FDR\"})\n\n    cbx3 = d.loc[d[\"Gene\"].astype(str).str.upper().eq(\"CBX3\"), \"FDR\"].dropna()\n    rest = d.loc[~d[\"Gene\"].astype(str).str.upper().eq(\"CBX3\"), \"FDR\"].dropna()\n\n    out = pd.DataFrame([\n        {\n            \"fdr_column_used\": fdr_col,\n            \"cbx3_n\": int(cbx3.shape[0]),\n            \"rest_n\": int(rest.shape[0]),\n            \"cbx3_mean_fdr\": float(cbx3.mean()) if cbx3.shape[0] else float('nan'),\n            \"rest_mean_fdr\": float(rest.mean()) if rest.shape[0] else float('nan'),\n            \"difference_cbx3_minus_rest\": float(cbx3.mean() - rest.mean()) if cbx3.shape[0] else float('nan')\n        }\n    ])\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute mean FDR for CBX3 vs all other genes in F-SS-phospho sheet using FDR.phos (primary), and report difference (CBX3 - rest) along with counts.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_xlsx": {
+      "x": 100,
+      "y": 40
+    },
+    "load_F_SS_phospho": {
+      "x": 100,
+      "y": 220
+    },
+    "cbx3_fdr_diff": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "load_F_SS_phospho-->cbx3_fdr_diff",
+      "source": {
+        "operatorID": "load_F_SS_phospho",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "cbx3_fdr_diff",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

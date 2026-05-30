@@ -1,0 +1,126 @@
+{
+  "operators": [
+    {
+      "operatorID": "sunspots",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    # File is semicolon-separated with no header in the provided load; parse explicitly.\n    # Columns per SILSO SN_y_tot_V2.0: year (decimal .5), mean, std, n_obs, definitive\n    path = 'data/astronomy/input/SILSO/SN_y_tot_V2.0.csv'\n    df = pd.read_csv(path, sep=';', header=None, engine='python')\n    # Trim whitespace and coerce\n    df = df.apply(lambda c: c.astype(str).str.strip())\n    df = df.replace({'': None})\n    df.columns = ['year_dec', 'sn_mean', 'sn_std', 'n_obs', 'definitive']\n    for col in ['year_dec','sn_mean','sn_std','n_obs','definitive']:\n        df[col] = pd.to_numeric(df[col], errors='coerce')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Reload data/astronomy/input/SILSO/SN_y_tot_V2.0.csv as semicolon-separated with columns year_dec, sn_mean, sn_std, n_obs, definitive; strip whitespace and convert to numeric.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sunspots_1960_2020",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\nimport numpy as np\n\ndef process(sunspots) -> pd.DataFrame:\n    df = sunspots.copy()\n    # year is centered at .5 in this file (e.g., 1960.5). Convert to integer year label.\n    df['year'] = np.floor(df['year_dec']).astype(int)\n    df = df[(df['year'] >= 1960) & (df['year'] <= 2020)].copy()\n    df = df[['year','sn_mean']].sort_values('year').reset_index(drop=True)\n    return df\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter yearly mean sunspot numbers to years 1960\u20132020 inclusive; convert year_dec to integer year; keep columns year and sn_mean.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "peaks_troughs",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sunspots_1960_2020):\n    import numpy as np\n    import pandas as pd\n    from scipy.signal import find_peaks\n\n    df = sunspots_1960_2020.sort_values('year').reset_index(drop=True)\n    years = df['year'].to_numpy()\n    y = df['sn_mean'].to_numpy(dtype=float)\n\n    # maxima\n    pk_idx, pk_props = find_peaks(y, prominence=20, distance=5)\n    peaks = pd.DataFrame({\n        'year': years[pk_idx],\n        'sn_mean': y[pk_idx],\n        'prominence': pk_props.get('prominences', np.nan)\n    }).sort_values('year')\n\n    # minima: peaks in the inverted series\n    tr_idx, tr_props = find_peaks(-y, prominence=20, distance=5)\n    troughs = pd.DataFrame({\n        'year': years[tr_idx],\n        'sn_mean': y[tr_idx],\n        'prominence': tr_props.get('prominences', np.nan)\n    }).sort_values('year')\n\n    # compute average cycle length using successive maxima (fallback to minima if needed)\n    if len(peaks) >= 2:\n        diffs = np.diff(peaks['year'].to_numpy())\n    elif len(troughs) >= 2:\n        diffs = np.diff(troughs['year'].to_numpy())\n    else:\n        diffs = np.array([])\n\n    avg_period = float(np.mean(diffs)) if diffs.size else np.nan\n\n    # take top 5 by sunspot number for peaks and bottom 5 for troughs, but keep chronological order\n    top5_peaks = peaks.sort_values('sn_mean', ascending=False).head(5).sort_values('year')\n    top5_troughs = troughs.sort_values('sn_mean', ascending=True).head(5).sort_values('year')\n\n    # single output table for easy downstream use\n    out = pd.concat([\n        top5_peaks.assign(kind='maximum'),\n        top5_troughs.assign(kind='minimum')\n    ], ignore_index=True).sort_values(['kind','year'])\n\n    out.attrs['avg_period_years'] = avg_period\n    out.attrs['n_maxima'] = int(len(peaks))\n    out.attrs['n_minima'] = int(len(troughs))\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Identify local maxima/minima in yearly mean sunspot numbers (1960\u20132020) using scipy.signal.find_peaks with prominence=20 and distance=5; compute average cycle period from successive maxima (fallback to minima); return top 5 maxima (largest sn_mean) and top 5 minima (smallest sn_mean) with year, sn_mean, prominence, and kind.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sunspots": {
+      "x": 100,
+      "y": 40
+    },
+    "sunspots_1960_2020": {
+      "x": 430,
+      "y": 40
+    },
+    "peaks_troughs": {
+      "x": 760,
+      "y": 40
+    }
+  },
+  "links": [
+    {
+      "linkID": "sunspots-->sunspots_1960_2020",
+      "source": {
+        "operatorID": "sunspots",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sunspots_1960_2020",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sunspots_1960_2020-->peaks_troughs",
+      "source": {
+        "operatorID": "sunspots_1960_2020",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "peaks_troughs",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

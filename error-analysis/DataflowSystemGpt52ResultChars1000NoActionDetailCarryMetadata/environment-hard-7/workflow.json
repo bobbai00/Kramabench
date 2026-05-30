@@ -1,0 +1,310 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_water",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2023.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows of data/environment/input/water-body-testing-2023.csv to inspect schema and data quality",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_ej",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    df = pd.read_csv('data/environment/input/environmental-justice-populations.csv')\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows of data/environment/input/environmental-justice-populations.csv to inspect schema and EJ population fields",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "water",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/water-body-testing-2023.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2023 water body testing data from data/environment/input/water-body-testing-2023.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "ej",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/environmental-justice-populations.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full environmental justice populations data from data/environment/input/environmental-justice-populations.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "marine",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(water) -> pd.DataFrame:\n    import pandas as pd\n    df = water.copy()\n\n    # Keep marine beach samples\n    df = df[df['Beach Type Description'].astype(str).str.strip().str.lower().eq('marine')]\n\n    # Standardize community name for joining\n    df['Community'] = df['Community'].astype(str).str.strip()\n\n    # Violation to boolean exceedance\n    v = df['Violation'].astype(str).str.strip().str.lower()\n    df['exceed'] = v.isin(['yes', 'y', 'true', '1'])\n\n    # Parse sample date\n    df['Sample Date'] = pd.to_datetime(df['Sample Date'], errors='coerce')\n\n    return df[['Community Code','Community','County Description','Year','Sample Date','Beach Name','Organism','Indicator Level','Violation','exceed']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter water to 2023 marine beach samples; standardize Community; parse Sample Date; create boolean exceed from Violation",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "ej_groups",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(ej):\n    import pandas as pd\n    df = ej.copy()\n    # Standardize municipality name to match water Community\n    df['Community'] = (df['Municipality'].astype(str)\n                       .str.strip())\n    # Ensure percent column is numeric\n    pct_col = 'Percent of population in EJ BGs'\n    df[pct_col] = pd.to_numeric(df[pct_col], errors='coerce')\n\n    df['ej_group'] = pd.NA\n    df.loc[df[pct_col] > 50, 'ej_group'] = '>50%'\n    df.loc[df[pct_col] < 25, 'ej_group'] = '<25%'\n\n    return df[['Community', pct_col, 'ej_group']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Create EJ grouping per municipality using Percent of population in EJ BGs: >50% vs <25%; standardize Community name for joining",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "marine_ej_join",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(marine, ej_groups) -> pd.DataFrame:\n    import pandas as pd\n\n    m = marine.copy()\n    e = ej_groups.copy()\n\n    # ensure same casing/whitespace\n    m['Community'] = m['Community'].astype(str).str.strip()\n    e['Community'] = e['Community'].astype(str).str.strip()\n\n    out = m.merge(e[['Community', 'ej_group']], on='Community', how='left')\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Left join marine samples to EJ groups on standardized Community to assign ej_group to each marine sample",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "exceedance_rates",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(marine_ej_join):\n    import pandas as pd\n\n    df = marine_ej_join.copy()\n    # keep only samples with defined EJ group\n    df = df[df['ej_group'].isin(['>50%', '<25%'])].copy()\n\n    rates = (\n        df.groupby('ej_group')\n          .agg(n_samples=('exceed', 'size'), n_exceed=('exceed', 'sum'))\n          .reset_index()\n    )\n    rates['exceedance_rate_pct'] = rates['n_exceed'] / rates['n_samples'] * 100\n\n    # compute difference: (>50%) - (<25%)\n    pivot = rates.set_index('ej_group')['exceedance_rate_pct']\n    diff = float(pivot.get('>50%', 0.0) - pivot.get('<25%', 0.0))\n\n    out = rates.copy()\n    out['difference_pct_points_(>50_minus_<25)'] = diff\n    return out.sort_values('ej_group')\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute bacterial exceedance rate (% of marine samples with exceed==True) for EJ communities >50% vs <25% and include the percent-point difference (>50% minus <25%).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_water": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_ej": {
+      "x": 100,
+      "y": 220
+    },
+    "water": {
+      "x": 100,
+      "y": 400
+    },
+    "ej": {
+      "x": 100,
+      "y": 580
+    },
+    "marine": {
+      "x": 430,
+      "y": 400
+    },
+    "ej_groups": {
+      "x": 430,
+      "y": 580
+    },
+    "marine_ej_join": {
+      "x": 760,
+      "y": 490
+    },
+    "exceedance_rates": {
+      "x": 1090,
+      "y": 490
+    }
+  },
+  "links": [
+    {
+      "linkID": "water-->marine",
+      "source": {
+        "operatorID": "water",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "marine",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "ej-->ej_groups",
+      "source": {
+        "operatorID": "ej",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "ej_groups",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "marine-->marine_ej_join",
+      "source": {
+        "operatorID": "marine",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "marine_ej_join",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "ej_groups-->marine_ej_join",
+      "source": {
+        "operatorID": "ej_groups",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "marine_ej_join",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "marine_ej_join-->exceedance_rates",
+      "source": {
+        "operatorID": "marine_ej_join",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "exceedance_rates",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_xlsx",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xl = pd.ExcelFile(path)\n    sheets = xl.sheet_names\n    # sample first 5 rows from each sheet\n    out = []\n    for sh in sheets:\n        df = xl.parse(sh)\n        out.append(pd.DataFrame({\n            'sheet': [sh],\n            'nrows': [df.shape[0]],\n            'ncols': [df.shape[1]],\n            'columns': [', '.join(map(str, df.columns.tolist()[:50]))]\n        }))\n    return pd.concat(out, ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect the Excel workbook: list sheets and basic schema (rows/cols/column names) for each sheet in data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "meta_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    return pd.read_excel(path, sheet_name='UCEC_CPTAC3_meta_table_V2.1')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full metadata sheet UCEC_CPTAC3_meta_table_V2.1 from the Excel file data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "age_over70",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(meta_full) -> pd.DataFrame:\n    import pandas as pd\n\n    df = meta_full.copy()\n\n    # Coerce Age to numeric\n    df['Age_num'] = pd.to_numeric(df['Age'], errors='coerce')\n\n    # Keep only patients above 70\n    df = df[df['Age_num'] > 70]\n\n    # Standardize FIGO_stage for counting\n    figo = df['FIGO_stage']\n    figo = figo.astype('string').str.strip()\n    figo = figo.replace({'': pd.NA, 'NA': pd.NA, 'NaN': pd.NA, 'nan': pd.NA})\n    df = df.assign(FIGO_stage_clean=figo)\n\n    return df[['Proteomics_Participant_ID', 'Age_num', 'FIGO_stage_clean', 'Histologic_Grade_FIGO']]"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter meta_full to patients with Age > 70 (numeric coercion) and keep clean FIGO_stage (trimmed) for downstream counting; output participant id, age, FIGO stage, and histologic grade",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "figo_counts_over70",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(age_over70):\n    import pandas as pd\n    s = age_over70['FIGO_stage_clean'].astype(str).str.strip()\n    s = s.replace({'nan': pd.NA, 'None': pd.NA, '': pd.NA})\n    counts = s.value_counts(dropna=True).rename_axis('FIGO_stage').reset_index(name='n')\n    counts['pct'] = counts['n'] / counts['n'].sum()\n    return counts"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Count FIGO_stage frequencies among patients with Age > 70 (excluding missing), and compute proportions",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_xlsx": {
+      "x": 100,
+      "y": 40
+    },
+    "meta_full": {
+      "x": 100,
+      "y": 220
+    },
+    "age_over70": {
+      "x": 430,
+      "y": 220
+    },
+    "figo_counts_over70": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "meta_full-->age_over70",
+      "source": {
+        "operatorID": "meta_full",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "age_over70",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "age_over70-->figo_counts_over70",
+      "source": {
+        "operatorID": "age_over70",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "figo_counts_over70",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

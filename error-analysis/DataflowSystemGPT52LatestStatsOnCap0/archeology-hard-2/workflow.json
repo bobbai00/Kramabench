@@ -1,0 +1,136 @@
+{
+  "headId": "step-agent-458-8-1779120144657",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "climateMeasurements",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/archeology/input/climateMeasurements.xlsx\"\n    # The sheet has a multi-row preamble; the actual header row begins with 'Site'\n    # in the first column (observed in raw inspection).\n    df = pd.read_excel(path, header=2, dtype=str)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx via pd.read_excel with header=2 (skip 2-row preamble so header row starts at the row beginning with 'Site'); dtype=str to preserve mixed-type cells",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "radiocarbonRegional",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/radiocarbon_database_regional.xlsx'\n    # Load all cells as strings to avoid schema/type mismatch; not required for wet-dry index task\n    return pd.read_excel(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load radiocarbon_database_regional.xlsx via pd.read_excel with dtype=str (force all columns to string to avoid schema/type mismatch); default first sheet, header=0",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectClimateRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/archeology/input/climateMeasurements.xlsx\"\n    # Raw peek to locate the real header row / relevant columns\n    df = pd.read_excel(path, header=None, dtype=str, nrows=40)\n    df.columns = [f\"c{i}\" for i in range(df.shape[1])]\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect climateMeasurements.xlsx (first 40 rows) with header=None and dtype=str to identify the actual header row and the column(s) for year/age and wet-dry index",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wetDryIncreasingPercent",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climateMeasurements):\n    import pandas as pd\n    import numpy as np\n\n    df = climateMeasurements.copy()\n\n    # Drop preamble rows that got read as data (they have 'Site' in first col)\n    first_col = df.columns[0]\n    df = df[df[first_col].notna() & (~df[first_col].astype(str).str.strip().eq('Site'))]\n\n    # Identify numeric columns (after coercion) and pick a plausible wet-dry index column.\n    # Wet-dry index should have both positive and negative values; choose the numeric column\n    # with the largest fraction of negative values.\n    num = df.apply(lambda s: pd.to_numeric(s, errors='coerce'))\n\n    neg_frac = (num < 0).sum(axis=0) / num.notna().sum(axis=0)\n    # Require at least 1000 non-null to avoid tiny columns\n    valid = num.notna().sum(axis=0) >= 1000\n    neg_frac = neg_frac[valid]\n    wetdry_col = neg_frac.sort_values(ascending=False).index[0]\n\n    # Identify an age/year column: choose numeric column with the widest range.\n    rng = (num.max(axis=0) - num.min(axis=0))\n    rng = rng[valid]\n    age_col = rng.sort_values(ascending=False).index[0]\n\n    tmp = pd.DataFrame({\n        'age': num[age_col],\n        'wetDryIndex': num[wetdry_col]\n    }).dropna()\n\n    # Convert to integer 'years' by rounding age to nearest whole year.\n    tmp['year'] = tmp['age'].round().astype('int64')\n\n    # Aggregate if multiple measurements per year\n    per_year = tmp.groupby('year', as_index=False)['wetDryIndex'].mean().sort_values('year')\n\n    # Compute year-over-year change\n    per_year['delta'] = per_year['wetDryIndex'].diff()\n    increasing = (per_year['delta'] > 0).sum()\n    total = per_year['delta'].notna().sum()\n\n    pct = (increasing / total) * 100 if total else np.nan\n    return pd.DataFrame([{\n        'wetDryIndexColumn': str(wetdry_col),\n        'ageColumn': str(age_col),\n        'nYears': int(per_year.shape[0]),\n        'nTransitions': int(total),\n        'nIncreasing': int(increasing),\n        'percentIncreasing': float(pct)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute percent of year-to-year transitions where wet-dry index increases: from climateMeasurements, coerce all columns to numeric; drop rows where first column equals 'Site'; select wet-dry index column as numeric column (>=1000 non-null) with highest fraction of negative values; select age/year column as numeric column (>=1000 non-null) with widest range; round age to integer year, average wetDryIndex per year, sort by year, compute diff and percent of deltas > 0; output chosen column names and percentIncreasing.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "climateMeasurements": {
+        "x": 100,
+        "y": 40
+      },
+      "radiocarbonRegional": {
+        "x": 100,
+        "y": 220
+      },
+      "inspectClimateRaw": {
+        "x": 100,
+        "y": 400
+      },
+      "wetDryIncreasingPercent": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "climateMeasurements-->wetDryIncreasingPercent",
+        "source": {
+          "operatorID": "climateMeasurements",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "wetDryIncreasingPercent",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

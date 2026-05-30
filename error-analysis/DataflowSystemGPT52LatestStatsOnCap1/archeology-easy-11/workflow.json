@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-469-5-1779120431075",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "worldcities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv using pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8 encoding inference).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "capitalLatAvg",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(worldcities) -> pd.DataFrame:\n    import pandas as pd\n\n    df = worldcities.copy()\n\n    # Consider any row marked as a capital (primary/admin/minor) as a capital city.\n    capitals = df[df['capital'].notna()].copy()\n\n    # Ensure population is numeric; treat missing as 0 for tie-breaking.\n    capitals['population'] = pd.to_numeric(capitals['population'], errors='coerce').fillna(0)\n\n    # For each country, keep the capital with the largest population\n    # (if multiple capitals exist, pick the max-population one).\n    capitals = capitals.sort_values(['country', 'population'], ascending=[True, False])\n    topCapitals = capitals.drop_duplicates(subset=['country'], keep='first')\n\n    avgLat = topCapitals['lat'].mean()\n\n    return pd.DataFrame([{'avg_latitude': round(float(avgLat), 4)}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter worldcities to rows where capital is not null (includes 'primary', 'admin', 'minor'); coerce population to numeric (missing->0); within each country select the capital city with maximum population (sort by [country asc, population desc] then drop_duplicates on country); compute mean of lat across selected capitals and return single-row DataFrame with avg_latitude rounded to 4 decimals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "worldcities": {
+        "x": 100,
+        "y": 40
+      },
+      "capitalLatAvg": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "worldcities-->capitalLatAvg",
+        "source": {
+          "operatorID": "worldcities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "capitalLatAvg",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

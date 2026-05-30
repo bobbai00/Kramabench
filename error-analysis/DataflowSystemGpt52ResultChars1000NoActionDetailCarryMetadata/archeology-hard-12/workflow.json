@@ -1,0 +1,197 @@
+{
+  "operators": [
+    {
+      "operatorID": "conflict",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/archeology/input/conflict_brecke.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load conflict dataset from data/archeology/input/conflict_brecke.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load city-to-country reference from data/archeology/input/worldcities.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "conflicts_800_1400_ge1y",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(conflict) -> pd.DataFrame:\n    import pandas as pd\n    df = conflict.copy()\n    # coerce years\n    df['StartYear'] = pd.to_numeric(df['StartYear'], errors='coerce')\n    df['EndYear'] = pd.to_numeric(df['EndYear'], errors='coerce')\n    df = df.dropna(subset=['StartYear','EndYear'])\n    df['StartYear'] = df['StartYear'].astype(int)\n    df['EndYear'] = df['EndYear'].astype(int)\n\n    # filter to 800-1400 inclusive (both endpoints within range)\n    df = df[(df['StartYear'] >= 800) & (df['EndYear'] <= 1400)]\n\n    # duration at least 1 year: treat as inclusive years => (EndYear - StartYear) >= 1\n    df = df[(df['EndYear'] - df['StartYear']) >= 1]\n\n    # require two actors: conflict string contains '-' between actors; exclude parenthetical-only dashes via simple contains\n    df = df[df['Conflict'].astype(str).str.contains('-', regex=False)]\n\n    return df[['Conflict','StartYear','EndYear']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Recompute filter: coerce StartYear/EndYear to int; keep conflicts with StartYear>=800 and EndYear<=1400, duration (EndYear-StartYear)>=1, and Conflict contains '-' indicating two actors; output Conflict, StartYear, EndYear.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "count_conflicts",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(conflicts_800_1400_ge1y):\n    # Each row in the Brecke conflict dataset is a unique conflict instance.\n    # The filtering operator already enforced StartYear/EndYear within 800-1400 and duration >= 1 year.\n    return conflicts_800_1400_ge1y[['Conflict']].assign(n=1)[['n']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Create a 1-per-row table to count conflicts after applying 800\u20131400 and duration>=1y filter",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "count_total",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(conflicts_800_1400_ge1y):\n    import pandas as pd\n    return pd.DataFrame({'count':[len(conflicts_800_1400_ge1y)]})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Count number of conflicts in 800\u20131400 inclusive with duration>=1 year by taking row count",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "conflict": {
+      "x": 100,
+      "y": 130
+    },
+    "worldcities": {
+      "x": 100,
+      "y": 310
+    },
+    "conflicts_800_1400_ge1y": {
+      "x": 430,
+      "y": 130
+    },
+    "count_conflicts": {
+      "x": 760,
+      "y": 40
+    },
+    "count_total": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "conflicts_800_1400_ge1y-->count_conflicts",
+      "source": {
+        "operatorID": "conflicts_800_1400_ge1y",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "count_conflicts",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "conflicts_800_1400_ge1y-->count_total",
+      "source": {
+        "operatorID": "conflicts_800_1400_ge1y",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "count_total",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "conflict-->conflicts_800_1400_ge1y",
+      "source": {
+        "operatorID": "conflict",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "conflicts_800_1400_ge1y",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

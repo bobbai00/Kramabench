@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "tle_quiet",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/astronomy/input/space-track/58214_quiet.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load TLE CSV for Starlink 58214 during quiet period (May 1-4, 2024) from data/astronomy/input/space-track/58214_quiet.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "tle_storm",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/astronomy/input/space-track/58214_storm.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load TLE CSV for Starlink 58214 during Gannon storm period (May 10-13, 2024) from data/astronomy/input/space-track/58214_storm.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "quiet_a_decay",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(tle_quiet):\n    import pandas as pd\n    mu = 398600.4418  # km^3/s^2\n    df = tle_quiet.copy()\n    df['EPOCH'] = pd.to_datetime(df['EPOCH'], utc=True)\n    # mean motion rev/day -> rad/s\n    n_rad_s = df['MEAN_MOTION'] * 2.0 * 3.141592653589793 / 86400.0\n    df['a_km'] = (mu / (n_rad_s**2))**(1.0/3.0)\n    df = df.sort_values('EPOCH')\n    t0, t1 = df['EPOCH'].iloc[0], df['EPOCH'].iloc[-1]\n    a0, a1 = df['a_km'].iloc[0], df['a_km'].iloc[-1]\n    dt_days = (t1 - t0).total_seconds() / 86400.0\n    rate = (a1 - a0) / dt_days\n    return pd.DataFrame([{\n        'period': 'quiet',\n        't0': t0, 't1': t1,\n        'a0_km': a0, 'a1_km': a1,\n        'dt_days': dt_days,\n        'avg_rate_km_day': rate\n    }])"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute semi-major axis a from TLE MEAN_MOTION using Kepler's law (a=(mu/n^2)^(1/3), n=mean_motion*2pi/86400). Sort by EPOCH; compute average decay rate as (a_last-a_first)/delta_days for quiet period.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "storm_a_decay",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(tle_storm):\n    import pandas as pd\n    import numpy as np\n\n    mu = 398600.4418  # km^3/s^2\n\n    df = tle_storm.copy()\n    df['EPOCH'] = pd.to_datetime(df['EPOCH'], utc=True, errors='coerce')\n    df['MEAN_MOTION'] = pd.to_numeric(df['MEAN_MOTION'], errors='coerce')\n    df = df.dropna(subset=['EPOCH', 'MEAN_MOTION']).sort_values('EPOCH')\n\n    # Kepler: n(rad/s) = mean_motion(rev/day)*2pi / 86400\n    n = df['MEAN_MOTION'].to_numpy() * 2*np.pi / 86400.0\n    a = (mu / (n**2)) ** (1/3)\n    df = df.assign(a_km=a)\n\n    t0, t1 = df['EPOCH'].iloc[0], df['EPOCH'].iloc[-1]\n    a0, a1 = float(df['a_km'].iloc[0]), float(df['a_km'].iloc[-1])\n    dt_days = (t1 - t0).total_seconds() / 86400.0\n    avg_rate = (a1 - a0) / dt_days if dt_days != 0 else np.nan\n\n    return pd.DataFrame([{\n        'period': 'storm',\n        't0': t0,\n        't1': t1,\n        'a0_km': a0,\n        'a1_km': a1,\n        'dt_days': dt_days,\n        'avg_rate_km_day': avg_rate\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute semi-major axis a from storm TLE MEAN_MOTION via Kepler's law (mu=398600.4418). Sort by EPOCH; compute average decay rate (a_last-a_first)/delta_days for storm period.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "tle_quiet": {
+      "x": 100,
+      "y": 40
+    },
+    "tle_storm": {
+      "x": 100,
+      "y": 220
+    },
+    "quiet_a_decay": {
+      "x": 430,
+      "y": 40
+    },
+    "storm_a_decay": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "tle_quiet-->quiet_a_decay",
+      "source": {
+        "operatorID": "tle_quiet",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "quiet_a_decay",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "tle_storm-->storm_a_decay",
+      "source": {
+        "operatorID": "tle_storm",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "storm_a_decay",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

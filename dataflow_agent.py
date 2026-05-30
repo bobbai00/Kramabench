@@ -107,6 +107,7 @@ class AgentSettings:
     compact_stats: bool = False
     lineage_timeline: bool = False
     few_shot_prompt: bool = False
+    table_structure_hint: bool = False
     max_result_rows: int = 0
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
@@ -141,6 +142,7 @@ class AgentSettings:
             "compactStats": self.compact_stats,
             "lineageTimeline": self.lineage_timeline,
             "fewShotPrompt": self.few_shot_prompt,
+            "tableStructureHint": self.table_structure_hint,
             "maxResultRows": self.max_result_rows,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
@@ -765,6 +767,7 @@ class DataflowAgent:
             compact_stats: bool = False,
             lineage_timeline: bool = False,
             few_shot_prompt: bool = False,
+            table_structure_hint: bool = False,
             max_result_rows: int = 0,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
@@ -834,6 +837,7 @@ class DataflowAgent:
             compact_stats=compact_stats,
             lineage_timeline=lineage_timeline,
             few_shot_prompt=few_shot_prompt,
+            table_structure_hint=table_structure_hint,
             max_result_rows=max_result_rows,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,

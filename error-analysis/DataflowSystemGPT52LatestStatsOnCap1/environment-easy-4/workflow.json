@@ -1,0 +1,255 @@
+{
+  "headId": "step-agent-107-6-1779101253419",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTesting2019",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2019.csv'\n    return pd.read_csv(path, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2019.csv via pd.read_csv with dtype=str (preserve original text values for later parsing/cleaning).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyTesting2020",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2020.csv'\n    return pd.read_csv(path, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2020.csv via pd.read_csv with dtype=str (preserve original text values for later parsing/cleaning).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyTesting2021",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2021.csv'\n    return pd.read_csv(path, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2021.csv via pd.read_csv with dtype=str (preserve original text values for later parsing/cleaning).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyTesting2022",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2022.csv'\n    return pd.read_csv(path, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2022.csv via pd.read_csv with dtype=str (preserve original text values for later parsing/cleaning).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyTesting2023",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2023.csv'\n    return pd.read_csv(path, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2023.csv via pd.read_csv with dtype=str (preserve original text values for later parsing/cleaning).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "quincyWollastonBeachPercent",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTesting2019, waterBodyTesting2020, waterBodyTesting2021, waterBodyTesting2022, waterBodyTesting2023) -> pd.DataFrame:\n    import pandas as pd\n\n    df = pd.concat(\n        [\n            waterBodyTesting2019,\n            waterBodyTesting2020,\n            waterBodyTesting2021,\n            waterBodyTesting2022,\n            waterBodyTesting2023,\n        ],\n        ignore_index=True,\n    )\n\n    # Standardize key text fields\n    for col in ['Community', 'Beach Name']:\n        if col in df.columns:\n            df[col] = df[col].astype(str).str.strip()\n\n    # Some files/years may include \"Beach Name\" variants (e.g., \"Wollaston\", \"Wollaston Beach - ...\").\n    # We'll match any beach name containing \"wollaston\" within Quincy.\n    communityMask = df['Community'].astype(str).str.strip().str.casefold() == 'quincy'\n    beachMask = df['Beach Name'].astype(str).str.strip().str.casefold().str.contains('wollaston', na=False)\n    sub = df.loc[communityMask & beachMask, ['Year', 'Sample Date', 'Community', 'Beach Name', 'Violation']].copy()\n\n    # Swimming standards: Violation == NO (any case). Treat any other value as not meeting.\n    sub['violationNorm'] = sub['Violation'].astype(str).str.strip().str.casefold()\n    sub['meetsSwimmingStandards'] = sub['violationNorm'].isin(['no'])\n\n    total = len(sub)\n    meets = int(sub['meetsSwimmingStandards'].sum())\n    pct_int = int(round((meets / total) * 100)) if total > 0 else None\n\n    return pd.DataFrame(\n        [\n            {\n                'total_samples': total,\n                'meeting_samples': meets,\n                'percent_meeting_int': pct_int,\n            }\n        ]\n    )\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-3",
+            "displayName": "Input 3",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-4",
+            "displayName": "Input 4",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Concatenate 2019-2023 water-body-testing tables; filter rows where Community == 'Quincy' (case-insensitive) and Beach Name contains 'wollaston' (case-insensitive substring match to capture naming variants); interpret meeting swimming standards as Violation == 'NO' (case-insensitive); compute total samples, count meeting samples, and integer percent meeting (=round(100*meeting/total)).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTesting2019": {
+        "x": 100,
+        "y": 40
+      },
+      "waterBodyTesting2020": {
+        "x": 100,
+        "y": 220
+      },
+      "waterBodyTesting2021": {
+        "x": 100,
+        "y": 400
+      },
+      "waterBodyTesting2022": {
+        "x": 100,
+        "y": 580
+      },
+      "waterBodyTesting2023": {
+        "x": 100,
+        "y": 760
+      },
+      "quincyWollastonBeachPercent": {
+        "x": 400,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyTesting2019-->quincyWollastonBeachPercent",
+        "source": {
+          "operatorID": "waterBodyTesting2019",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "quincyWollastonBeachPercent",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2020-->quincyWollastonBeachPercent",
+        "source": {
+          "operatorID": "waterBodyTesting2020",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "quincyWollastonBeachPercent",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2021-->quincyWollastonBeachPercent",
+        "source": {
+          "operatorID": "waterBodyTesting2021",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "quincyWollastonBeachPercent",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2022-->quincyWollastonBeachPercent",
+        "source": {
+          "operatorID": "waterBodyTesting2022",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "quincyWollastonBeachPercent",
+          "portID": "input-3"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2023-->quincyWollastonBeachPercent",
+        "source": {
+          "operatorID": "waterBodyTesting2023",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "quincyWollastonBeachPercent",
+          "portID": "input-4"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,261 @@
+{
+  "headId": "step-agent-26-6-1779139205247",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "floridaFraudMsa",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Florida.csv (State MSA Fraud and Other data) via pd.read_csv with default parameters (comma delimiter, header=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "metroFraudOther2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv\"\n    # File appears to contain non-UTF8 characters; try Windows-1252, fall back to latin1.\n    try:\n        return pd.read_csv(path, encoding=\"cp1252\")\n    except UnicodeDecodeError:\n        return pd.read_csv(path, encoding=\"latin1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv via pd.read_csv with encoding='cp1252' (fallback 'latin1') to handle non-UTF8 bytes; comma delimiter, header=0",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compareMiamiCounts",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(floridaFraudMsa, fixMetroFraudOther2024) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    def find_cols(df):\n        cols = list(df.columns)\n        # pick likely MSA/name column\n        msa_col = None\n        for c in cols:\n            if re.search(r'(msa|metropolitan|metro|area)', str(c), re.I):\n                msa_col = c\n                break\n        if msa_col is None:\n            msa_col = cols[0]\n\n        # pick likely count column\n        count_col = None\n        for c in cols:\n            if re.search(r'(#\\s*of\\s*reports|report\\s*count|number\\s*of\\s*reports)', str(c), re.I):\n                count_col = c\n                break\n        if count_col is None:\n            # fallback numeric column with largest max\n            num_cols = []\n            for c in cols:\n                s = pd.to_numeric(df[c].astype(str).str.replace(',', '', regex=False), errors='coerce')\n                if s.notna().sum() > 0:\n                    num_cols.append((c, s.max()))\n            if num_cols:\n                count_col = sorted(num_cols, key=lambda x: (x[1] if pd.notna(x[1]) else -1), reverse=True)[0][0]\n            else:\n                count_col = cols[-1]\n        return msa_col, count_col\n\n    def miami_mask(series: pd.Series) -> pd.Series:\n        s = series.astype(str).str.lower()\n        # require miami and at least one of fort/palm/west/lauderdale/beach to avoid false matches\n        return s.str.contains('miami', na=False) & (\n            s.str.contains('fort', na=False) | s.str.contains('lauderdale', na=False) | s.str.contains('west palm', na=False) | s.str.contains('palm beach', na=False)\n        )\n\n    # Metro file (cleaned)\n    metro = fixMetroFraudOther2024.copy()\n    if 'metropolitan_area' in metro.columns and 'report_count' in metro.columns:\n        metro_msa_col, metro_cnt_col = 'metropolitan_area', 'report_count'\n    else:\n        metro_msa_col, metro_cnt_col = find_cols(metro)\n\n    metro_matches_df = metro[miami_mask(metro[metro_msa_col])]\n    metro_count = metro_matches_df[metro_cnt_col]\n    metro_count = pd.to_numeric(metro_count, errors='coerce')\n    metro_val = metro_count.dropna().iloc[0] if metro_count.dropna().shape[0] > 0 else pd.NA\n\n    # Florida state MSA file\n    fl = floridaFraudMsa.copy()\n    fl_msa_col, fl_cnt_col = find_cols(fl)\n    fl_matches_df = fl[miami_mask(fl[fl_msa_col])]\n    fl_count = pd.to_numeric(fl_matches_df[fl_cnt_col].astype(str).str.replace(',', '', regex=False), errors='coerce')\n    fl_val = fl_count.dropna().iloc[0] if fl_count.dropna().shape[0] > 0 else pd.NA\n\n    consistent = (pd.notna(metro_val) and pd.notna(fl_val) and float(metro_val) == float(fl_val))\n\n    return pd.DataFrame([{\n        'metro_count': metro_val,\n        'fl_count': fl_val,\n        'consistent': bool(consistent),\n        'metroAreaCol': str(metro_msa_col),\n        'metroCountCol': str(metro_cnt_col),\n        'flMsaCol': str(fl_msa_col),\n        'flCountCol': str(fl_cnt_col),\n        'metro_matches': int(metro_matches_df.shape[0]),\n        'fl_matches': int(fl_matches_df.shape[0]),\n    }])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare Miami-Fort Lauderdale-West Palm Beach 'Fraud and Other' report counts between Florida State MSA Fraud+Other table and cleaned 2024 metropolitan areas file: identify Miami MSA row(s) by keyword mask; extract numeric report counts; set consistent=True only when both counts are non-null and exactly equal; output counts, chosen columns, match counts, and boolean 'consistent'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectMetroFraudRaw",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metroFraudOther2024) -> pd.DataFrame:\n    import pandas as pd\n    # show first 30 rows as-is for structure\n    return metroFraudOther2024.head(30)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 30 rows of 2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv as currently loaded (to identify header row, area-name column, and '# of Reports' column)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectFloridaFraudRaw",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(floridaFraudMsa) -> pd.DataFrame:\n    import pandas as pd\n    return floridaFraudMsa.head(30)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 30 rows of Florida.csv (State MSA Fraud and Other data) as currently loaded (to confirm columns and Miami MSA row layout)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fixMetroFraudOther2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metroFraudOther2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = metroFraudOther2024.copy()\n\n    # The file is loaded with a top title row and then the real header at row index 1.\n    # If we detect the second row contains the expected column labels, use it as header.\n    if len(df) >= 3:\n        potential_header = df.iloc[1].tolist()\n        header_str = [\"\" if pd.isna(x) else str(x).strip() for x in potential_header]\n        if (\"Metropolitan Area\" in header_str) and (\"# of Reports\" in header_str):\n            df2 = df.iloc[2:].copy()\n            df2.columns = header_str\n            df = df2\n\n    # Drop fully empty rows\n    df = df.dropna(how='all')\n\n    # Standardize column names\n    rename = {}\n    for c in df.columns:\n        cs = str(c).strip()\n        if cs.lower() == 'metropolitan area':\n            rename[c] = 'metropolitan_area'\n        elif cs.lower() == '# of reports':\n            rename[c] = 'report_count'\n        elif cs.lower() == 'reports per 100k population':\n            rename[c] = 'reports_per_100k'\n        elif cs.lower() == 'rank':\n            rename[c] = 'rank'\n    df = df.rename(columns=rename)\n\n    # Keep only expected columns if present\n    cols = [c for c in ['rank','metropolitan_area','reports_per_100k','report_count'] if c in df.columns]\n    if cols:\n        df = df[cols]\n\n    # Parse numerics\n    if 'report_count' in df.columns:\n        df['report_count'] = (\n            df['report_count'].astype(str)\n            .str.replace(',', '', regex=False)\n            .str.extract(r'([0-9]+(?:\\.[0-9]+)?)', expand=False)\n        )\n        df['report_count'] = pd.to_numeric(df['report_count'], errors='coerce')\n    if 'reports_per_100k' in df.columns:\n        df['reports_per_100k'] = (\n            df['reports_per_100k'].astype(str)\n            .str.extract(r'([0-9]+(?:\\.[0-9]+)?)', expand=False)\n        )\n        df['reports_per_100k'] = pd.to_numeric(df['reports_per_100k'], errors='coerce')\n    if 'rank' in df.columns:\n        df['rank'] = pd.to_numeric(df['rank'], errors='coerce')\n\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean metroFraudOther2024 table by promoting row 1 to header when it contains ['Rank','Metropolitan Area','Reports per 100K Population','# of Reports']; drop empty rows; rename to standardized columns [rank, metropolitan_area, reports_per_100k, report_count]; parse numeric fields",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "floridaFraudMsa": {
+        "x": 100,
+        "y": 130
+      },
+      "metroFraudOther2024": {
+        "x": 100,
+        "y": 460
+      },
+      "compareMiamiCounts": {
+        "x": 400,
+        "y": 40
+      },
+      "inspectMetroFraudRaw": {
+        "x": 400,
+        "y": 475
+      },
+      "inspectFloridaFraudRaw": {
+        "x": 400,
+        "y": 295
+      },
+      "fixMetroFraudOther2024": {
+        "x": 400,
+        "y": 655
+      }
+    },
+    "links": [
+      {
+        "linkID": "metroFraudOther2024-->inspectMetroFraudRaw",
+        "source": {
+          "operatorID": "metroFraudOther2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectMetroFraudRaw",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "floridaFraudMsa-->inspectFloridaFraudRaw",
+        "source": {
+          "operatorID": "floridaFraudMsa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectFloridaFraudRaw",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metroFraudOther2024-->fixMetroFraudOther2024",
+        "source": {
+          "operatorID": "metroFraudOther2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fixMetroFraudOther2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "floridaFraudMsa-->compareMiamiCounts",
+        "source": {
+          "operatorID": "floridaFraudMsa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareMiamiCounts",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fixMetroFraudOther2024-->compareMiamiCounts",
+        "source": {
+          "operatorID": "fixMetroFraudOther2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareMiamiCounts",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-25-9-1779139145483",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topThreeIdTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv\"\n    raw = pd.read_csv(path, header=None, dtype=str, keep_default_na=False)\n\n    # Find the header row that contains the 3 expected column labels.\n    header_mask = (\n        raw[0].str.strip().eq(\"Theft Type\")\n        & raw[1].str.strip().eq(\"Year\")\n        & raw[2].str.strip().str.contains(\"# of Reports\", regex=False)\n    )\n    if not header_mask.any():\n        # Fallback: return raw for debugging\n        return raw.head(30)\n\n    header_idx = int(raw.index[header_mask][0])\n    df = raw.iloc[header_idx + 1 :, 0:3].copy()\n    df.columns = [\"year\", \"theftType\", \"reports\"]\n\n    # Clean\n    for c in df.columns:\n        df[c] = df[c].astype(str).str.strip()\n    df = df[(df[\"year\"] != \"\") & (df[\"theftType\"] != \"\") & (df[\"reports\"] != \"\")]\n\n    # Keep only data rows where year looks numeric\n    df = df[df[\"year\"].str.fullmatch(r\"\\d{4}\")].copy()\n\n    df[\"year\"] = pd.to_numeric(df[\"year\"], errors=\"coerce\").astype(\"Int64\")\n    df[\"reports\"] = pd.to_numeric(df[\"reports\"].str.replace(\",\", \"\", regex=False), errors=\"coerce\")\n\n    df = df.dropna(subset=[\"year\", \"theftType\", \"reports\"]).copy()\n    df[\"year\"] = df[\"year\"].astype(int)\n    df[\"reports\"] = df[\"reports\"].astype(int)\n\n    return df.sort_values([\"theftType\", \"year\"]).reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv by reading with header=None (dtype=str, keep_default_na=False); locate header row where [col0='Theft Type', col1='Year', col2 contains '# of Reports']; then parse subsequent rows' columns as [year, theftType, reports] (note: in file, year appears in first column); strip whitespace; drop blank/non-year footer rows; parse year to int and reports to int after removing commas; sort by [theftType, year].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectTopThreeRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv\"\n    raw = pd.read_csv(path, header=None, dtype=str, keep_default_na=False)\n    return raw.head(40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect raw 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv \u2014 read with header=None, dtype=str, keep_default_na=False; return first 40 rows to determine true header layout and column positions",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fastestGrowth2020to2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topThreeIdTheft):\n    import pandas as pd\n\n    df = topThreeIdTheft.copy()\n\n    base = df[df[\"year\"] == 2020][[\"theftType\", \"reports\"]].rename(columns={\"reports\": \"reports2020\"})\n    end = df[df[\"year\"] == 2024][[\"theftType\", \"reports\"]].rename(columns={\"reports\": \"reports2024\"})\n\n    growth = base.merge(end, on=\"theftType\", how=\"inner\")\n    growth[\"relativeGrowth\"] = (growth[\"reports2024\"] - growth[\"reports2020\"]) / growth[\"reports2020\"]\n\n    out = growth.sort_values([\"relativeGrowth\", \"theftType\"], ascending=[False, True]).head(1)[\n        [\"theftType\", \"relativeGrowth\", \"reports2020\", \"reports2024\"]\n    ]\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute fastest relative growth in # of reports from 2020 to 2024 by theftType: filter topThreeIdTheft to year==2020 (reports2020) and year==2024 (reports2024); inner-join on theftType; compute relativeGrowth=(reports2024-reports2020)/reports2020; sort descending by relativeGrowth (tie-break theftType asc) and return top 1 theftType with relativeGrowth and endpoints.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topThreeIdTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "inspectTopThreeRaw": {
+        "x": 100,
+        "y": 220
+      },
+      "fastestGrowth2020to2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topThreeIdTheft-->fastestGrowth2020to2024",
+        "source": {
+          "operatorID": "topThreeIdTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fastestGrowth2020to2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

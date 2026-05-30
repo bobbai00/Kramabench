@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-344-5-1779107498826",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc7",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    xls = pd.ExcelFile(path)\n    # Load all sheets as strings to preserve values; add sheet name\n    dfs = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh, dtype=str)\n        df['__sheet__'] = sh\n        dfs.append(df)\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc7.xlsx (all sheets) via pd.ExcelFile + pd.read_excel(dtype=str); concatenate sheets with added '__sheet__' column indicating sheet name",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xls = pd.ExcelFile(path)\n    dfs = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh, dtype=str)\n        df['__sheet__'] = sh\n        dfs.append(df)\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx (all sheets) via pd.ExcelFile + pd.read_excel(dtype=str); concatenate sheets with added '__sheet__' column indicating sheet name",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "lowestAppZAge",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc7, mmc1):\n    import pandas as pd\n\n    df = mmc7.copy()\n    # Use the APM subtypes sheet where APP_Z_score is populated\n    df = df[df['__sheet__'].astype(str).str.strip().eq('B-APM subtypes')].copy()\n\n    # Coerce APP_Z_score to numeric\n    df['APP_Z_score_num'] = pd.to_numeric(df['APP_Z_score'], errors='coerce')\n    df = df.dropna(subset=['APP_Z_score_num']).copy()\n\n    # Find row(s) with minimum APP-Z score\n    min_val = df['APP_Z_score_num'].min()\n    min_rows = df[df['APP_Z_score_num'] == min_val].copy()\n\n    # Pull patient/sample identifier from mmc7 and join to mmc1 for age\n    # In this file the identifier column is 'idx' (patient/sample index)\n    min_rows['idx'] = min_rows['idx'].astype(str).str.strip()\n\n    meta = mmc1.copy()\n    meta['idx'] = meta['idx'].astype(str).str.strip()\n    meta['Age_num'] = pd.to_numeric(meta['Age'], errors='coerce')\n\n    joined = min_rows[['idx', 'APP_Z_score_num']].merge(\n        meta[['idx', 'Age_num']], on='idx', how='left'\n    )\n\n    # Return a single-row table with the age as integer (if available)\n    age = joined['Age_num'].dropna()\n    age_int = int(age.iloc[0]) if len(age) else None\n\n    return pd.DataFrame([{\n        'idx': joined['idx'].iloc[0] if len(joined) else None,\n        'min_APP_Z_score': float(min_val) if pd.notna(min_val) else None,\n        'age': age_int\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc7, filter to '__sheet__' == 'B-APM subtypes' where APP_Z_score is populated; coerce APP_Z_score to numeric and find the minimum; take the corresponding patient identifier 'idx' and left-join to mmc1 on idx to fetch Age (coerced to numeric); return single-row DataFrame with idx, min_APP_Z_score, and patient age as integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc7": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc1": {
+        "x": 100,
+        "y": 220
+      },
+      "lowestAppZAge": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc7-->lowestAppZAge",
+        "source": {
+          "operatorID": "mmc7",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "lowestAppZAge",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc1-->lowestAppZAge",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "lowestAppZAge",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

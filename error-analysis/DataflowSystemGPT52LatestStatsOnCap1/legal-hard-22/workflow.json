@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-612-9-1779125276062",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv'\n    # File has title/blank lines and a source footer; keep all rows for parsing downstream.\n    return pd.read_csv(path, dtype=str, encoding='cp1252', header=None)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Type.csv via pd.read_csv with header=None, dtype=str, encoding='cp1252' to preserve raw row structure (title/header rows + footer) for robust parsing of total report count.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv'\n    # File contains Windows-1252 characters (e.g., en dash 0x96); use cp1252.\n    return pd.read_csv(path, dtype=str, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Identity_Theft_Reports_by_Type.csv via pd.read_csv with dtype=str and encoding='cp1252' (handles Windows-1252 bytes such as 0x96 en-dash); preserves labels for Theft Type/Subtype and counts",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "bankAcctNewAcctProportion",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identityTheftByType, reportType) -> pd.DataFrame:\n    import pandas as pd\n\n    # ---------------- Numerator: identity theft Bank Account / New Accounts ----------------\n    it = identityTheftByType.copy()\n\n    col_map = {\n        'Identity Theft Reports by Type': 'theft_type',\n        'Theft Type': 'theft_type',\n        'Unnamed: 1': 'theft_subtype',\n        'Theft Subtype': 'theft_subtype',\n        'Unnamed: 2': 'reports',\n        '# of Reports': 'reports',\n    }\n    it = it.rename(columns={c: col_map.get(c, c) for c in it.columns})\n\n    # drop title/blank/footer rows\n    it = it[it['theft_type'].notna()]\n    it = it[~it['theft_type'].astype(str).str.contains('Source:', na=False)]\n    it = it[it['theft_type'].astype(str).str.strip().ne('Theft Type')]\n\n    # keep rows where subtype exists (filters out narrative row)\n    it = it[it['theft_subtype'].notna()]\n\n    it['theft_type'] = it['theft_type'].astype(str).str.strip()\n    it['theft_subtype'] = it['theft_subtype'].astype(str).str.strip()\n    it['reports'] = (\n        it['reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+)', expand=False)\n    )\n    it['reports'] = pd.to_numeric(it['reports'], errors='coerce')\n\n    num = it.loc[\n        (it['theft_type'].str.casefold() == 'bank account'.casefold())\n        & (it['theft_subtype'].str.casefold() == 'new accounts'.casefold()),\n        'reports'\n    ].sum(min_count=1)\n\n    # ---------------- Denominator: all reports total ----------------\n    rt = reportType.copy()\n\n    # find header row: ('Report Type', '# of Reports', ...)\n    def norm(x):\n        return str(x).strip().casefold()\n\n    header_row_idx = None\n    for i in range(len(rt)):\n        row = rt.iloc[i].tolist()\n        if any(norm(x) == 'report type' for x in row) and any(norm(x) == '# of reports' for x in row):\n            header_row_idx = i\n            break\n\n    if header_row_idx is None:\n        raise ValueError('Could not find header row with Report Type and # of Reports in reportType table')\n\n    header = rt.iloc[header_row_idx].tolist()\n    data = rt.iloc[header_row_idx + 1:].copy()\n    data.columns = [str(x).strip() if pd.notna(x) else f'col{j}' for j, x in enumerate(header)]\n\n    # trim footer starting at Source\n    source_rows = data.apply(lambda r: r.astype(str).str.contains('Source:', na=False).any(), axis=1)\n    if source_rows.any():\n        data = data.loc[:source_rows.idxmax() - 1]\n\n    data = data[data['Report Type'].notna()].copy()\n    data['Report Type'] = data['Report Type'].astype(str).str.strip()\n\n    if '# of Reports' not in data.columns:\n        raise ValueError(\"'# of Reports' column not found after parsing reportType\")\n\n    data['# of Reports_num'] = (\n        data['# of Reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+)', expand=False)\n    )\n    data['# of Reports_num'] = pd.to_numeric(data['# of Reports_num'], errors='coerce')\n\n    # denominator: prefer explicit Total row; else sum numeric counts (excluding any rows that look like percentages)\n    total_mask = data['Report Type'].str.casefold().eq('total'.casefold())\n    denom = data.loc[total_mask, '# of Reports_num'].sum(min_count=1)\n    if pd.isna(denom):\n        denom = data['# of Reports_num'].sum(min_count=1)\n\n    if pd.isna(num) or pd.isna(denom) or denom == 0:\n        raise ValueError(f'Invalid numerator/denominator computed: num={num}, denom={denom}')\n\n    prop = float(num) / float(denom)\n\n    return pd.DataFrame([\n        {\n            'numerator_identity_theft_bank_account_new_accounts': int(num),\n            'denominator_all_reports': int(denom),\n            'proportion': round(prop, 4),\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute proportion = (identity theft # reports where theft_type == 'Bank Account' AND theft_subtype == 'New Accounts') / (total # of reports from 2024_CSN_Report_Type.csv). Numerator: rename columns from 2024_CSN_Identity_Theft_Reports_by_Type.csv to [theft_type, theft_subtype, reports], drop title/footer/narrative rows, parse reports as integer, sum matching row. Denominator: parse 2024_CSN_Report_Type.csv loaded raw (header=None) by locating header row containing 'Report Type' and '# of Reports', apply those headers to subsequent rows, trim footer at any row containing 'Source:', parse '# of Reports' numeric; denominator is 'Total' row if present else sum of numeric counts. Return numerator, denominator, and proportion rounded to 4 decimals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportType": {
+        "x": 100,
+        "y": 220
+      },
+      "identityTheftByType": {
+        "x": 100,
+        "y": 40
+      },
+      "bankAcctNewAcctProportion": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "identityTheftByType-->bankAcctNewAcctProportion",
+        "source": {
+          "operatorID": "identityTheftByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bankAcctNewAcctProportion",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "reportType-->bankAcctNewAcctProportion",
+        "source": {
+          "operatorID": "reportType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bankAcctNewAcctProportion",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

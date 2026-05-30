@@ -1,0 +1,433 @@
+{
+  "headId": "step-agent-437-12-1779116099849",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xl = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xl.sheet_names})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 1-s2.0-S0092867420301070-mmc1.xlsx by listing all Excel sheet names via pd.ExcelFile(...).sheet_names; return one-column DataFrame [sheet_name] for selecting the correct clinical/metadata sheet to load next.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc4",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    xl = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xl.sheet_names})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 1-s2.0-S0092867420301070-mmc4.xlsx by listing all Excel sheet names via pd.ExcelFile(...).sheet_names; return one-column DataFrame [sheet_name] to identify which sheet contains the peptide HPKPEVLGSSADGALLVSLDGLR and sample IDs.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "metaTable",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    # Load the clinical metadata table\n    df = pd.read_excel(path, sheet_name='UCEC_CPTAC3_meta_table_V2.1', dtype=str)\n    # Normalize column names a bit for easier downstream selection\n    df.columns = [str(c).strip() for c in df.columns]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx sheet 'UCEC_CPTAC3_meta_table_V2.1' (clinical metadata) via pd.read_excel with dtype=str; strip whitespace from column names; return full metadata table for extracting histological grade labels.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "variantsTable",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    df = pd.read_excel(path, sheet_name='A-Variants', dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc4.xlsx sheet 'A-Variants' via pd.read_excel with dtype=str; strip whitespace from column names; table expected to contain peptide sequences and associated tumor/sample identifiers.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "peptideSamples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(variantsTable) -> pd.DataFrame:\n    import pandas as pd\n\n    target = 'HPKPEVLGSSADGALLVSLDGLR'\n\n    df = variantsTable.copy()\n    df.columns = [str(c).strip() for c in df.columns]\n\n    hit = df[df['Peptide'].astype(str).str.strip() == target].copy()\n\n    if hit.empty:\n        return pd.DataFrame({'Peptide_found': [False], 'Samples_With_Peptide': [None]})\n\n    # Samples_With_Peptide may be a semicolon/comma/space separated string; normalize to individual sample IDs\n    samples_str = hit['Samples_With_Peptide'].dropna().astype(str).tolist()\n    # keep original row(s) for traceability\n    out = hit[['Peptide', 'Samples_With_Peptide', 'Num_Samples_With_Peptide', 'Gene', 'Variant_Type', 'Variant']].copy()\n\n    # explode to sample IDs\n    all_samples = []\n    for s in samples_str:\n        # common delimiters\n        parts = [p.strip() for p in s.replace(',', ';').replace('|', ';').split(';')]\n        parts = [p for p in parts if p]\n        all_samples.extend(parts)\n\n    out2 = pd.DataFrame({'Peptide': [target] * len(all_samples), 'Proteomics_Participant_ID': all_samples})\n    out2 = out2.drop_duplicates().reset_index(drop=True)\n\n    # attach variant info (may be multiple; keep first for context)\n    context = out.head(1).drop(columns=['Samples_With_Peptide']).to_dict('records')[0]\n    for k, v in context.items():\n        out2[k] = v\n\n    return out2\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variantsTable (mmc4.xlsx sheet 'A-Variants') to exact Peptide == 'HPKPEVLGSSADGALLVSLDGLR'; parse 'Samples_With_Peptide' (delimiter-normalized to ';' from ',', '|') into individual Proteomics_Participant_ID values; return distinct sample IDs with peptide plus context columns [Gene, Variant_Type, Variant, Num_Samples_With_Peptide].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "peptideSearch",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(variantsTable) -> pd.DataFrame:\n    import pandas as pd\n\n    target = 'HPKPEVLGSSADGALLVSLDGLR'\n\n    df = variantsTable.copy()\n    df.columns = [str(c).strip() for c in df.columns]\n\n    # normalize peptide string for robust matching\n    pep = df['Peptide'].astype(str).str.strip()\n\n    exact = df[pep == target].copy()\n    contains = df[pep.str.contains(target, na=False)].copy()\n    # also search with I/L ambiguity common in proteomics\n    alt = target.replace('I', '[IL]').replace('L', '[IL]')\n    regex = df[pep.str.contains(alt, na=False, regex=True)].copy()\n\n    def pack(name, sub):\n        if sub.empty:\n            return pd.DataFrame([{'match_type': name, 'n_rows': 0, 'samples_concat': None}])\n        return pd.DataFrame([{\n            'match_type': name,\n            'n_rows': len(sub),\n            'samples_concat': ';'.join(sorted(set(sub['Samples_With_Peptide'].dropna().astype(str))))\n        }])\n\n    out = pd.concat([pack('exact', exact), pack('contains', contains), pack('IL_regex', regex)], ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search variantsTable 'Peptide' column for target peptide HPKPEVLGSSADGALLVSLDGLR using (a) exact match, (b) substring contains, and (c) regex allowing I/L ambiguity; report counts and concatenated Samples_With_Peptide strings per match type for debugging why peptideSamples found none.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "rawVariantsPreview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    return pd.read_excel(path, sheet_name='A-Variants', header=None, dtype=str, nrows=30)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "One-shot inspection preview of 1-s2.0-S0092867420301070-mmc4.xlsx sheet 'A-Variants' using pd.read_excel(header=None, dtype=str, nrows=30) to view the raw row/column layout and confirm whether the true header row/peptide column differ from the current loader.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc4Readme",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    df = pd.read_excel(path, sheet_name='README', dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc4.xlsx sheet 'README' via pd.read_excel(dtype=str); strip whitespace from column names; inspect documentation/notes for where peptide HPKPEVLGSSADGALLVSLDGLR would appear (e.g., which sheet, formatting, or I/L ambiguity guidance).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadBNovel",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    df = pd.read_excel(path, sheet_name='B-Novel Splice Junctions', dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc4.xlsx sheet 'B-Novel Splice Junctions' via pd.read_excel(dtype=str); strip whitespace from column names; return novel splice junction peptide evidence table to search for peptide HPKPEVLGSSADGALLVSLDGLR.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadCAlternate",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    df = pd.read_excel(path, sheet_name='C-Alternate Splice Junctions', dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc4.xlsx sheet 'C-Alternate Splice Junctions' via pd.read_excel(dtype=str); strip whitespace from column names; return alternate splice junction peptide evidence table to search for peptide HPKPEVLGSSADGALLVSLDGLR.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "searchSpliceSheets",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadBNovel, loadCAlternate) -> pd.DataFrame:\n    import pandas as pd\n    target = 'HPKPEVLGSSADGALLVSLDGLR'\n\n    def search(df: pd.DataFrame, sheet: str) -> pd.DataFrame:\n        # find candidate columns that may contain peptide sequence\n        cols = [c for c in df.columns if any(k in str(c).lower() for k in ['peptide', 'sequence', 'pep'])]\n        if not cols:\n            cols = list(df.columns)\n        rows = []\n        for col in cols:\n            s = df[col].astype(str)\n            exact = (s == target).sum()\n            contains = s.str.contains(target, na=False).sum()\n            # I/L ambiguity (also treat J as I/L occasionally)\n            regex = target.replace('I', '[IL]').replace('L', '[IL]')\n            il = s.str.contains(regex, na=False, regex=True).sum()\n            if exact or contains or il:\n                rows.append({'sheet': sheet, 'column': col, 'exact': int(exact), 'contains': int(contains), 'IL_regex': int(il)})\n        if rows:\n            return pd.DataFrame(rows)\n        return pd.DataFrame([{'sheet': sheet, 'column': None, 'exact': 0, 'contains': 0, 'IL_regex': 0}])\n\n    out = pd.concat([\n        search(loadBNovel, 'B-Novel Splice Junctions'),\n        search(loadCAlternate, 'C-Alternate Splice Junctions')\n    ], ignore_index=True)\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search mmc4 splice-junction sheets B-Novel and C-Alternate for peptide HPKPEVLGSSADGALLVSLDGLR: for each candidate peptide/sequence column compute match counts (exact, substring contains, I/L-ambiguity regex); return per-sheet per-column summary to locate which sheet/column contains the peptide.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "peptideToGrades",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadCAlternate, metaTable) -> pd.DataFrame:\n    import pandas as pd\n\n    target = 'HPKPEVLGSSADGALLVSLDGLR'\n\n    ca = loadCAlternate.copy()\n    ca.columns = [str(c).strip() for c in ca.columns]\n    ca = ca[ca['Peptide'].astype(str) == target].copy()\n\n    if ca.empty:\n        return pd.DataFrame(columns=['Peptide', 'sample_id', 'Histologic_Grade_FIGO'])\n\n    # Expand Samples_With_Peptide -> one row per sample\n    samp = ca['Samples_With_Peptide'].astype(str).str.replace('|', ',', regex=False)\n    samp = samp.str.replace(';', ',', regex=False)\n    sample_list = []\n    for s in samp:\n        for item in [x.strip() for x in s.split(',') if x.strip() and x.strip().lower() != 'nan']:\n            sample_list.append(item)\n\n    samples = pd.DataFrame({'sample_id': sorted(set(sample_list))})\n\n    mt = metaTable.copy()\n    mt.columns = [str(c).strip() for c in mt.columns]\n\n    # Determine best join column for sample IDs\n    join_col = None\n    for cand in ['idx', 'Proteomics_Participant_ID', 'Case_ID', 'Participant_ID']:\n        if cand in mt.columns:\n            join_col = cand\n            break\n    if join_col is None:\n        raise ValueError('No recognizable sample id column found in metaTable')\n\n    out = samples.merge(\n        mt[[join_col, 'Histologic_Grade_FIGO']].rename(columns={join_col: 'sample_id'}),\n        on='sample_id',\n        how='left'\n    )\n    out.insert(0, 'Peptide', target)\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc4.xlsx sheet 'C-Alternate Splice Junctions', filter to Peptide == 'HPKPEVLGSSADGALLVSLDGLR'; split 'Samples_With_Peptide' on ',', ';', '|' into distinct sample_id values; left-join those sample_id values to mmc1.xlsx metaTable using the first available ID column among ['idx','Proteomics_Participant_ID','Case_ID','Participant_ID']; output per-sample Histologic_Grade_FIGO for tumors where the peptide was found.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc4": {
+        "x": 100,
+        "y": 220
+      },
+      "metaTable": {
+        "x": 100,
+        "y": 670
+      },
+      "variantsTable": {
+        "x": 100,
+        "y": 400
+      },
+      "peptideSamples": {
+        "x": 400,
+        "y": 310
+      },
+      "peptideSearch": {
+        "x": 400,
+        "y": 490
+      },
+      "rawVariantsPreview": {
+        "x": 100,
+        "y": 850
+      },
+      "mmc4Readme": {
+        "x": 100,
+        "y": 1030
+      },
+      "loadBNovel": {
+        "x": 100,
+        "y": 1450
+      },
+      "loadCAlternate": {
+        "x": 100,
+        "y": 1210
+      },
+      "searchSpliceSheets": {
+        "x": 400,
+        "y": 1375
+      },
+      "peptideToGrades": {
+        "x": 400,
+        "y": 745
+      }
+    },
+    "links": [
+      {
+        "linkID": "variantsTable-->peptideSamples",
+        "source": {
+          "operatorID": "variantsTable",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peptideSamples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "variantsTable-->peptideSearch",
+        "source": {
+          "operatorID": "variantsTable",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peptideSearch",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadBNovel-->searchSpliceSheets",
+        "source": {
+          "operatorID": "loadBNovel",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "searchSpliceSheets",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadCAlternate-->searchSpliceSheets",
+        "source": {
+          "operatorID": "loadCAlternate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "searchSpliceSheets",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "loadCAlternate-->peptideToGrades",
+        "source": {
+          "operatorID": "loadCAlternate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peptideToGrades",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metaTable-->peptideToGrades",
+        "source": {
+          "operatorID": "metaTable",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peptideToGrades",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

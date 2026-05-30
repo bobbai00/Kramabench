@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-626-6-1779125472755",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "usa",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/usa.gpkg')\n    gdf = gdf.copy()\n    if 'geometry' in gdf.columns:\n        gdf['geometry_wkt'] = gdf.geometry.to_wkt()\n    return gdf.drop(columns=['geometry'], errors='ignore')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load usa.gpkg via geopandas.read_file; convert geometry to WKT in column 'geometry_wkt' and drop the original 'geometry' column to avoid non-serializable shapely geometries in the runtime output",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifcAreas",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/nifc_geographic_areas.gpkg')\n    gdf = gdf.copy()\n    if 'geometry' in gdf.columns:\n        gdf['geometry_wkt'] = gdf.geometry.to_wkt()\n    return gdf.drop(columns=['geometry'], errors='ignore')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_geographic_areas.gpkg via geopandas.read_file; convert geometry to WKT in column 'geometry_wkt' and drop the original 'geometry' column to avoid non-serializable shapely geometries in the runtime output",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stateAreaIntersections",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(usa, nifcAreas):\n    import pandas as pd\n    import geopandas as gpd\n    from shapely import wkt\n\n    # --- Reconstruct geometries ---\n    usa_gdf = gpd.GeoDataFrame(\n        usa.copy(),\n        geometry=usa[\"geometry_wkt\"].apply(wkt.loads),\n        crs=\"EPSG:4326\",\n    )\n    areas_gdf = gpd.GeoDataFrame(\n        nifcAreas.copy(),\n        geometry=nifcAreas[\"geometry_wkt\"].apply(wkt.loads),\n        crs=\"EPSG:4326\",\n    )\n\n    # --- Use state-level geometry (adm1) rather than county-level (adm2) ---\n    # Dissolve counties into states (adm1_name) to avoid counting per-county.\n    states_gdf = (\n        usa_gdf[[\"adm1_name\", \"geometry\"]]\n        .dissolve(by=\"adm1_name\", as_index=False)\n        .rename(columns={\"adm1_name\": \"state\"})\n    )\n\n    # --- NIFC area identity ---\n    area_name_col = \"GACCName\" if \"GACCName\" in areas_gdf.columns else \"GACCAbbreviation\"\n    areas_gdf = areas_gdf[[area_name_col, \"GlobalID\", \"geometry\"]].rename(\n        columns={area_name_col: \"nifc_area_name\", \"GlobalID\": \"nifc_area_id\"}\n    )\n\n    # --- Spatial join: which states intersect which NIFC areas ---\n    joined = gpd.sjoin(\n        states_gdf[[\"state\", \"geometry\"]],\n        areas_gdf[[\"nifc_area_id\", \"nifc_area_name\", \"geometry\"]],\n        how=\"inner\",\n        predicate=\"intersects\",\n    )\n\n    # Unique (state, area) pairs then count distinct areas per state\n    pairs = joined[[\"state\", \"nifc_area_id\"]].drop_duplicates()\n    counts = (\n        pairs.groupby(\"state\")[\"nifc_area_id\"]\n        .nunique()\n        .reset_index(name=\"nifc_area_count\")\n    )\n\n    max_count = int(counts[\"nifc_area_count\"].max()) if len(counts) else 0\n    top_states = counts[counts[\"nifc_area_count\"] == max_count].copy()\n    top_states.insert(0, \"max_nifc_area_count\", max_count)\n\n    # Return only the states tying for max (plus counts)\n    return top_states.sort_values([\"nifc_area_count\", \"state\"], ascending=[False, True]).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Reconstruct GeoDataFrames from WKT geometries for USA counties (usa.geometry_wkt) and NIFC areas (nifcAreas.geometry_wkt) with CRS EPSG:4326; dissolve county polygons to state-level by adm1_name to create one geometry per full state name; spatial join states\u2194NIFC areas with predicate='intersects' using NIFC identifiers (GlobalID) and names (GACCName); drop duplicate (state, nifc_area_id) pairs; count distinct nifc_area_id per state; compute maximum count and return only state(s) with nifc_area_count equal to the maximum, with column max_nifc_area_count.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "usa": {
+        "x": 100,
+        "y": 40
+      },
+      "nifcAreas": {
+        "x": 100,
+        "y": 220
+      },
+      "stateAreaIntersections": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "usa-->stateAreaIntersections",
+        "source": {
+          "operatorID": "usa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateAreaIntersections",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifcAreas-->stateAreaIntersections",
+        "source": {
+          "operatorID": "nifcAreas",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateAreaIntersections",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

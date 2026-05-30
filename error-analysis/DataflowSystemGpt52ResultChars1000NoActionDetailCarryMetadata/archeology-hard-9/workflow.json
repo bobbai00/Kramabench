@@ -1,0 +1,303 @@
+{
+  "operators": [
+    {
+      "operatorID": "worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load modern city dataset from data/archeology/input/worldcities.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "roman_cities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/archeology/input/roman_cities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load ancient Roman cities dataset from data/archeology/input/roman_cities.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "worldcities_million",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(worldcities):\n    import pandas as pd\n    wc = worldcities.copy()\n    # ensure numeric\n    wc['population'] = pd.to_numeric(wc['population'], errors='coerce')\n    wc['lat'] = pd.to_numeric(wc['lat'], errors='coerce')\n    wc['lng'] = pd.to_numeric(wc['lng'], errors='coerce')\n    return wc[(wc['population'] > 1_000_000) & wc['lat'].notna() & wc['lng'].notna()].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter worldcities to modern cities with population > 1,000,000; coerce population/lat/lng to numeric and drop rows with missing coordinates",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "roman_rank_parsed",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(roman_cities):\n    import pandas as pd\n    import numpy as np\n\n    df = roman_cities.copy()\n    col = 'Barrington Atlas Rank'\n\n    def parse_rank(x):\n        if pd.isna(x):\n            return np.nan\n        s = str(x).strip()\n        if s == '' or s.lower() == 'nan':\n            return np.nan\n        # handle forms like '4 or 5'\n        if 'or' in s:\n            parts = [p.strip() for p in s.split('or')]\n            nums = []\n            for p in parts:\n                try:\n                    nums.append(float(p))\n                except Exception:\n                    # if not pure numeric, extract first numeric token\n                    import re\n                    m = re.search(r\"[-+]?\\d*\\.?\\d+\", p)\n                    if m:\n                        nums.append(float(m.group()))\n            if len(nums) == 0:\n                return np.nan\n            return float(np.mean(nums))\n        # otherwise extract numeric\n        import re\n        m = re.search(r\"[-+]?\\d*\\.?\\d+\", s)\n        return float(m.group()) if m else np.nan\n\n    df['rank_num'] = df[col].apply(parse_rank)\n    # coords\n    df['lat'] = pd.to_numeric(df['Latitude (Y)'], errors='coerce')\n    df['lng'] = pd.to_numeric(df['Longitude (X)'], errors='coerce')\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse 'Barrington Atlas Rank' into numeric rank_num (average if 'x or y'); coerce ancient coordinates to numeric lat/lng, keeping all other roman_cities columns",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "roman_last_sample",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(roman_rank_parsed):\n    # If multiple ancient cities match a modern city, take the last sample in the data.\n    # We'll preserve original row order via the existing index.\n    df = roman_rank_parsed.copy()\n    df['_row'] = range(len(df))\n    # Keep only rows with a valid numeric rank\n    df = df[df['rank_num'].notna()].copy()\n    # For matching later, we just need coordinates + rank; keep most recent (last) row per exact coordinate pair to reduce duplicates\n    # but do NOT collapse broadly yet; final collapse will be after nearest matching to modern cities.\n    return df\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter roman_rank_parsed to rows with non-null rank_num; add _row to preserve original order for later 'take last sample' tie-breaking",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "roman_modern_match",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(roman_last_sample, worldcities_million) -> pd.DataFrame:\n    import pandas as pd\n\n    r = roman_last_sample.copy()\n    w = worldcities_million.copy()\n\n    # Ensure numeric\n    for c in ['lat', 'lng']:\n        r[c] = pd.to_numeric(r[c], errors='coerce')\n        w[c] = pd.to_numeric(w[c], errors='coerce')\n    w['population'] = pd.to_numeric(w['population'], errors='coerce')\n\n    # Cross join then filter by degree threshold\n    r['_k'] = 1\n    w['_k'] = 1\n    cw = r.merge(w, on='_k', suffixes=('_anc', '_mod')).drop(columns=['_k'])\n\n    cw['dlat'] = (cw['lat_anc'] - cw['lat_mod']).abs()\n    cw['dlng'] = (cw['lng_anc'] - cw['lng_mod']).abs()\n    cw = cw[(cw['dlat'] < 0.1) & (cw['dlng'] < 0.1)].copy()\n\n    if cw.empty:\n        return pd.DataFrame(columns=['id', 'city', 'country', 'population', 'lat_mod', 'lng_mod',\n                                     'rank_num', '_row', 'Primary Key', 'Ancient Toponym', 'Modern Toponym'])\n\n    # If multiple ancient matches per modern city, take last roman sample by max _row\n    cw = cw.sort_values(['id', '_row'])\n    last = cw.groupby('id', as_index=False).tail(1)\n\n    out = last[[\n        'id', 'city', 'country', 'population', 'lat_mod', 'lng_mod',\n        'rank_num', '_row', 'Primary Key', 'Ancient Toponym', 'Modern Toponym'\n    ]]\n\n    return out.reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Match roman_last_sample to worldcities_million via cross join; keep pairs where abs(lat diff)<0.1 and abs(lng diff)<0.1. For each modern city id with multiple matching ancient rows, keep the last roman sample (max _row). Output id/city/country/population and rank_num plus identifiers.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "rank_pop_corr",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(roman_modern_match) -> pd.DataFrame:\n    import pandas as pd\n    df = roman_modern_match.copy()\n    df['rank_num'] = pd.to_numeric(df['rank_num'], errors='coerce')\n    df['population'] = pd.to_numeric(df['population'], errors='coerce')\n    df = df.dropna(subset=['rank_num','population'])\n    corr = df['rank_num'].corr(df['population'])\n    return pd.DataFrame([{'corr': float(corr), 'n': int(len(df))}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Recompute Pearson correlation between rank_num and population on matched dataset, ensuring numeric types and dropping any nulls",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "worldcities": {
+      "x": 430,
+      "y": 220
+    },
+    "roman_cities": {
+      "x": 100,
+      "y": 40
+    },
+    "worldcities_million": {
+      "x": 760,
+      "y": 220
+    },
+    "roman_rank_parsed": {
+      "x": 430,
+      "y": 40
+    },
+    "roman_last_sample": {
+      "x": 760,
+      "y": 40
+    },
+    "roman_modern_match": {
+      "x": 1090,
+      "y": 130
+    },
+    "rank_pop_corr": {
+      "x": 1420,
+      "y": 130
+    }
+  },
+  "links": [
+    {
+      "linkID": "worldcities-->worldcities_million",
+      "source": {
+        "operatorID": "worldcities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "worldcities_million",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "roman_cities-->roman_rank_parsed",
+      "source": {
+        "operatorID": "roman_cities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "roman_rank_parsed",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "roman_rank_parsed-->roman_last_sample",
+      "source": {
+        "operatorID": "roman_rank_parsed",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "roman_last_sample",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "roman_last_sample-->roman_modern_match",
+      "source": {
+        "operatorID": "roman_last_sample",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "roman_modern_match",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "worldcities_million-->roman_modern_match",
+      "source": {
+        "operatorID": "worldcities_million",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "roman_modern_match",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "roman_modern_match-->rank_pop_corr",
+      "source": {
+        "operatorID": "roman_modern_match",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rank_pop_corr",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

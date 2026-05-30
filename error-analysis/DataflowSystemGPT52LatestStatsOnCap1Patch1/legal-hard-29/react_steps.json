@@ -1,0 +1,192 @@
+{
+  "steps": [
+    {
+      "id": "step-agent-92-1-1779140161222",
+      "messageId": "msg-agent-92-1-init-1779140161222",
+      "stepId": 0,
+      "timestamp": 1779140161222,
+      "role": "agent",
+      "content": "Initialization: loaded workflow and recorded a baseline of each operator's current result.",
+      "isBegin": true,
+      "isEnd": true,
+      "toolCalls": [
+        {
+          "toolName": "initialize",
+          "toolCallId": "call-step-agent-92-1-1779140161222-initialize",
+          "input": {
+            "workflowId": 2350
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "call-step-agent-92-1-1779140161222-initialize",
+          "output": "Initialization: state=Empty, operators=0, errors=0.",
+          "isError": false
+        }
+      ]
+    },
+    {
+      "id": "step-agent-92-2-1779140161225",
+      "parentId": "step-agent-92-1-1779140161222",
+      "messageId": "msg-agent-92-2-1779140161225",
+      "stepId": 0,
+      "timestamp": 1779140161225,
+      "role": "user",
+      "content": "You are a data scientist. Answer the following question based on the data files.\n\nData files available (use these paths to read the data):\n[\n  \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n]\n\nNote: All paths are relative. Some paths may contain wildcards (e.g., \"folder/*\" or \"file-*.csv\"). Use glob patterns to match and read those files.\n\nQuestion: Among states with 5 or more metro areas, which metropolitan area had the largest percentage of fraud reports in its own state?\n\nAnswer format: The result should be a single string representing a metropolitan statistical area name, using the exact format from the data.\n\nYour last line MUST BE: **Final Answer: <value>**",
+      "isBegin": true,
+      "isEnd": true,
+      "messageSource": "chat",
+      "usage": {
+        "inputTokens": 177,
+        "outputTokens": 0,
+        "totalTokens": 177
+      }
+    },
+    {
+      "id": "step-agent-92-3-1779140164628",
+      "parentId": "step-agent-92-2-1779140161225",
+      "messageId": "msg-agent-92-2-1779140161225",
+      "stepId": 1,
+      "timestamp": 1779140164628,
+      "role": "agent",
+      "content": "",
+      "isBegin": true,
+      "isEnd": false,
+      "toolCalls": [
+        {
+          "toolName": "createOrModifyOperator",
+          "toolCallId": "call_XSDUHlPN4KMdALcP7D81dsH6",
+          "input": {
+            "operatorId": "loadStateMsaFraudFiles",
+            "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        try:\n            df = pd.read_csv(p)\n        except Exception:\n            # fallback for odd encodings/delimiters\n            df = pd.read_csv(p, encoding=\"latin-1\")\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n",
+            "summary": "Load all CSVs matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' using glob; read each via pd.read_csv (fallback encoding='latin-1' if needed); concatenate into one DataFrame and add provenance column '__source_file' (basename)."
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "call_XSDUHlPN4KMdALcP7D81dsH6",
+          "output": "Added operator loadStateMsaFraudFiles, input ports: 0, output ports: 1",
+          "isError": false
+        }
+      ],
+      "usage": {
+        "inputTokens": 5625,
+        "outputTokens": 293,
+        "totalTokens": 5918
+      },
+      "inputMessages": [
+        {
+          "role": "user",
+          "content": "# User Task\n\nYou are a data scientist. Answer the following question based on the data files.\n\nData files available (use these paths to read the data):\n[\n  \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n]\n\nNote: All paths are relative. Some paths may contain wildcards (e.g., \"folder/*\" or \"file-*.csv\"). Use glob patterns to match and read those files.\n\nQuestion: Among states with 5 or more metro areas, which metropolitan area had the largest percentage of fraud reports in its own state?\n\nAnswer format: The result should be a single string representing a metropolitan statistical area name, using the exact format from the data.\n\nYour last line MUST BE: **Final Answer: <value>**\n\n# Recent Agent Events\n\n(no agent actions yet)"
+        }
+      ]
+    },
+    {
+      "id": "step-agent-92-4-1779140173845",
+      "parentId": "step-agent-92-3-1779140164628",
+      "messageId": "msg-agent-92-2-1779140161225",
+      "stepId": 2,
+      "timestamp": 1779140173845,
+      "role": "agent",
+      "content": "",
+      "isBegin": false,
+      "isEnd": false,
+      "toolCalls": [
+        {
+          "toolName": "createOrModifyOperator",
+          "toolCallId": "call_AZEq55Dj2sokScOqlFvbj4bJ",
+          "input": {
+            "operatorId": "cleanStateMsaFraud",
+            "code": "def process(loadStateMsaFraudFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadStateMsaFraudFiles.copy()\n    df = df.rename(columns={\n        \"Metropolitan Areas: Fraud and Other Reports\": \"msa\",\n        \"Unnamed: 1\": \"reports_raw\",\n    })\n\n    # Keep rows that look like data (msa present, not headers/footers)\n    df = df[df[\"msa\"].notna()].copy()\n    bad = {\n        \"Metropolitan Area\",\n        \"Metropolitan Areas: Fraud and Other Reports\",\n        \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\",\n    }\n    df = df[~df[\"msa\"].isin(bad)].copy()\n\n    # Parse state from source file name (e.g., Alabama.csv -> Alabama)\n    df[\"state\"] = df[\"__source_file\"].str.replace(\".csv\", \"\", regex=False)\n\n    # Parse report count, handling commas and possible non-numeric entries\n    df[\"reports\"] = (\n        df[\"reports_raw\"].astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.extract(r\"(\\d+)\")[0]\n        .astype(float)\n    )\n    df = df[df[\"reports\"].notna()].copy()\n    df[\"reports\"] = df[\"reports\"].astype(int)\n\n    # Keep relevant columns\n    return df[[\"state\", \"msa\", \"reports\"]].reset_index(drop=True)\n",
+            "summary": "Clean concatenated State MSA Fraud CSVs: rename columns to [msa, reports_raw]; drop NaN/header/footer rows (e.g., 'Metropolitan Area', 'Source: ...'); derive 'state' from '__source_file' basename without .csv; parse integer 'reports' from reports_raw by removing commas and extracting digits; return columns [state, msa, reports]."
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "call_AZEq55Dj2sokScOqlFvbj4bJ",
+          "output": "Added operator cleanStateMsaFraud, input ports: 1, output ports: 1, created links: [loadStateMsaFraudFiles --> cleanStateMsaFraud]",
+          "isError": false
+        }
+      ],
+      "usage": {
+        "inputTokens": 6168,
+        "outputTokens": 465,
+        "totalTokens": 6633
+      },
+      "inputMessages": [
+        {
+          "role": "user",
+          "content": "# User Task\n\nYou are a data scientist. Answer the following question based on the data files.\n\nData files available (use these paths to read the data):\n[\n  \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n]\n\nNote: All paths are relative. Some paths may contain wildcards (e.g., \"folder/*\" or \"file-*.csv\"). Use glob patterns to match and read those files.\n\nQuestion: Among states with 5 or more metro areas, which metropolitan area had the largest percentage of fraud reports in its own state?\n\nAnswer format: The result should be a single string representing a metropolitan statistical area name, using the exact format from the data.\n\nYour last line MUST BE: **Final Answer: <value>**\n\n# Recent Agent Events (last 1 of 2 events)\n\n(... 1 earlier event omitted to keep context focused on recent work ...)\n\n## Agent Event 2\n\nActions:\n- createOrModifyOperator(operatorId=\"loadStateMsaFraudFiles\")\n    code: |\n      def load() -> pd.DataFrame:\n          import glob\n          import pandas as pd\n      \n          pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n          paths = sorted(glob.glob(pattern))\n          if not paths:\n              raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n      \n          dfs = []\n          for p in paths:\n              try:\n                  df = pd.read_csv(p)\n              except Exception:\n                  # fallback for odd encodings/delimiters\n                  df = pd.read_csv(p, encoding=\"latin-1\")\n              df[\"__source_file\"] = p.split(\"/\")[-1]\n              dfs.append(df)\n      \n          out = pd.concat(dfs, ignore_index=True, sort=False)\n          return out\n      \n    (result: Added operator loadStateMsaFraudFiles, input ports: 0, output ports: 1)\n\n# Current Dataflow\n## Operators\n\n### Operator `loadStateMsaFraudFiles` (DataLoading)\nSummary: Load all CSVs matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' using glob; read each via pd.read_csv (fallback encoding='latin-1' if needed); concatenate into one DataFrame and add provenance column '__source_file' (basename).\nResult:\n  Executed operator loadStateMsaFraudFiles\n  Output table shape: (764, 3)\n  \tMetropolitan Areas: Fraud and Other Reports\tUnnamed: 1\t__source_file\n  0\tNaN\tNaN\tAlabama.csv\n  1\tMetropolitan Area\t# of Reports\tAlabama.csv\n  2\tAnniston-Oxford, AL Metropolitan Statistical Area\t1,299\tAlabama.csv\n  ...\t...\t...\t...\n  762\tNaN\tNaN\tWyoming.csv\n  763\tSource: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\tNaN\tWyoming.csv\n  Column stats:\n  - \"__source_file\" (str): null=0, distinct=52\n  - \"Metropolitan Areas: Fraud and Other Reports\" (str): null=156, distinct=404\n  - \"Unnamed: 1\" (str): null=260, distinct=388"
+        }
+      ]
+    },
+    {
+      "id": "step-agent-92-5-1779140181531",
+      "parentId": "step-agent-92-4-1779140173845",
+      "messageId": "msg-agent-92-2-1779140161225",
+      "stepId": 3,
+      "timestamp": 1779140181531,
+      "role": "agent",
+      "content": "",
+      "isBegin": false,
+      "isEnd": false,
+      "toolCalls": [
+        {
+          "toolName": "createOrModifyOperator",
+          "toolCallId": "call_hxeLxyy30xo4yzzwnjHMCn49",
+          "input": {
+            "operatorId": "topMsaFraudShareWithinEligibleStates",
+            "code": "def process(cleanStateMsaFraud) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanStateMsaFraud.copy()\n\n    # Only Metropolitan Statistical Areas (exclude Micropolitan)\n    df = df[df[\"msa\"].str.contains(r\"Metropolitan Statistical Area$\", regex=True, na=False)].copy()\n\n    # States with 5+ metro areas\n    metroCounts = df.groupby(\"state\")[\"msa\"].nunique().reset_index(name=\"metro_count\")\n    eligibleStates = metroCounts[metroCounts[\"metro_count\"] >= 5][[\"state\"]]\n\n    dfEligible = df.merge(eligibleStates, on=\"state\", how=\"inner\")\n\n    # Compute share of fraud reports within each state\n    stateTotals = dfEligible.groupby(\"state\", as_index=False)[\"reports\"].sum().rename(columns={\"reports\": \"state_reports\"})\n    dfEligible = dfEligible.merge(stateTotals, on=\"state\", how=\"inner\")\n    dfEligible[\"pct_of_state\"] = dfEligible[\"reports\"] / dfEligible[\"state_reports\"]\n\n    # Find the maximum share MSA across all eligible states\n    out = (\n        dfEligible.sort_values([\"pct_of_state\", \"reports\"], ascending=[False, False])\n        .head(1)[[\"msa\", \"state\", \"reports\", \"state_reports\", \"pct_of_state\"]]\n        .reset_index(drop=True)\n    )\n    return out\n",
+            "summary": "Filter clean State-MSA fraud table to rows whose 'msa' endswith 'Metropolitan Statistical Area' (exclude Micropolitan); compute number of metro areas per state (nunique msa) and keep states with metro_count>=5; within eligible states compute state_reports=sum(reports) and pct_of_state=reports/state_reports for each MSA; return the single MSA row with the maximum pct_of_state (tie-breaker: higher reports)."
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "call_hxeLxyy30xo4yzzwnjHMCn49",
+          "output": "Added operator topMsaFraudShareWithinEligibleStates, input ports: 1, output ports: 1, created links: [cleanStateMsaFraud --> topMsaFraudShareWithinEligibleStates]",
+          "isError": false
+        }
+      ],
+      "usage": {
+        "inputTokens": 6713,
+        "outputTokens": 458,
+        "totalTokens": 7171
+      },
+      "inputMessages": [
+        {
+          "role": "user",
+          "content": "# User Task\n\nYou are a data scientist. Answer the following question based on the data files.\n\nData files available (use these paths to read the data):\n[\n  \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n]\n\nNote: All paths are relative. Some paths may contain wildcards (e.g., \"folder/*\" or \"file-*.csv\"). Use glob patterns to match and read those files.\n\nQuestion: Among states with 5 or more metro areas, which metropolitan area had the largest percentage of fraud reports in its own state?\n\nAnswer format: The result should be a single string representing a metropolitan statistical area name, using the exact format from the data.\n\nYour last line MUST BE: **Final Answer: <value>**\n\n# Recent Agent Events (last 1 of 3 events)\n\n(... 2 earlier events omitted to keep context focused on recent work ...)\n\n## Agent Event 3\n\nActions:\n- createOrModifyOperator(operatorId=\"cleanStateMsaFraud\")\n    code: |\n      def process(loadStateMsaFraudFiles) -> pd.DataFrame:\n          import pandas as pd\n      \n          df = loadStateMsaFraudFiles.copy()\n          df = df.rename(columns={\n              \"Metropolitan Areas: Fraud and Other Reports\": \"msa\",\n              \"Unnamed: 1\": \"reports_raw\",\n          })\n      \n          # Keep rows that look like data (msa present, not headers/footers)\n          df = df[df[\"msa\"].notna()].copy()\n          bad = {\n              \"Metropolitan Area\",\n              \"Metropolitan Areas: Fraud and Other Reports\",\n              \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\",\n          }\n          df = df[~df[\"msa\"].isin(bad)].copy()\n      \n          # Parse state from source file name (e.g., Alabama.csv -> Alabama)\n          df[\"state\"] = df[\"__source_file\"].str.replace(\".csv\", \"\", regex=False)\n      \n          # Parse report count, handling commas and possible non-numeric entries\n          df[\"reports\"] = (\n              df[\"reports_raw\"].astype(str)\n              .str.replace(\",\", \"\", regex=False)\n              .str.extract(r\"(\\d+)\")[0]\n              .astype(float)\n          )\n          df = df[df[\"reports\"].notna()].copy()\n          df[\"reports\"] = df[\"reports\"].astype(int)\n      \n          # Keep relevant columns\n          return df[[\"state\", \"msa\", \"reports\"]].reset_index(drop=True)\n      \n    (result: Added operator cleanStateMsaFraud, input ports: 1, output ports: 1, created links: [loadStateMsaFraudFiles --> cleanStateMsaFraud])\n\n# Current Dataflow\n## Operators\n\n### Operator `loadStateMsaFraudFiles` (DataLoading)\nSummary: Load all CSVs matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' using glob; read each via pd.read_csv (fallback encoding='latin-1' if needed); concatenate into one DataFrame and add provenance column '__source_file' (basename).\nResult:\n  Executed operator loadStateMsaFraudFiles\n  Output table shape: (764, 3)\n  \tMetropolitan Areas: Fraud and Other Reports\tUnnamed: 1\t__source_file\n  0\tNaN\tNaN\tAlabama.csv\n  1\tMetropolitan Area\t# of Reports\tAlabama.csv\n  2\tAnniston-Oxford, AL Metropolitan Statistical Area\t1,299\tAlabama.csv\n  ...\t...\t...\t...\n  762\tNaN\tNaN\tWyoming.csv\n  763\tSource: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\tNaN\tWyoming.csv\n  Column stats:\n  - \"__source_file\" (str): null=0, distinct=52\n  - \"Metropolitan Areas: Fraud and Other Reports\" (str): null=156, distinct=404\n  - \"Unnamed: 1\" (str): null=260, distinct=388\n\n### Operator `cleanStateMsaFraud` (DataProcessing)\nSummary: Clean concatenated State MSA Fraud CSVs: rename columns to [msa, reports_raw]; drop NaN/header/footer rows (e.g., 'Metropolitan Area', 'Source: ...'); derive 'state' from '__source_file' basename without .csv; parse integer 'reports' from reports_raw by removing commas and extracting digits; return columns [state, msa, reports].\nResult:\n  Executed operator cleanStateMsaFraud\n  Input operator(table shape): loadStateMsaFraudFiles(764, undefined)\n  Output table shape: (452, 3)\n  \tstate\tmsa\treports\n  0\tAlabama\tAnniston-Oxford, AL Metropolitan Statistical Area\t1299\n  1\tAlabama\tAuburn-Opelika, AL Metropolitan Statistical Area\t2141\n  2\tAlabama\tBirmingham, AL Metropolitan Statistical Area\t20649\n  3\tAlabama\tColumbus, GA-AL Metropolitan Statistical Area\t5541\n  ...\t...\t...\t...\n  448\tWisconsin\tSheboygan, WI Metropolitan Statistical Area\t851\n  449\tWisconsin\tWausau, WI Metropolitan Statistical Area\t844\n  450\tWisconsin\tWhitewater-Elkhorn, WI Micropolitan Statistical Area\t728\n  451\tWyoming\tCheyenne, WY Metropolitan Statistical Area\t1131\n  Column stats:\n  - \"msa\" (str): null=0, distinct=401\n  - \"reports\" (numeric): null=0, mean=1.292e+04, min=373, max=309066\n  - \"state\" (str): null=0, distinct=52\n\n## Links\n- loadStateMsaFraudFiles \u2192 cleanStateMsaFraud"
+        }
+      ]
+    },
+    {
+      "id": "step-agent-92-6-1779140184261",
+      "parentId": "step-agent-92-5-1779140181531",
+      "messageId": "msg-agent-92-2-1779140161225",
+      "stepId": 4,
+      "timestamp": 1779140184261,
+      "role": "agent",
+      "content": "**Final Answer: Washington-Arlington-Alexandria, DC-VA-MD-WV Metropolitan Statistical Area**",
+      "isBegin": false,
+      "isEnd": true,
+      "toolCalls": [],
+      "toolResults": [],
+      "usage": {
+        "inputTokens": 7095,
+        "outputTokens": 26,
+        "totalTokens": 7121
+      },
+      "inputMessages": [
+        {
+          "role": "user",
+          "content": "# User Task\n\nYou are a data scientist. Answer the following question based on the data files.\n\nData files available (use these paths to read the data):\n[\n  \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n]\n\nNote: All paths are relative. Some paths may contain wildcards (e.g., \"folder/*\" or \"file-*.csv\"). Use glob patterns to match and read those files.\n\nQuestion: Among states with 5 or more metro areas, which metropolitan area had the largest percentage of fraud reports in its own state?\n\nAnswer format: The result should be a single string representing a metropolitan statistical area name, using the exact format from the data.\n\nYour last line MUST BE: **Final Answer: <value>**\n\n# Recent Agent Events (last 1 of 4 events)\n\n(... 3 earlier events omitted to keep context focused on recent work ...)\n\n## Agent Event 4\n\nActions:\n- createOrModifyOperator(operatorId=\"topMsaFraudShareWithinEligibleStates\")\n    code: |\n      def process(cleanStateMsaFraud) -> pd.DataFrame:\n          import pandas as pd\n      \n          df = cleanStateMsaFraud.copy()\n      \n          # Only Metropolitan Statistical Areas (exclude Micropolitan)\n          df = df[df[\"msa\"].str.contains(r\"Metropolitan Statistical Area$\", regex=True, na=False)].copy()\n      \n          # States with 5+ metro areas\n          metroCounts = df.groupby(\"state\")[\"msa\"].nunique().reset_index(name=\"metro_count\")\n          eligibleStates = metroCounts[metroCounts[\"metro_count\"] >= 5][[\"state\"]]\n      \n          dfEligible = df.merge(eligibleStates, on=\"state\", how=\"inner\")\n      \n          # Compute share of fraud reports within each state\n          stateTotals = dfEligible.groupby(\"state\", as_index=False)[\"reports\"].sum().rename(columns={\"reports\": \"state_reports\"})\n          dfEligible = dfEligible.merge(stateTotals, on=\"state\", how=\"inner\")\n          dfEligible[\"pct_of_state\"] = dfEligible[\"reports\"] / dfEligible[\"state_reports\"]\n      \n          # Find the maximum share MSA across all eligible states\n          out = (\n              dfEligible.sort_values([\"pct_of_state\", \"reports\"], ascending=[False, False])\n              .head(1)[[\"msa\", \"state\", \"reports\", \"state_reports\", \"pct_of_state\"]]\n              .reset_index(drop=True)\n          )\n          return out\n      \n    (result: Added operator topMsaFraudShareWithinEligibleStates, input ports: 1, output ports: 1, created links: [cleanStateMsaFraud --> topMsaFraudShareWithinEligibleStates])\n\n# Current Dataflow\n## Operators\n\n### Operator `loadStateMsaFraudFiles` (DataLoading)\nSummary: Load all CSVs matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' using glob; read each via pd.read_csv (fallback encoding='latin-1' if needed); concatenate into one DataFrame and add provenance column '__source_file' (basename).\nResult:\n  Executed operator loadStateMsaFraudFiles\n  Output table shape: (764, 3)\n  \tMetropolitan Areas: Fraud and Other Reports\tUnnamed: 1\t__source_file\n  0\tNaN\tNaN\tAlabama.csv\n  1\tMetropolitan Area\t# of Reports\tAlabama.csv\n  2\tAnniston-Oxford, AL Metropolitan Statistical Area\t1,299\tAlabama.csv\n  ...\t...\t...\t...\n  762\tNaN\tNaN\tWyoming.csv\n  763\tSource: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\tNaN\tWyoming.csv\n  Column stats:\n  - \"__source_file\" (str): null=0, distinct=52\n  - \"Metropolitan Areas: Fraud and Other Reports\" (str): null=156, distinct=404\n  - \"Unnamed: 1\" (str): null=260, distinct=388\n\n### Operator `cleanStateMsaFraud` (DataProcessing)\nSummary: Clean concatenated State MSA Fraud CSVs: rename columns to [msa, reports_raw]; drop NaN/header/footer rows (e.g., 'Metropolitan Area', 'Source: ...'); derive 'state' from '__source_file' basename without .csv; parse integer 'reports' from reports_raw by removing commas and extracting digits; return columns [state, msa, reports].\nResult:\n  Executed operator cleanStateMsaFraud\n  Input operator(table shape): loadStateMsaFraudFiles(764, undefined)\n  Output table shape: (452, 3)\n  \tstate\tmsa\treports\n  0\tAlabama\tAnniston-Oxford, AL Metropolitan Statistical Area\t1299\n  1\tAlabama\tAuburn-Opelika, AL Metropolitan Statistical Area\t2141\n  2\tAlabama\tBirmingham, AL Metropolitan Statistical Area\t20649\n  3\tAlabama\tColumbus, GA-AL Metropolitan Statistical Area\t5541\n  ...\t...\t...\t...\n  448\tWisconsin\tSheboygan, WI Metropolitan Statistical Area\t851\n  449\tWisconsin\tWausau, WI Metropolitan Statistical Area\t844\n  450\tWisconsin\tWhitewater-Elkhorn, WI Micropolitan Statistical Area\t728\n  451\tWyoming\tCheyenne, WY Metropolitan Statistical Area\t1131\n  Column stats:\n  - \"msa\" (str): null=0, distinct=401\n  - \"reports\" (numeric): null=0, mean=1.292e+04, min=373, max=309066\n  - \"state\" (str): null=0, distinct=52\n\n### Operator `topMsaFraudShareWithinEligibleStates` (DataProcessing)\nSummary: Filter clean State-MSA fraud table to rows whose 'msa' endswith 'Metropolitan Statistical Area' (exclude Micropolitan); compute number of metro areas per state (nunique msa) and keep states with metro_count>=5; within eligible states compute state_reports=sum(reports) and pct_of_state=reports/state_reports for each MSA; return the single MSA row with the maximum pct_of_state (tie-breaker: higher reports).\nResult:\n  Executed operator topMsaFraudShareWithinEligibleStates\n  Input operator(table shape): cleanStateMsaFraud(452, undefined)\n  Output table shape: (1, 5)\n  \tmsa\tstate\treports\tstate_reports\tpct_of_state\n  0\tWashington-Arlington-Alexandria, DC-VA-MD-WV Metropolitan Statistical Area\tWestVirginia\t109978\t124044\t0.8866047531521073\n  Column stats:\n  - \"msa\" (str): null=0, distinct=1, top_10={\"Washington-Arlington-Alexandria, DC-VA-MD-WV Metropolitan Statistical Area\"=1}\n  - \"pct_of_state\" (numeric): null=0, mean=0.8866, min=0.8866, max=0.8866\n  - \"reports\" (numeric): null=0, mean=109978, min=109978, max=109978\n  - \"state\" (str): null=0, distinct=1, top_10={\"WestVirginia\"=1}\n  - \"state_reports\" (numeric): null=0, mean=124044, min=124044, max=124044\n\n## Links\n- loadStateMsaFraudFiles \u2192 cleanStateMsaFraud\n- cleanStateMsaFraud \u2192 topMsaFraudShareWithinEligibleStates"
+        }
+      ]
+    }
+  ],
+  "state": "AVAILABLE"
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-83-9-1779140071208",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudReports2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load():\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv\"\n\n    # Read raw; this file uses a title row and/or irregular header placement.\n    # Load everything as-is, then downstream operators can promote the proper header row.\n    return pd.read_csv(path, header=None)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv via pd.read_csv with header=None (ingest raw rows without header inference due to irregular header/title rows).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "maxMedianFraudLossBranch2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudReports2024):\n    import pandas as pd\n\n    raw = fraudReports2024.copy()\n\n    # Identify header row by exact match in first column\n    col0 = raw.iloc[:, 0].astype(str).str.strip()\n    header_candidates = raw.index[col0.eq('Military Status')]\n    if len(header_candidates) == 0:\n        # Fallback: search anywhere in row\n        header_mask = raw.apply(lambda r: r.astype(str).str.strip().eq('Military Status').any(), axis=1)\n        if not header_mask.any():\n            return pd.DataFrame({'error': ['Could not find header row containing Military Status'], 'preview': [raw.head(10).to_json()]})\n        header_idx = int(header_mask[header_mask].index[0])\n    else:\n        header_idx = int(header_candidates[0])\n\n    headers = raw.loc[header_idx].tolist()\n    df = raw.loc[header_idx + 1:].copy()\n    df.columns = headers\n\n    # Drop blank rows / source notes\n    df = df.dropna(how='all')\n\n    # Clean key fields\n    df['Military Status'] = df['Military Status'].astype(str).str.strip()\n\n    # Parse median fraud loss as numeric dollars.\n    df['Median Fraud Loss (num)'] = (\n        df['Median Fraud Loss']\n        .astype(str)\n        .str.replace(r'[^0-9.-]', '', regex=True)\n        .replace('', pd.NA)\n    )\n    df['Median Fraud Loss (num)'] = pd.to_numeric(df['Median Fraud Loss (num)'], errors='coerce')\n\n    # Keep only actual branches by excluding aggregate/other categories\n    knownNonBranches = {\n        'Total', 'Civilian', 'Veteran', 'National Guard', 'Reserve',\n        'Military', 'Active Duty', 'Unknown', 'Other'\n    }\n    df = df[~df['Military Status'].isin(knownNonBranches)].copy()\n\n    # Drop rows without a numeric median\n    df = df.dropna(subset=['Median Fraud Loss (num)'])\n\n    # Find maximum\n    top = df.sort_values('Median Fraud Loss (num)', ascending=False).head(1)\n    return top[['Military Status', 'Median Fraud Loss', 'Median Fraud Loss (num)']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Locate the true header row in fraudReports2024 by matching 'Military Status' in column 0, promote it to column headers, keep subsequent rows as data, drop all-empty rows; strip Military Status, parse 'Median Fraud Loss' to numeric dollars, exclude common non-branch aggregate categories (e.g., Total, Veteran, National Guard, Reserve), then sort descending by numeric median fraud loss and return the top row with Military Status and median values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudReports2024": {
+        "x": 100,
+        "y": 40
+      },
+      "maxMedianFraudLossBranch2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudReports2024-->maxMedianFraudLossBranch2024",
+        "source": {
+          "operatorID": "fraudReports2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maxMedianFraudLossBranch2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

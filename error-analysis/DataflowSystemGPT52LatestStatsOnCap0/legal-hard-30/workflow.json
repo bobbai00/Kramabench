@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-109-5-1779101250056",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadIdentityTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = sorted(glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'))\n    if not paths:\n        raise FileNotFoundError('No files matched identity theft glob pattern')\n\n    dfs = []\n    for p in paths:\n        # read as strings first to avoid dtype issues; convert later\n        df = pd.read_csv(p, dtype=str)\n        df['__source_file'] = p.split('/')[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv' via glob; read each with pd.read_csv(dtype=str); append '__source_file' (basename) column; concatenate into one DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadFraud",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob, os\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if len(paths) == 0:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p, dtype=str)\n        df[\"__source_file\"] = os.path.basename(p)\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' via glob; read each with pd.read_csv(dtype=str); append '__source_file' (basename) column; concatenate into one DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanIdentityTheft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadIdentityTheft) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadIdentityTheft.copy()\n\n    # Standardize expected columns (first = metro name, second = report count)\n    metro_col = df.columns[0]\n    count_col = df.columns[1]\n\n    out = df[[metro_col, count_col, \"__source_file\"]].rename(\n        columns={metro_col: \"metropolitan_area\", count_col: \"identity_theft_reports\"}\n    )\n\n    # Drop header/footnote/blank rows\n    out[\"metropolitan_area\"] = out[\"metropolitan_area\"].astype(str)\n    out = out[~out[\"metropolitan_area\"].str.strip().isin([\n        \"nan\",\n        \"Metropolitan Area\",\n        \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\",\n    ])]\n    out = out[out[\"metropolitan_area\"].str.strip() != \"\"]\n\n    out[\"identity_theft_reports\"] = pd.to_numeric(out[\"identity_theft_reports\"], errors=\"coerce\")\n    out = out.dropna(subset=[\"identity_theft_reports\"])\n\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft table: keep first two columns as [metropolitan_area, identity_theft_reports] plus __source_file; drop repeated header rows ('Metropolitan Area')/footnotes/source lines/blanks; coerce identity_theft_reports to numeric and drop non-numeric rows",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cleanFraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadFraud) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadFraud.copy()\n\n    # Heuristically pick metro and count columns (some files may have extra cols)\n    cols = list(df.columns)\n    metro_col = cols[0]\n\n    # Prefer a column that looks like a report count\n    candidate_cols = [c for c in cols if c != metro_col and c != \"__source_file\"]\n    if len(candidate_cols) == 0:\n        raise ValueError(\"No candidate count column found in fraud files\")\n\n    # Choose the first candidate as count column\n    count_col = candidate_cols[0]\n\n    out = df[[metro_col, count_col, \"__source_file\"]].rename(\n        columns={metro_col: \"metropolitan_area\", count_col: \"fraud_reports\"}\n    )\n\n    out[\"metropolitan_area\"] = out[\"metropolitan_area\"].astype(str)\n    out = out[~out[\"metropolitan_area\"].str.strip().isin([\n        \"nan\",\n        \"Metropolitan Area\",\n        \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\",\n    ])]\n    out = out[out[\"metropolitan_area\"].str.strip() != \"\"]\n\n    out[\"fraud_reports\"] = pd.to_numeric(out[\"fraud_reports\"], errors=\"coerce\")\n    out = out.dropna(subset=[\"fraud_reports\"])\n\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean fraud table: keep metro column (first col) and first non-metro/non-__source_file column as fraud_reports; drop repeated header rows/footnotes/blanks; coerce fraud_reports to numeric and drop non-numeric rows",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compareMetroReports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanIdentityTheft, cleanFraud) -> pd.DataFrame:\n    import pandas as pd\n\n    it = cleanIdentityTheft.copy()\n    fr = cleanFraud.copy()\n\n    # Aggregate within metro across states (same MSA can appear in multiple state files)\n    itAgg = it.groupby(\"metropolitan_area\", as_index=False)[\"identity_theft_reports\"].sum()\n    frAgg = fr.groupby(\"metropolitan_area\", as_index=False)[\"fraud_reports\"].sum()\n\n    merged = itAgg.merge(frAgg, on=\"metropolitan_area\", how=\"inner\")\n    merged[\"itExceedsFraud\"] = merged[\"identity_theft_reports\"] > merged[\"fraud_reports\"]\n\n    exists = bool(merged[\"itExceedsFraud\"].any())\n    return pd.DataFrame([{ \"exists_identity_theft_exceeds_fraud\": exists }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Aggregate identity theft and fraud report counts by metropolitan_area (sum across all source files); inner-join on metropolitan_area; compute boolean identity_theft_reports > fraud_reports; output single-row flag exists_identity_theft_exceeds_fraud indicating whether any metro satisfies condition",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadIdentityTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "loadFraud": {
+        "x": 100,
+        "y": 220
+      },
+      "cleanIdentityTheft": {
+        "x": 400,
+        "y": 40
+      },
+      "cleanFraud": {
+        "x": 400,
+        "y": 220
+      },
+      "compareMetroReports": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadIdentityTheft-->cleanIdentityTheft",
+        "source": {
+          "operatorID": "loadIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdentityTheft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadFraud-->cleanFraud",
+        "source": {
+          "operatorID": "loadFraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanFraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdentityTheft-->compareMetroReports",
+        "source": {
+          "operatorID": "cleanIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareMetroReports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanFraud-->compareMetroReports",
+        "source": {
+          "operatorID": "cleanFraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareMetroReports",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-345-6-1779107526167",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xls = pd.ExcelFile(path)\n    sheets = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh, dtype=str)\n        df.columns = [str(c).strip() for c in df.columns]\n        df['__sheet__'] = sh\n        sheets.append(df)\n    out = pd.concat(sheets, ignore_index=True, sort=False)\n    out.insert(0, '__source__', path)\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx \u2014 read all sheets as strings via pd.ExcelFile + pd.read_excel(dtype=str), append '__sheet__' column, concat into one table, add '__source__' filename column",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc4",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    xls = pd.ExcelFile(path)\n    sheets = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh, dtype=str)\n        df.columns = [str(c).strip() for c in df.columns]\n        df['__sheet__'] = sh\n        sheets.append(df)\n    out = pd.concat(sheets, ignore_index=True, sort=False)\n    out.insert(0, '__source__', path)\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc4.xlsx \u2014 read all sheets as strings via pd.ExcelFile + pd.read_excel(dtype=str), append '__sheet__' column, concat into one table, add '__source__' filename column",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "peptideSamples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc4) -> pd.DataFrame:\n    import pandas as pd\n\n    peptide = 'HPKPEVLGSSADGALLVSLDGLR'\n\n    df = mmc4.copy()\n    # Keep rows with a peptide match (exact string match)\n    df = df[df['Peptide'].astype(str) == peptide]\n\n    # Split the samples list (typically like \"S101\" or \"S12,S13\" etc.)\n    if df.empty:\n        return pd.DataFrame({'Peptide':[peptide], 'Samples_With_Peptide':[pd.NA]})\n\n    out = df[['Peptide', 'Samples_With_Peptide', 'Num_Samples_With_Peptide', '__sheet__']].copy()\n    out['sample'] = (\n        out['Samples_With_Peptide']\n        .astype(str)\n        .str.replace(r'\\s+', '', regex=True)\n        .str.split(',')\n    )\n    out = out.explode('sample')\n    out['sample'] = out['sample'].replace({'nan': pd.NA, '': pd.NA})\n    out = out.dropna(subset=['sample']).drop_duplicates(subset=['Peptide', 'sample'])\n\n    return out.sort_values(['Peptide', 'sample']).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter mmc4 to rows where Peptide == 'HPKPEVLGSSADGALLVSLDGLR' (exact match); select [Peptide, Samples_With_Peptide, Num_Samples_With_Peptide, __sheet__]; split Samples_With_Peptide on commas (remove whitespace), explode into one row per sample id, drop missing/duplicate sample entries, and sort by [Peptide, sample]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "sampleGrades",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(peptideSamples, mmc1) -> pd.DataFrame:\n    import pandas as pd\n\n    ps = peptideSamples.copy()\n    meta = mmc1.copy()\n\n    # keys\n    ps['sample'] = ps['sample'].astype(str).str.strip()\n    meta['idx'] = meta['idx'].astype(str).str.strip()\n\n    # keep only needed cols\n    grade_col = 'Histologic_Grade_FIGO'\n    keep = ['idx'] + ([grade_col] if grade_col in meta.columns else [])\n    meta2 = meta[keep].drop_duplicates(subset=['idx'])\n\n    out = ps.merge(meta2, left_on='sample', right_on='idx', how='left')\n\n    # normalize grade label\n    if grade_col in out.columns:\n        out[grade_col] = out[grade_col].astype(str).str.strip()\n        out.loc[out[grade_col].isin(['', 'nan', 'None', 'NaN']), grade_col] = pd.NA\n\n    return out[['sample', grade_col]].drop_duplicates().sort_values('sample').reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join peptideSamples to mmc1 metadata to retrieve tumor histological grade: trim peptideSamples.sample and mmc1.idx; select mmc1 columns [idx, Histologic_Grade_FIGO]; left-merge on sample==idx; normalize Histologic_Grade_FIGO by stripping and setting empty/'nan' to NA; return distinct [sample, Histologic_Grade_FIGO] sorted by sample",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1": {
+        "x": 400,
+        "y": 220
+      },
+      "mmc4": {
+        "x": 100,
+        "y": 40
+      },
+      "peptideSamples": {
+        "x": 400,
+        "y": 40
+      },
+      "sampleGrades": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc4-->peptideSamples",
+        "source": {
+          "operatorID": "mmc4",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "peptideSamples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "peptideSamples-->sampleGrades",
+        "source": {
+          "operatorID": "peptideSamples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "sampleGrades",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc1-->sampleGrades",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "sampleGrades",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

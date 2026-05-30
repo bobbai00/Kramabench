@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-462-6-1779120343418",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "worldcities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    df = pd.read_csv(path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv via pd.read_csv (comma-delimited, header inferred from first row, UTF-8/default encoding).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "romanCities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/roman_cities.csv'\n    df = pd.read_csv(path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load roman_cities.csv from data/archeology/input/roman_cities.csv via pd.read_csv (comma-delimited, header inferred from first row, UTF-8/default encoding).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nearbyModernCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(worldcities, romanCities) -> pd.DataFrame:\n    import pandas as pd\n\n    wc = worldcities.copy()\n    rc = romanCities.copy()\n\n    # Ensure numeric types\n    wc['lat'] = pd.to_numeric(wc['lat'], errors='coerce')\n    wc['lng'] = pd.to_numeric(wc['lng'], errors='coerce')\n    wc['population'] = pd.to_numeric(wc['population'], errors='coerce')\n\n    rc['Latitude (Y)'] = pd.to_numeric(rc['Latitude (Y)'], errors='coerce')\n    rc['Longitude (X)'] = pd.to_numeric(rc['Longitude (X)'], errors='coerce')\n\n    # Filter modern cities by population threshold (strictly over 100k)\n    wc_f = wc[(wc['population'] > 100_000) & wc['lat'].notna() & wc['lng'].notna()].copy()\n    rc_f = rc[rc['Latitude (Y)'].notna() & rc['Longitude (X)'].notna()].copy()\n\n    # Cross join (bounded later by near filter)\n    wc_f['_k'] = 1\n    rc_f['_k'] = 1\n    pairs = wc_f.merge(rc_f, on='_k', how='inner', suffixes=('_wc', '_rc'))\n\n    # Within 0.1 degrees in BOTH latitude and longitude\n    near = pairs[(pairs['lat'] - pairs['Latitude (Y)']).abs() <= 0.1]\n    near = near[(near['lng'] - near['Longitude (X)']).abs() <= 0.1]\n\n    count = near['id'].nunique(dropna=True)\n    return pd.DataFrame({'count': [int(count)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count distinct modern cities from worldcities with population > 100,000 that lie within 0.1 degrees in BOTH latitude and longitude of at least one Roman-era city from roman_cities: coerce worldcities[lat,lng,population] and romanCities[Latitude (Y),Longitude (X)] to numeric; filter wc population>100k and non-null coords; cross join via constant key; filter |lat-Latitude (Y)|<=0.1 and |lng-Longitude (X)|<=0.1; return single-row DataFrame with integer 'count' = nunique(worldcities.id).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "worldcities": {
+        "x": 100,
+        "y": 40
+      },
+      "romanCities": {
+        "x": 100,
+        "y": 220
+      },
+      "nearbyModernCount": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "worldcities-->nearbyModernCount",
+        "source": {
+          "operatorID": "worldcities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nearbyModernCount",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "romanCities-->nearbyModernCount",
+        "source": {
+          "operatorID": "romanCities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nearbyModernCount",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-34-5-1779139268880",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportsByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Number_of_Reports_by_Type.csv via pd.read_csv (comma delimiter, header in first row, UTF-8 inferred) to get annual counts of reports by type including 'Other'.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "otherMoreThanHalf",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportsByType) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportsByType.copy()\n    # Real header is on row index 1\n    df.columns = df.iloc[1].astype(str).str.strip()\n    df = df.iloc[2:].copy()\n\n    # Keep year range and coerce numerics (remove commas)\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'].between(2001, 2024)].copy()\n\n    for c in ['Fraud', 'Identity Theft', 'Other']:\n        if c in df.columns:\n            df[c] = pd.to_numeric(df[c].astype(str).str.replace(',', '', regex=False), errors='coerce')\n\n    df['total'] = df[['Fraud', 'Identity Theft', 'Other']].sum(axis=1, skipna=False)\n    df['otherShare'] = df['Other'] / df['total']\n    any_year = bool((df['otherShare'] > 0.5).fillna(False).any())\n\n    return pd.DataFrame([{'answer': 'Yes' if any_year else 'No'}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean reportsByType table by promoting row 2 (index 1) to header (Year, Fraud, Identity Theft, Other), dropping non-data rows; parse comma-formatted counts to numeric; filter Year between 2001-2024 inclusive; compute total = Fraud+Identity Theft+Other and flag whether any year has Other/total > 0.5; output single-row DataFrame with column 'answer' as Yes/No.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportsByType": {
+        "x": 100,
+        "y": 40
+      },
+      "otherMoreThanHalf": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportsByType-->otherMoreThanHalf",
+        "source": {
+          "operatorID": "reportsByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "otherMoreThanHalf",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

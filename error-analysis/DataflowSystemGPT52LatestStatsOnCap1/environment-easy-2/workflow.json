@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-554-5-1779124039333",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadWaterTesting",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = [\n        \"data/environment/input/water-body-testing-2023.csv\",\n        \"data/environment/input/water-body-testing-2015.csv\",\n        \"data/environment/input/water-body-testing-2014.csv\",\n        \"data/environment/input/water-body-testing-2016.csv\",\n        \"data/environment/input/water-body-testing-2012.csv\",\n        \"data/environment/input/water-body-testing-2006.csv\",\n        \"data/environment/input/water-body-testing-2007.csv\",\n        \"data/environment/input/water-body-testing-2009.csv\",\n        \"data/environment/input/water-body-testing-2018.csv\",\n        \"data/environment/input/water-body-testing-2011.csv\",\n        \"data/environment/input/water-body-testing-2005.csv\",\n        \"data/environment/input/water-body-testing-2008.csv\",\n        \"data/environment/input/water-body-testing-2020.csv\",\n        \"data/environment/input/water-body-testing-2004.csv\",\n        \"data/environment/input/water-body-testing-2022.csv\",\n        \"data/environment/input/water-body-testing-2021.csv\",\n        \"data/environment/input/water-body-testing-2002.csv\",\n        \"data/environment/input/water-body-testing-2017.csv\",\n        \"data/environment/input/water-body-testing-2013.csv\",\n        \"data/environment/input/water-body-testing-2010.csv\",\n        \"data/environment/input/water-body-testing-2003.csv\",\n        \"data/environment/input/water-body-testing-2019.csv\",\n    ]\n\n    matched = []\n    for p in paths:\n        ms = glob.glob(p)\n        if not ms:\n            raise FileNotFoundError(f\"No files matched: {p}\")\n        matched.extend(ms)\n\n    dfs = []\n    for fp in sorted(set(matched)):\n        df = pd.read_csv(fp, dtype=str)\n        df[\"sourceFile\"] = fp.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and union water-body-testing-YYYY.csv files for years 2002-2023 (22 CSVs) using glob; read each via pd.read_csv(dtype=str), add sourceFile (basename), and concat into a single DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "freshwaterBeachExceedanceRates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadWaterTesting) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = loadWaterTesting.copy()\n\n    # Explicit columns based on observed schema\n    yearCol = \"Year\"\n    waterTypeCol = \"Beach Type Description\"  # values: Fresh / Marine\n    exceedCol = \"Violation\"  # values like yes/no with case variants\n\n    # Extract year\n    df[\"_year\"] = pd.to_numeric(df[yearCol], errors=\"coerce\")\n\n    # Freshwater beaches: Beach Type Description == 'Fresh'\n    wt = df[waterTypeCol].astype(str).str.strip().str.lower()\n    freshBeaches = df[wt.eq(\"fresh\")].copy()\n\n    # Exceedance flag\n    raw = freshBeaches[exceedCol].astype(str).str.strip().str.lower()\n\n    trueVals = {\"yes\", \"y\", \"true\", \"1\"}\n    falseVals = {\"no\", \"n\", \"false\", \"0\", \"nan\", \"\"}\n\n    def to01(s: str):\n        if s in trueVals:\n            return 1\n        if s in falseVals:\n            return 0\n        # fallback patterns\n        if \"yes\" in s or \"exceed\" in s or \"viol\" in s or \"fail\" in s:\n            return 1\n        if \"no\" in s or \"pass\" in s or \"meet\" in s:\n            return 0\n        return np.nan\n\n    freshBeaches[\"_exceed\"] = raw.map(to01)\n\n    # Keep only 2002-2023 inclusive\n    freshBeaches = freshBeaches[(freshBeaches[\"_year\"] >= 2002) & (freshBeaches[\"_year\"] <= 2023)].copy()\n\n    # Per-year exceedance rate (mean over non-null exceed flags)\n    grp = (\n        freshBeaches.groupby(\"_year\", dropna=True)[\"_exceed\"].agg(\n            nSamples=\"count\",\n            nExceed=\"sum\",\n            rate=\"mean\",\n        )\n        .reset_index()\n        .rename(columns={\"_year\": \"year\"})\n        .sort_values(\"year\")\n    )\n\n    # Overall average freshwater beach exceedance rate across all samples\n    overall = freshBeaches[\"_exceed\"].mean()\n\n    grp[\"overallAvgRate\"] = overall\n\n    # Compare using 2-decimal rounded rates per prompt\n    grp[\"rate2\"] = grp[\"rate\"].round(2)\n    grp[\"overall2\"] = round(float(overall), 2) if pd.notna(overall) else np.nan\n    grp[\"aboveAvg\"] = grp[\"rate2\"] > grp[\"overall2\"]\n\n    return grp"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute freshwater beach bacterial exceedance rates by year using explicit schema: use Year as year, Beach Type Description=='Fresh' as freshwater beach filter, and Violation (case-insensitive yes/no) as exceedance indicator mapped to 0/1; filter years 2002-2023; groupby year to compute nSamples=count, nExceed=sum, rate=mean; compute overall freshwater-beach average exceedance rate across all samples; round per-year rate and overall average to 2 decimals and flag years where rate2 > overall2.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "yearsAboveAverage",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(freshwaterBeachExceedanceRates) -> pd.DataFrame:\n    import pandas as pd\n\n    df = freshwaterBeachExceedanceRates.copy()\n    years = df.loc[df[\"aboveAvg\"] == True, [\"year\"]].dropna().astype({\"year\": int}).sort_values(\"year\")\n    return years.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Select years where aboveAvg==True (per-year exceedance rate rounded to 2 decimals exceeds overall rounded average); return sorted unique integer years.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadWaterTesting": {
+        "x": 100,
+        "y": 40
+      },
+      "freshwaterBeachExceedanceRates": {
+        "x": 400,
+        "y": 40
+      },
+      "yearsAboveAverage": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "freshwaterBeachExceedanceRates-->yearsAboveAverage",
+        "source": {
+          "operatorID": "freshwaterBeachExceedanceRates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "yearsAboveAverage",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadWaterTesting-->freshwaterBeachExceedanceRates",
+        "source": {
+          "operatorID": "loadWaterTesting",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "freshwaterBeachExceedanceRates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

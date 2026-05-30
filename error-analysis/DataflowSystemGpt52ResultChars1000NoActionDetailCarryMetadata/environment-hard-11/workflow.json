@@ -1,0 +1,197 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_datasheet",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of pleasure_bay_and_castle_island_beach_datasheet.csv to inspect schema and potential cleaning needs",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "datasheet",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', header=None)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full pleasure_bay_and_castle_island_beach_datasheet.csv as raw rows (header=None) for cleaning/parsing multi-row headers",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "parse_pleasure_bay",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(datasheet) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = datasheet.copy()\n\n    # Ensure columns are labeled 0..n-1 even if loaded with headers\n    df.columns = list(range(df.shape[1]))\n\n    # Identify data rows by parsable date in col 0\n    dates = pd.to_datetime(df[0], errors='coerce')\n    data = df.loc[dates.notna()].copy()\n\n    data = data.rename(columns={\n        0:'sample_date',\n        1:'rain_1day',\n        2:'rain_2day',\n        3:'rain_3day',\n        4:'pb_broadway_qual',\n        5:'pb_broadway_ent',\n        6:'pb_flagpole_qual',\n        7:'pb_flagpole_ent',\n        8:'castle_playground_qual',\n        9:'castle_playground_ent'\n    })\n\n    data['sample_date'] = pd.to_datetime(data['sample_date'], errors='coerce')\n\n    # Convert rainfall columns to numeric\n    for c in ['rain_1day','rain_2day','rain_3day']:\n        data[c] = pd.to_numeric(data[c], errors='coerce')\n\n    # Parse enterococcus counts that may have leading '<'\n    def parse_ent(val):\n        if pd.isna(val):\n            return np.nan\n        s = str(val).strip().replace(',', '')\n        if s == '' or s.lower() == 'nan':\n            return np.nan\n        if s.startswith('<'):\n            s = s[1:].strip()\n        try:\n            return float(s)\n        except Exception:\n            return np.nan\n\n    for c in ['pb_broadway_ent','pb_flagpole_ent','castle_playground_ent']:\n        data[c] = data[c].apply(parse_ent)\n\n    # Long format for Pleasure Bay Beach sites (Broadway, Flagpole)\n    out = []\n    for site, ent_col, qual_col in [\n        ('Pleasure Bay @ Broadway','pb_broadway_ent','pb_broadway_qual'),\n        ('Pleasure Bay @ Flagpole','pb_flagpole_ent','pb_flagpole_qual')\n    ]:\n        tmp = data[['sample_date','rain_1day',ent_col,qual_col]].copy()\n        tmp = tmp.rename(columns={ent_col:'enterococcus', qual_col:'qualifier'})\n        tmp['site'] = site\n        out.append(tmp)\n\n    long = pd.concat(out, ignore_index=True)\n    long = long[long['enterococcus'].notna()].copy()\n    return long\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Fix parsing by forcing datasheet columns to 0..9, then extract dated rows and reshape Pleasure Bay Broadway/Flagpole into long table with sample_date, rain_1day, enterococcus (numeric), qualifier, site",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "failed_samples",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(parse_pleasure_bay):\n    import pandas as pd\n    df = parse_pleasure_bay.copy()\n    # Failed if enterococcus > 104. Qualifier like '<' still has numeric extracted; treat based on numeric value.\n    df['failed'] = df['enterococcus'] > 104\n    failed = df[df['failed']]\n    return failed[['sample_date','site','rain_1day','enterococcus','qualifier']].sort_values(['sample_date','site'])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter Pleasure Bay samples (Broadway/Flagpole) to those failing swimming standard (enterococcus > 104), keeping sample_date, site, rain_1day, enterococcus, qualifier",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "avg_rain_failed",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(failed_samples):\n    import pandas as pd\n    avg = failed_samples['rain_1day'].mean()\n    return pd.DataFrame([{'avg_rain_1day_before_failed': round(float(avg), 2)}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute the mean rainfall in the 1-day period before sampling across Pleasure Bay samples that failed the swimming standard (enterococcus > 104), and round to 2 decimals",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_datasheet": {
+      "x": 100,
+      "y": 40
+    },
+    "datasheet": {
+      "x": 100,
+      "y": 220
+    },
+    "parse_pleasure_bay": {
+      "x": 430,
+      "y": 220
+    },
+    "failed_samples": {
+      "x": 760,
+      "y": 220
+    },
+    "avg_rain_failed": {
+      "x": 1090,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "datasheet-->parse_pleasure_bay",
+      "source": {
+        "operatorID": "datasheet",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "parse_pleasure_bay",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "parse_pleasure_bay-->failed_samples",
+      "source": {
+        "operatorID": "parse_pleasure_bay",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "failed_samples",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "failed_samples-->avg_rain_failed",
+      "source": {
+        "operatorID": "failed_samples",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "avg_rain_failed",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

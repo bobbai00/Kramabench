@@ -1,0 +1,204 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_mmc7",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    xls = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xls.sheet_names})"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List sheet names in mmc7.xlsx to identify where tumor sample subtype and variants per Mbp are stored",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_mmc1",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xls = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xls.sheet_names})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List sheet names in mmc1.xlsx to locate sample metadata including tumor histology (serous) and variant burden (variants per Mbp)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_meta",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    df = pd.read_excel(path, sheet_name='UCEC_CPTAC3_meta_table_V2.1')\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows of mmc1 sheet UCEC_CPTAC3_meta_table_V2.1 to inspect columns for histology/subtype and variants per Mbp",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "meta",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    return pd.read_excel(path, sheet_name='UCEC_CPTAC3_meta_table_V2.1')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full mmc1.xlsx sheet UCEC_CPTAC3_meta_table_V2.1 containing sample metadata including Histologic_type and Log2_variant_per_Mbp",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "serous_variants",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(meta) -> pd.DataFrame:\n    import pandas as pd\n    df = meta.copy()\n\n    # Keep tumor samples (if column exists)\n    if 'Proteomics_Tumor_Normal' in df.columns:\n        df = df[df['Proteomics_Tumor_Normal'].astype(str).str.strip().str.lower().eq('tumor')]\n\n    # Exclude cases marked excluded\n    if 'Case_excluded' in df.columns:\n        df = df[~df['Case_excluded'].astype(str).str.strip().str.lower().eq('yes')]\n\n    # Serous histologic type\n    hist = df['Histologic_type'].astype(str).str.strip().str.lower()\n    df = df[hist.eq('serous')]\n\n    # Convert log2 variants/Mbp to variants/Mbp\n    x = pd.to_numeric(df['Log2_variant_per_Mbp'], errors='coerce')\n    df = df.assign(variants_per_Mbp=(2 ** x))\n\n    # Keep essential columns\n    keep_cols = [c for c in ['idx','Proteomics_Participant_ID','Histologic_type','Log2_variant_per_Mbp','variants_per_Mbp'] if c in df.columns]\n    return df[keep_cols]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter meta table to tumor, non-excluded serous samples; compute variants_per_Mbp = 2^(Log2_variant_per_Mbp); output key columns for downstream median calculation.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "serous_median",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(serous_variants) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    vals = pd.to_numeric(serous_variants['variants_per_Mbp'], errors='coerce').dropna()\n    med = float(np.median(vals))\n    return pd.DataFrame([{\n        'n_serous': int(vals.shape[0]),\n        'median_variants_per_Mbp': med,\n        'median_variants_per_Mbp_rounded4': round(med, 4)\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute median of variants_per_Mbp across serous tumor samples (from serous_variants); report n and median (raw and rounded to 4 decimals).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_mmc7": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_mmc1": {
+      "x": 100,
+      "y": 220
+    },
+    "sample_meta": {
+      "x": 100,
+      "y": 400
+    },
+    "meta": {
+      "x": 100,
+      "y": 580
+    },
+    "serous_variants": {
+      "x": 430,
+      "y": 580
+    },
+    "serous_median": {
+      "x": 760,
+      "y": 580
+    }
+  },
+  "links": [
+    {
+      "linkID": "meta-->serous_variants",
+      "source": {
+        "operatorID": "meta",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "serous_variants",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "serous_variants-->serous_median",
+      "source": {
+        "operatorID": "serous_variants",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "serous_median",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

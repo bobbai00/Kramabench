@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-18-5-1779139045949",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "contributors2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Data_Contributors.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Data_Contributors.csv via pd.read_csv with default parameters (comma delimiter, header=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "ftcWebFraudsTotal",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(contributors2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = contributors2024.copy()\n\n    # Real header is on row index 2 in the loaded file (0-based)\n    header = df.iloc[2].tolist()\n    data = df.iloc[3:].copy()\n    data.columns = header\n\n    # Keep relevant rows: FTC web reports for years 2022-2024\n    data = data[data['Year'].isin(['2022', '2023', '2024'])]\n    data = data[data['Data Contributor'].astype(str).str.contains('FTC - Web Reports', na=False)]\n\n    # Parse '# of Reports' like '796,366'\n    reports = (\n        data['# of Reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    data['reportsNumeric'] = pd.to_numeric(reports, errors='coerce')\n\n    total = data['reportsNumeric'].sum(min_count=1)\n\n    return pd.DataFrame([{'total_ftc_web_frauds_2022_2024': int(total) if pd.notna(total) else None}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Re-interpret contributors2024 with true header row at original row index 2 (columns: Year, Data Contributor, # of Reports, %); filter Year in {2022,2023,2024} and Data Contributor contains 'FTC - Web Reports'; parse '# of Reports' by removing commas and converting to numeric; sum across years and return single-row DataFrame with total_ftc_web_frauds_2022_2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "contributors2024": {
+        "x": 100,
+        "y": 40
+      },
+      "ftcWebFraudsTotal": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "contributors2024-->ftcWebFraudsTotal",
+        "source": {
+          "operatorID": "contributors2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ftcWebFraudsTotal",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

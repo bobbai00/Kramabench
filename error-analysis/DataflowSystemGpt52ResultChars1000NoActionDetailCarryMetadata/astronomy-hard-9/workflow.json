@@ -1,0 +1,284 @@
+{
+  "operators": [
+    {
+      "operatorID": "omni2_spec",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2.txt'\n    with open(path, 'r', encoding='utf-8', errors='ignore') as f:\n        txt = f.read()\n    return pd.DataFrame([{'path': path, 'content': txt}])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load OMNI2 hourly data format specification from data/astronomy/input/omni2_low_res/omni2.txt",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "omni2_2024_raw",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n    # fixed-width: parse only needed columns: year, day, hour, ap-index(word 50)\n    colspecs = [(0,4),(4,8),(8,11),(395,399)]\n    names = ['year','doy','hour','ap']\n    df = pd.read_fwf(path, colspecs=colspecs, names=names)\n    df['year'] = pd.to_numeric(df['year'], errors='coerce').astype('Int64')\n    df['doy'] = pd.to_numeric(df['doy'], errors='coerce').astype('Int64')\n    df['hour'] = pd.to_numeric(df['hour'], errors='coerce').astype('Int64')\n    df['ap'] = pd.to_numeric(df['ap'], errors='coerce')\n    # build datetime index\n    df = df.dropna(subset=['year','doy','hour'])\n    df['time'] = pd.to_datetime(df['year'].astype(int).astype(str), format='%Y') + pd.to_timedelta(df['doy'].astype(int)-1, unit='D') + pd.to_timedelta(df['hour'].astype(int), unit='h')\n    # treat fill values\n    df.loc[df['ap']>=999, 'ap'] = pd.NA\n    return df[['time','ap']].sort_values('time').reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load hourly OMNI2 2024 fixed-width file data/astronomy/input/omni2_low_res/omni2_2024.dat; parse year,doy,hour and ap-index (word 50 at columns 396-399), build datetime 'time', set fill ap>=999 to NA.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "omni2_2024_parse",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(omni2_2024_raw) -> pd.DataFrame:\n    import pandas as pd\n    # Re-read with correct fixed-width positions derived from OMNI2 standard layout.\n    # The existing omni2_2024_raw appears to have parsed ap as all NaN, so we rebuild\n    # by reading the source file directly here (allowed in process, but keep it single-purpose).\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n    # Column specifications (0-indexed, end exclusive) for Year, DOY, Hour are standard.\n    # AP index (word 50, I4) is at cols 600-604 in the 55-word layout? Not guaranteed.\n    # We'll robustly parse by splitting fixed-width into words using known FORTRAN widths.\n    # Build widths list for OMNI2_YYYY.DAT words 1-55 as per spec.\n    widths = [4,4,3,5,3,3,4,4,\n              6,6,6,6,6,6,6,6,6,\n              6,6,6,6,6,\n              9,6,\n              6,6,6,\n              6,6,\n              9,6,6,6,6,6,\n              7,7,6,\n              3,4,6,5,\n              10,9,9,9,9,9,\n              3,\n              4,6,6,6,6,5]\n    # Some fields in the text show e.g. 'F6 1' typo; treat as 6.\n    # Read as strings, then pick year,doy,hour,ap (word 50)\n    df = pd.read_fwf(path, widths=widths, header=None, dtype=str)\n    # Ensure at least 50 columns\n    if df.shape[1] < 50:\n        raise ValueError(f'Parsed only {df.shape[1]} columns; expected >=50')\n    year = df.iloc[:,0].astype(int)\n    doy = df.iloc[:,1].astype(int)\n    hour = df.iloc[:,2].astype(int)\n    ap_str = df.iloc[:,49].str.strip()\n    ap = pd.to_numeric(ap_str, errors='coerce')\n    ap = ap.where(ap < 999, pd.NA)\n    time = pd.to_datetime(year.astype(str), format='%Y') + pd.to_timedelta(doy-1, unit='D') + pd.to_timedelta(hour, unit='h')\n    out = pd.DataFrame({'time': time, 'ap': ap.astype('float')})\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Re-parse OMNI2 2024 .dat using fixed-width word widths from omni2.txt; extract year,doy,hour and ap-index (word 50), convert fill 999->NA, construct hourly datetime 'time'.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "tle_43180",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    from pathlib import Path\n    import pandas as pd\n    from sgp4.api import Satrec\n    from sgp4.conveniences import sat_epoch_datetime\n\n    path = Path('data/astronomy/input/TLE/43180.tle')\n    lines = path.read_text().splitlines()\n    # keep non-empty\n    lines = [l.strip() for l in lines if l.strip()]\n    # group into 2-line TLEs (ignore name lines if present)\n    tle_pairs = []\n    i = 0\n    while i < len(lines):\n        if lines[i].startswith('1 ') and i+1 < len(lines) and lines[i+1].startswith('2 '):\n            tle_pairs.append((lines[i], lines[i+1]))\n            i += 2\n        elif i+2 < len(lines) and lines[i+1].startswith('1 ') and lines[i+2].startswith('2 '):\n            # name line at i\n            tle_pairs.append((lines[i+1], lines[i+2]))\n            i += 3\n        else:\n            i += 1\n\n    rows = []\n    for l1, l2 in tle_pairs:\n        sat = Satrec.twoline2rv(l1, l2)\n        epoch_dt = sat_epoch_datetime(sat)  # naive UTC\n        mm_rev_per_day = sat.no_kozai * 1440.0/(2.0*3.141592653589793)  # sat.no_kozai rad/min\n        # easier: sat.no_kozai is rad/min; compute mean motion n rad/s\n        import numpy as np\n        n_rad_s = sat.no_kozai/60.0\n        mu = 398600.4418\n        a_km = (mu/(n_rad_s**2))**(1.0/3.0)\n        rows.append({\n            'epoch': pd.to_datetime(epoch_dt, utc=True),\n            'a_km': float(a_km),\n            'line1': l1,\n            'line2': l2\n        })\n\n    df = pd.DataFrame(rows).sort_values('epoch').reset_index(drop=True)\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load TLEs from data/astronomy/input/TLE/43180.tle, parse epochs and compute semi-major axis a (km) from mean motion using mu=398600.4418; return epoch,a_km plus raw lines for traceability.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "tle_hourly_drag",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(tle_43180) -> pd.DataFrame:\n    import pandas as pd\n    df = tle_43180.copy()\n    # round to nearest hour\n    df['time'] = pd.to_datetime(df['epoch'], utc=True).dt.round('H').dt.tz_convert(None)\n    df = df.sort_values('time')\n    # keep first record per hour if duplicates\n    df = df.drop_duplicates('time', keep='first')\n    # compute semi-major axis change between consecutive TLEs (km)\n    df['da_km'] = df['a_km'].diff()\n    # interval hours between consecutive TLE times\n    df['dt_hours'] = df['time'].diff().dt.total_seconds() / 3600.0\n    # for irregular spacing, convert to per-hour rate then later sample at hourly grid\n    df['da_per_hr'] = df['da_km'] / df['dt_hours']\n    # build hourly time series by reindexing and time-interpolating da_per_hr\n    hourly = df.set_index('time')[['da_per_hr']].resample('H').mean()\n    hourly['da_per_hr'] = hourly['da_per_hr'].interpolate('time')\n    hourly = hourly.reset_index().rename(columns={'time':'time'})\n    return hourly\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Round TLE epochs to nearest hour; compute semi-major axis change rate (da_km per hour) between consecutive TLE-derived a_km values and interpolate to an hourly time series on the hour.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "omni_ap_may",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(omni2_2024_parse):\n    import pandas as pd\n    df = omni2_2024_parse.copy()\n    df['time'] = pd.to_datetime(df['time'], utc=True)\n    start = pd.Timestamp('2024-05-01T00:00:00Z')\n    end = pd.Timestamp('2024-05-31T00:00:00Z')\n    df = df[(df['time'] >= start) & (df['time'] < end)][['time','ap']].sort_values('time')\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter OMNI2 hourly ap-index to May 1-30, 2024 (inclusive), keeping hourly timestamps and ap.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "lag_r2_scan",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(tle_hourly_drag, omni_ap_may) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    drag = tle_hourly_drag.copy()\n    ap = omni_ap_may.copy()\n\n    # ensure tz-naive alignment (both are UTC in dataflow)\n    drag['time'] = pd.to_datetime(drag['time'], utc=True)\n    ap['time'] = pd.to_datetime(ap['time'], utc=True)\n\n    # restrict to May 1-30, 2024 hourly window common to both\n    start = pd.Timestamp('2024-05-01 00:00:00', tz='UTC')\n    end = pd.Timestamp('2024-05-30 23:00:00', tz='UTC')\n    drag = drag[(drag['time'] >= start) & (drag['time'] <= end)]\n    ap = ap[(ap['time'] >= start) & (ap['time'] <= end)]\n\n    # base merge on time; later we'll shift ap by lag\n    base = drag.merge(ap, on='time', how='inner')\n\n    out_rows = []\n    for lag in range(0, 49):\n        # ap leading drag by lag hours: correlate drag(t) with ap(t - lag)\n        # implement by shifting ap forward so ap_shifted(time)=ap(time-lag)\n        ap_lag = ap.copy()\n        ap_lag['time'] = ap_lag['time'] + pd.Timedelta(hours=lag)\n        m = drag.merge(ap_lag, on='time', how='inner', suffixes=('', '_lag'))\n        m = m[['da_per_hr', 'ap']].rename(columns={'ap': 'ap_lag'})\n        m = m.dropna()\n        n = len(m)\n        if n < 10:\n            r2 = np.nan\n        else:\n            r = np.corrcoef(m['da_per_hr'].to_numpy(), m['ap_lag'].to_numpy())[0, 1]\n            r2 = float(r * r)\n        out_rows.append({'lag_hr': lag, 'r2': r2, 'n': n})\n\n    res = pd.DataFrame(out_rows)\n    # choose best lag by max r2, tie-breaker: smallest lag\n    best = res.loc[res['r2'].idxmax()].copy()\n    res['best_lag'] = int(best['lag_hr'])\n    res['best_r2'] = float(best['r2'])\n    return res.sort_values('lag_hr').reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Scan lags 0-48 hr correlating hourly drag proxy (da_per_hr) with OMNI ap shifted by lag; compute r^2 and sample size per lag for May 1-30 2024; annotate best lag (max r^2, smallest lag tie-break).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "omni2_spec": {
+      "x": 100,
+      "y": 40
+    },
+    "omni2_2024_raw": {
+      "x": 100,
+      "y": 220
+    },
+    "omni2_2024_parse": {
+      "x": 430,
+      "y": 220
+    },
+    "tle_43180": {
+      "x": 430,
+      "y": 40
+    },
+    "tle_hourly_drag": {
+      "x": 760,
+      "y": 40
+    },
+    "omni_ap_may": {
+      "x": 760,
+      "y": 220
+    },
+    "lag_r2_scan": {
+      "x": 1090,
+      "y": 130
+    }
+  },
+  "links": [
+    {
+      "linkID": "omni2_2024_raw-->omni2_2024_parse",
+      "source": {
+        "operatorID": "omni2_2024_raw",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "omni2_2024_parse",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "tle_43180-->tle_hourly_drag",
+      "source": {
+        "operatorID": "tle_43180",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "tle_hourly_drag",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "omni2_2024_parse-->omni_ap_may",
+      "source": {
+        "operatorID": "omni2_2024_parse",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "omni_ap_may",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "tle_hourly_drag-->lag_r2_scan",
+      "source": {
+        "operatorID": "tle_hourly_drag",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "lag_r2_scan",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "omni_ap_may-->lag_r2_scan",
+      "source": {
+        "operatorID": "omni_ap_may",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "lag_r2_scan",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-37-7-1779100094408",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # Try common encodings for Windows-exported CSVs\n    try:\n        return pd.read_csv(path, encoding=\"cp1252\")\n    except UnicodeDecodeError:\n        return pd.read_csv(path, encoding=\"latin1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv using pd.read_csv with encoding fallback (cp1252 then latin1) to handle non-UTF8 smart quotes/dashes; comma delimiter; first row header",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanReportCategories2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCategories2024.copy()\n\n    # The file is a formatted table with an extra header row at index 1.\n    # Rename columns to semantic names and drop non-data rows.\n    df = df.rename(columns={\n        \"Report Categories\": \"rank\",\n        \"Unnamed: 1\": \"category\",\n        \"Unnamed: 2\": \"numReports\",\n        \"Unnamed: 3\": \"percentage\",\n    })\n\n    # Keep rows that look like ranked categories (rank is an integer)\n    df[\"rank\"] = pd.to_numeric(df[\"rank\"], errors=\"coerce\")\n    df = df[df[\"rank\"].notna()].copy()\n    df[\"rank\"] = df[\"rank\"].astype(int)\n\n    # Parse number of reports (commas) and percentage (e.g., '20.91%')\n    df[\"numReports\"] = (\n        df[\"numReports\"].astype(str).str.replace(\",\", \"\", regex=False)\n    )\n    df[\"numReports\"] = pd.to_numeric(df[\"numReports\"], errors=\"coerce\")\n\n    df[\"percentage\"] = df[\"percentage\"].astype(str).str.strip()\n    df[\"percentage\"] = df[\"percentage\"].str.replace(\"%\", \"\", regex=False)\n    df[\"percentage\"] = pd.to_numeric(df[\"percentage\"], errors=\"coerce\") / 100.0\n\n    # Basic sanity: drop rows missing required fields\n    df = df.dropna(subset=[\"category\", \"numReports\"])\n\n    # Sort descending by numReports to compute cumulative share\n    df = df.sort_values([\"numReports\", \"rank\"], ascending=[False, True]).reset_index(drop=True)\n    df[\"cumReports\"] = df[\"numReports\"].cumsum()\n    total = df[\"numReports\"].sum()\n    df[\"cumShare\"] = df[\"cumReports\"] / total\n\n    return df[[\"rank\", \"category\", \"numReports\", \"percentage\", \"cumReports\", \"cumShare\"]]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and parse 2024 report categories table from reportCategories2024: rename columns to [rank, category, numReports, percentage]; drop non-data rows by coercing rank to integer; parse numReports by removing thousands separators and converting to numeric; parse percentage strings like '20.91%' to float share; sort by numReports desc (tie-break rank asc); compute cumulative reports and cumulative share of total; output columns [rank, category, numReports, percentage, cumReports, cumShare]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "minCategoriesForHalfReports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanReportCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanReportCategories2024.copy()\n\n    # Find first position where cumulative share reaches at least 50%\n    reached = df[df[\"cumShare\"] >= 0.5].head(1)\n    if reached.empty:\n        k = pd.NA\n    else:\n        k = int(reached.index[0]) + 1  # index is 0-based rank in sorted-by-reports table\n\n    return pd.DataFrame([{\"minNumCategories\": k}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the minimum number of report categories needed to reach at least 50% of 2024 reports: from cleanReportCategories2024 (already sorted by numReports desc with cumShare), select the first row where cumShare >= 0.50 and return its 0-based row position + 1 as minNumCategories",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanReportCategories2024": {
+        "x": 400,
+        "y": 40
+      },
+      "minCategoriesForHalfReports": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCategories2024-->cleanReportCategories2024",
+        "source": {
+          "operatorID": "reportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanReportCategories2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanReportCategories2024-->minCategoriesForHalfReports",
+        "source": {
+          "operatorID": "cleanReportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "minCategoriesForHalfReports",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

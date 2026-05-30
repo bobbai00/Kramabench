@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-30-8-1779099937416",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topThreeIdTheftReports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv via pd.read_csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv (defaults: comma delimiter, header row 0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanTopThreeIdTheftReports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topThreeIdTheftReports) -> pd.DataFrame:\n    import pandas as pd\n\n    df = topThreeIdTheftReports.copy()\n\n    # The table's true header is at row index 1\n    header = df.iloc[1].tolist()  # ['Theft Type','Year','# of Reports']\n    body = df.iloc[2:].copy()\n    body.columns = header\n\n    # In this CSV, the first column actually holds the year values (as strings),\n    # the second column holds the identity theft category.\n    out = pd.DataFrame({\n        'Year': pd.to_numeric(body['Theft Type'], errors='coerce'),\n        'Theft Type': body['Year'].astype(str),\n        '# of Reports': pd.to_numeric(\n            body['# of Reports'].astype(str).str.replace(',', '', regex=False),\n            errors='coerce'\n        )\n    })\n\n    out = out.dropna(subset=['Year', 'Theft Type', '# of Reports']).copy()\n    out['Year'] = out['Year'].astype(int)\n    out['Theft Type'] = out['Theft Type'].str.strip()\n\n    # Keep only the requested window (helps ignore any stray non-year rows)\n    out = out[(out['Year'] >= 2020) & (out['Year'] <= 2024)].copy()\n\n    return out.sort_values(['Theft Type', 'Year']).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean topThreeIdTheftReports by using row index 1 as the header ['Theft Type','Year','# of Reports']; re-map columns because the file stores Year values under 'Theft Type' and the category under 'Year'; parse Year to int and '# of Reports' to numeric after removing commas; drop rows with missing values; filter to years 2020\u20132024; return normalized table sorted by [Theft Type, Year].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fastestGrowingCategory",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanTopThreeIdTheftReports) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanTopThreeIdTheftReports.copy()\n\n    # Use 2020 as baseline and 2024 as end; compute relative growth (pct change)\n    pivot = df.pivot_table(index='Theft Type', columns='Year', values='# of Reports', aggfunc='sum')\n\n    needed_years = [2020, 2024]\n    for y in needed_years:\n        if y not in pivot.columns:\n            pivot[y] = pd.NA\n\n    out = pivot[needed_years].rename(columns={2020: 'reports2020', 2024: 'reports2024'}).reset_index()\n\n    out['relative_growth'] = (out['reports2024'] - out['reports2020']) / out['reports2020']\n\n    # pick max relative growth\n    out = out.sort_values('relative_growth', ascending=False).reset_index(drop=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From cleanTopThreeIdTheftReports: pivot to get total '# of Reports' by [Theft Type] for years 2020 and 2024; compute relative growth as (reports2024 - reports2020) / reports2020; sort descending by relative_growth and return table with reports2020, reports2024, and relative_growth for each category.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topThreeIdTheftReports": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanTopThreeIdTheftReports": {
+        "x": 400,
+        "y": 40
+      },
+      "fastestGrowingCategory": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topThreeIdTheftReports-->cleanTopThreeIdTheftReports",
+        "source": {
+          "operatorID": "topThreeIdTheftReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanTopThreeIdTheftReports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanTopThreeIdTheftReports-->fastestGrowingCategory",
+        "source": {
+          "operatorID": "cleanTopThreeIdTheftReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fastestGrowingCategory",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

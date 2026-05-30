@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-440-5-1779116135587",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    # Load first sheet by default; keep values as strings to avoid type issues\n    return pd.read_excel(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx (first sheet) via pd.read_excel with dtype=str to preserve mixed-type columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "figoStageAbove70",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1) -> pd.DataFrame:\n    import pandas as pd\n\n    df = mmc1.copy()\n\n    # Coerce Age to numeric; keep only patients strictly above 70\n    df['Age_num'] = pd.to_numeric(df['Age'], errors='coerce')\n    older = df[df['Age_num'] > 70].copy()\n\n    # Count FIGO_stage occurrences (ignore missing)\n    counts = (\n        older['FIGO_stage']\n        .dropna()\n        .astype(str)\n        .str.strip()\n        .replace({'': pd.NA})\n        .dropna()\n        .value_counts()\n        .rename_axis('FIGO_stage')\n        .reset_index(name='n')\n    )\n\n    if counts.empty:\n        return pd.DataFrame([{'FIGO_stage_mode': pd.NA, 'n': 0, 'n_samples_age_gt_70': int(len(older))}])\n\n    top = counts.iloc[0]\n    return pd.DataFrame([\n        {\n            'FIGO_stage_mode': top['FIGO_stage'],\n            'n': int(top['n']),\n            'n_samples_age_gt_70': int(len(older)),\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc1: coerce Age to numeric (Age_num); filter to samples with Age_num > 70; compute value_counts of FIGO_stage after stripping whitespace and dropping missing/empty; return single-row DataFrame with modal FIGO_stage (FIGO_stage_mode), its count n, and total samples with age>70 (n_samples_age_gt_70).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1": {
+        "x": 100,
+        "y": 40
+      },
+      "figoStageAbove70": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1-->figoStageAbove70",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "figoStageAbove70",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

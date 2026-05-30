@@ -1,0 +1,81 @@
+{
+  "operators": [
+    {
+      "operatorID": "all_years",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = sorted(glob.glob('data/environment/input/water-body-testing-*.csv'))\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df['__source_file'] = p\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True, sort=False)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and concatenate all water-body-testing-*.csv files from data/environment/input (years 2002-2023), adding __source_file for provenance",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "marine_no_violation_beaches",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(all_years) -> pd.DataFrame:\n    import pandas as pd\n\n    df = all_years.copy()\n\n    # Keep marine beaches only\n    df = df[df['Beach Type Description'].astype(str).str.strip().str.lower() == 'marine']\n\n    # Normalize violation values; treat missing/\"null\" as non-violation (safe)\n    v = df['Violation'].astype(str).str.strip().str.lower()\n    v = v.replace({'nan': 'no', 'none': 'no', 'null': 'no', '': 'no'})\n\n    df = df.assign(_is_violation=v.eq('yes'))\n\n    # Any beach with any violation across all records (2002-2023) is not \"always safe\"\n    by_beach = df.groupby('Beach Name', dropna=False)['_is_violation'].any().reset_index(name='ever_violation')\n    always_safe = by_beach[~by_beach['ever_violation']]\n\n    return pd.DataFrame({'always_safe_marine_beach_count': [int(always_safe.shape[0])]})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter to Marine beaches; normalize Violation (yes/no, case-insensitive; missing/'null' treated as no); for each Beach Name compute if any violation occurred 2002-2023; output count of beaches with no violations ever.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "all_years": {
+      "x": 100,
+      "y": 40
+    },
+    "marine_no_violation_beaches": {
+      "x": 430,
+      "y": 40
+    }
+  },
+  "links": [
+    {
+      "linkID": "all_years-->marine_no_violation_beaches",
+      "source": {
+        "operatorID": "all_years",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "marine_no_violation_beaches",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

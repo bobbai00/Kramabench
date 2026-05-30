@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-227-5-1779103459646",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wildfireTotalFires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/wildfire_total_fires_p45_54.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wildfire_total_fires_p45_54.csv via pd.read_csv (defaults: comma delimiter, first row as header, UTF-8) to obtain wildfire fire counts by state.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "votes2020",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/democratic_vs_republican_votes_by_usa_state_2020.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load democratic_vs_republican_votes_by_usa_state_2020.csv via pd.read_csv (defaults) to obtain 2020 Democratic vs Republican votes by U.S. state for party classification.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "partyFireTotals",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfireTotalFires, votes2020) -> pd.DataFrame:\n    import pandas as pd\n\n    fires = wildfireTotalFires.copy()\n    votes = votes2020.copy()\n\n    # Normalize state names\n    fires['StateNorm'] = fires['State'].astype(str).str.strip()\n    votes['StateNorm'] = votes['usa_state'].astype(str).str.strip()\n\n    # Party classification: whichever has more votes in 2020\n    votes['Party'] = votes.apply(lambda r: 'Democratic' if r['DEM'] > r['REP'] else 'Republican', axis=1)\n\n    merged = fires.merge(votes[['StateNorm', 'Party']], on='StateNorm', how='inner')\n\n    out = (\n        merged.groupby('Party', as_index=False)\n        .agg(totalFires=('Total Fires', 'sum'), states=('StateNorm', 'nunique'))\n        .sort_values('totalFires', ascending=False)\n        .reset_index(drop=True)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join wildfire fire counts to 2020 votes by normalized state name (wildfireTotalFires.State vs votes2020.usa_state); classify each state as Democratic if DEM > REP else Republican; group by Party and sum 'Total Fires' as totalFires (also count distinct states), sorted descending by totalFires.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wildfireTotalFires": {
+        "x": 100,
+        "y": 40
+      },
+      "votes2020": {
+        "x": 100,
+        "y": 220
+      },
+      "partyFireTotals": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfireTotalFires-->partyFireTotals",
+        "source": {
+          "operatorID": "wildfireTotalFires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "partyFireTotals",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "votes2020-->partyFireTotals",
+        "source": {
+          "operatorID": "votes2020",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "partyFireTotals",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

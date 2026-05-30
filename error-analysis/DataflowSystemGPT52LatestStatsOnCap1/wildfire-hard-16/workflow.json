@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-200-5-1779102908318",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # File contains Windows-1252 smart quotes (e.g., 0x92). Use cp1252.\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv from data/wildfire/input/noaa_wildfires_variabledescrip.csv using pd.read_csv with encoding='cp1252' (handles Windows-1252 smart-quote bytes that break UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaWildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (comma delimiter, first row header, UTF-8) from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "chiSquareJfmKnownCauses",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires) -> pd.DataFrame:\n    import pandas as pd\n    from scipy.stats import chi2_contingency\n\n    df = noaaWildfires.copy()\n\n    # Parse start_date (m/d/YYYY) and keep Jan/Feb/Mar\n    start = pd.to_datetime(df['start_date'], errors='coerce')\n    df = df[start.dt.month.isin([1, 2, 3])].copy()\n\n    # Keep only known causes: exclude 'U' (Unknown) and nulls\n    df = df[df['cause'].notna() & (df['cause'] != 'U')].copy()\n\n    # Contingency table: region x cause\n    ct = pd.crosstab(df['region'], df['cause'])\n\n    chi2, p, dof, expected = chi2_contingency(ct)\n\n    return pd.DataFrame([{\n        'chi2': float(chi2),\n        'pValue': float(p),\n        'dof': int(dof),\n        'nFires': int(df.shape[0]),\n        'nRegions': int(ct.shape[0]),\n        'nCauses': int(ct.shape[1])\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For noaa_wildfires.csv: parse start_date to datetime; filter fires starting in months [1,2,3] (Jan-Feb-Mar); keep only known causes by excluding null cause and cause=='U' (Unknown); build contingency table with pd.crosstab(index=region, columns=cause); run scipy.stats.chi2_contingency to compute chi-square statistic and p-value; output chi2, pValue plus dof and table dimensions for validation.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "variableDescrip": {
+        "x": 100,
+        "y": 40
+      },
+      "noaaWildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "chiSquareJfmKnownCauses": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaaWildfires-->chiSquareJfmKnownCauses",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "chiSquareJfmKnownCauses",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

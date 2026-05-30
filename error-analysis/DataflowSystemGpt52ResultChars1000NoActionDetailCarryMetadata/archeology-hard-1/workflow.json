@@ -1,0 +1,303 @@
+{
+  "operators": [
+    {
+      "operatorID": "climate",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n    xls = pd.ExcelFile(path)\n    frames = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh)\n        df['__sheet__'] = sh\n        frames.append(df)\n    out = pd.concat(frames, ignore_index=True)\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load all sheets from data/archeology/input/climateMeasurements.xlsx and concatenate, keeping source sheet in __sheet__",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "rc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/radiocarbon_database_regional.xlsx'\n    xls = pd.ExcelFile(path)\n    dfs = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh)\n        df['__sheet__'] = sh\n        dfs.append(df)\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load all sheets from data/archeology/input/radiocarbon_database_regional.xlsx, concatenate, keep source sheet in __sheet__",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "rc_malta_span",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(rc):\n    import pandas as pd\n    malta = rc[rc['Region'].astype(str).str.strip().str.lower().eq('malta')].copy()\n    # Use uncalibrated radiocarbon age BP in 'date' (years BP)\n    # Larger BP = older. Find oldest and youngest recorded.\n    oldest_bp = malta['date'].max()\n    youngest_bp = malta['date'].min()\n    return pd.DataFrame([{\n        'oldest_bp': float(oldest_bp),\n        'youngest_bp': float(youngest_bp),\n        'n_records': int(len(malta))\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter radiocarbon database to Region=='Malta' and compute oldest (max BP) and youngest (min BP) radiocarbon ages (date), plus record count",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_k",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate):\n    import pandas as pd\n    # Identify likely age and potassium columns by scanning column names\n    df = climate.copy()\n\n    # Coerce all columns to numeric where possible (keep originals)\n    num = df.apply(pd.to_numeric, errors='coerce')\n\n    # Pick age column as the numeric column with largest non-null count and wide range\n    cand_stats = []\n    for c in num.columns:\n        s = num[c]\n        nn = s.notna().sum()\n        if nn < 100:  # too sparse\n            continue\n        rng = s.max() - s.min()\n        cand_stats.append((c, nn, rng, s.min(), s.max()))\n    cand = pd.DataFrame(cand_stats, columns=['col','non_null','range','min','max']).sort_values(['non_null','range'], ascending=[False,False])\n\n    # Heuristic: age likely in kyr or years with monotonic-ish; pick top candidate with max > 1000\n    age_col = None\n    for _, r in cand.iterrows():\n        if r['max'] > 1000 and r['min'] >= 0:\n            age_col = r['col']\n            break\n\n    # Potassium column: choose numeric col whose name contains 'k' or 'pot' (case-insensitive), else use a high-variance column among remaining\n    pot_col = None\n    for c in df.columns:\n        if isinstance(c, str) and ('potassium' in c.lower() or c.lower().strip() in ['k','k_ppm','k (ppm)'] or ' k' in c.lower()):\n            pot_col = c\n            break\n    if pot_col is None:\n        # search among columns where string name contains 'k'\n        k_like = [c for c in df.columns if isinstance(c,str) and 'k' in c.lower() and 'unk' not in c.lower()]\n        for c in k_like:\n            if pd.to_numeric(df[c], errors='coerce').notna().sum() > 100:\n                pot_col = c\n                break\n\n    out = pd.DataFrame([{'age_col': age_col, 'pot_col': pot_col}])\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Heuristically detect age (time) column and Potassium (K) column candidates in climateMeasurements by numeric coercion and name scan; output selected column names",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_preview",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate):\n    import pandas as pd\n    df = climate.copy()\n    # find first non-empty row as potential header-like content\n    # show first 30 rows and also any rows containing 'K' or 'Pot' tokens\n    head = df.head(40)\n    # rows with any cell containing 'K' or 'pot' or 'ppm'\n    mask = df.astype(str).apply(lambda c: c.str.contains(r'(?i)\\bpotassium\\b|\\bpot\\b|\\bk\\b|ppm', regex=True, na=False)).any(axis=1)\n    hits = df[mask].head(40)\n    # return a small combined preview\n    head['__section__'] = 'head'\n    hits2 = hits.copy()\n    hits2['__section__'] = 'hits'\n    out = pd.concat([head, hits2], ignore_index=True)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Preview climateMeasurements raw rows (first 40) and rows containing tokens like 'Potassium', 'K', 'ppm' to identify true headers/column meanings",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate) -> pd.DataFrame:\n    import pandas as pd\n    df = climate.copy()\n    # Find the header row containing 'Age_ky' and 'K'\n    header_idx = None\n    for i in range(min(len(df), 200)):\n        row = df.iloc[i].astype(str).str.strip()\n        if (row == 'Age_ky').any() and (row == 'K').any():\n            header_idx = i\n            break\n    if header_idx is None:\n        raise ValueError('Could not locate header row with Age_ky and K')\n\n    header = df.iloc[header_idx].astype(str).str.strip().tolist()\n    data = df.iloc[header_idx+1:].copy()\n    data.columns = header\n\n    # Keep only first occurrence for duplicate column names\n    data = data.loc[:, ~pd.Index(data.columns).duplicated(keep='first')]\n\n    # Coerce numeric\n    for c in ['Age_ky', 'K']:\n        if c in data.columns:\n            data[c] = pd.to_numeric(data[c], errors='coerce')\n\n    out = data[['Age_ky', 'K']].dropna().sort_values('Age_ky').reset_index(drop=True)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse climateMeasurements: detect true header row containing 'Age_ky' and 'K', set columns, keep first duplicate names, coerce Age_ky and K to numeric, return clean table with columns Age_ky (kyr) and K (ppm) sorted by Age_ky and non-null",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "k_avg_malta_span",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(rc_malta_span, climate_clean):\n    import pandas as pd\n    oldest_ky = float(rc_malta_span.loc[0, 'oldest_bp']) / 1000.0\n    youngest_ky = float(rc_malta_span.loc[0, 'youngest_bp']) / 1000.0\n    a = min(oldest_ky, youngest_ky)\n    b = max(oldest_ky, youngest_ky)\n\n    df = climate_clean[['Age_ky', 'K']].dropna().sort_values('Age_ky')\n    x = df['Age_ky'].to_numpy()\n    y = df['K'].to_numpy()\n\n    # ensure boundaries exist by interpolation\n    k_a = float(pd.Series(y).iloc[pd.Index(x).get_indexer([a], method='nearest')[0]]) if a in x else float(pd.Series(y).iloc[0])\n\n    # Use numpy interpolation for boundary values; requires increasing x\n    import numpy as np\n    k_a = float(np.interp(a, x, y))\n    k_b = float(np.interp(b, x, y))\n\n    # select interior points strictly between a and b\n    mask = (x > a) & (x < b)\n    x_seg = np.concatenate(([a], x[mask], [b]))\n    y_seg = np.concatenate(([k_a], y[mask], [k_b]))\n\n    # trapezoidal integral and average over interval length\n    area = float(np.trapz(y_seg, x_seg))\n    avg = area / (b - a) if b > a else float('nan')\n    return pd.DataFrame({'avg_K_ppm':[avg], 'a_ky':[a], 'b_ky':[b]})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute average K (ppm) over Malta occupation span: convert oldest/youngest BP to kyr, linearly interpolate K at boundaries in climate_clean, integrate piecewise linear (trapezoid) over [a,b], divide by interval length; output avg_K_ppm and bounds for verification",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "climate": {
+      "x": 100,
+      "y": 400
+    },
+    "rc": {
+      "x": 100,
+      "y": 40
+    },
+    "rc_malta_span": {
+      "x": 430,
+      "y": 40
+    },
+    "climate_k": {
+      "x": 430,
+      "y": 220
+    },
+    "climate_preview": {
+      "x": 430,
+      "y": 400
+    },
+    "climate_clean": {
+      "x": 430,
+      "y": 580
+    },
+    "k_avg_malta_span": {
+      "x": 760,
+      "y": 310
+    }
+  },
+  "links": [
+    {
+      "linkID": "rc-->rc_malta_span",
+      "source": {
+        "operatorID": "rc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rc_malta_span",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate-->climate_k",
+      "source": {
+        "operatorID": "climate",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_k",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate-->climate_preview",
+      "source": {
+        "operatorID": "climate",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_preview",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate-->climate_clean",
+      "source": {
+        "operatorID": "climate",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "rc_malta_span-->k_avg_malta_span",
+      "source": {
+        "operatorID": "rc_malta_span",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "k_avg_malta_span",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate_clean-->k_avg_malta_span",
+      "source": {
+        "operatorID": "climate_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "k_avg_malta_span",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

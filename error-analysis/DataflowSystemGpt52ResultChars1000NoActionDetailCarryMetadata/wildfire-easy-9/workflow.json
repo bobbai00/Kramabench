@@ -1,0 +1,81 @@
+{
+  "operators": [
+    {
+      "operatorID": "fire_weather",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load wildfire fire weather data from data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fatality_diff_humidity_lt30",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fire_weather):\n    import pandas as pd\n    df = fire_weather.copy()\n    # Ensure numeric\n    df['avrh_mean'] = pd.to_numeric(df['avrh_mean'], errors='coerce')\n    df['fatalities_last'] = pd.to_numeric(df['fatalities_last'], errors='coerce')\n\n    overall_avg = df['fatalities_last'].mean(skipna=True)\n    lt30_avg = df.loc[df['avrh_mean'] < 30, 'fatalities_last'].mean(skipna=True)\n\n    diff = lt30_avg - overall_avg\n    return pd.DataFrame([{\n        'overall_avg_fatalities': overall_avg,\n        'lt30_avg_fatalities': lt30_avg,\n        'diff_lt30_minus_overall': diff\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute average fatalities_last overall and for rows with avrh_mean < 30 (humidity <30%), then difference (lt30 avg - overall avg).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "fire_weather": {
+      "x": 100,
+      "y": 40
+    },
+    "fatality_diff_humidity_lt30": {
+      "x": 430,
+      "y": 40
+    }
+  },
+  "links": [
+    {
+      "linkID": "fire_weather-->fatality_diff_humidity_lt30",
+      "source": {
+        "operatorID": "fire_weather",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fatality_diff_humidity_lt30",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

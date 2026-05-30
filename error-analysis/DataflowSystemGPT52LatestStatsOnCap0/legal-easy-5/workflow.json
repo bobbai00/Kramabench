@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-22-6-1779099850982",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudByPaymentMethod",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud_Reports_by_Payment_Method.csv via pd.read_csv (comma delimiter, first row as header, UTF-8) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanFraudByPaymentMethod",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudByPaymentMethod) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    df = fraudByPaymentMethod.copy()\n    # The real header row is at index 1\n    df = df.iloc[1:].reset_index(drop=True)\n    df.columns = [\"paymentMethod\", \"numReports\", \"totalLoss\"]\n\n    # Keep only rows that look like actual payment methods and have a $ loss like \"$275M\"\n    df = df[df[\"paymentMethod\"].notna() & df[\"totalLoss\"].notna()].copy()\n    df = df[~df[\"paymentMethod\"].astype(str).str.startswith(\"#\")]\n    df = df[~df[\"paymentMethod\"].astype(str).str.contains(\"Source:\", na=False)]\n    df = df[df[\"totalLoss\"].astype(str).str.contains(\"\\\\$\")]\n\n    def parse_loss_to_millions(x: str):\n        s = str(x).strip().replace(\",\", \"\")\n        m = re.search(r\"\\$\\s*([0-9]*\\.?[0-9]+)\\s*([MBK]?)\", s, flags=re.IGNORECASE)\n        if not m:\n            return None\n        val = float(m.group(1))\n        unit = (m.group(2) or \"\").upper()\n        if unit == \"B\":\n            return val * 1000.0\n        if unit == \"M\" or unit == \"\":\n            return val\n        if unit == \"K\":\n            return val / 1000.0\n        return None\n\n    df[\"lossMillions\"] = df[\"totalLoss\"].map(parse_loss_to_millions)\n    df = df[df[\"lossMillions\"].notna()].copy()\n\n    return df[[\"paymentMethod\", \"numReports\", \"totalLoss\", \"lossMillions\"]]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean fraudByPaymentMethod table by (1) dropping the top blank row and setting header to ['paymentMethod','numReports','totalLoss'] (header row originally at index 1), (2) filtering out footer/source/total rows and keeping only rows with dollar-loss strings, and (3) parsing Total $ Loss values like '$275M' into numeric lossMillions (millions of dollars), supporting K/M/B suffixes; output columns: paymentMethod, numReports, totalLoss, lossMillions",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "sumLossMillions",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanFraudByPaymentMethod) -> pd.DataFrame:\n    import pandas as pd\n\n    total_millions = float(cleanFraudByPaymentMethod['lossMillions'].sum())\n    return pd.DataFrame([{\n        'totalLossMillions': total_millions,\n        'totalLossMillionsInt': int(round(total_millions))\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sum lossMillions across all payment methods from cleanFraudByPaymentMethod; output totalLossMillions (float) and rounded integer totalLossMillionsInt (millions of dollars)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudByPaymentMethod": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanFraudByPaymentMethod": {
+        "x": 400,
+        "y": 40
+      },
+      "sumLossMillions": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudByPaymentMethod-->cleanFraudByPaymentMethod",
+        "source": {
+          "operatorID": "fraudByPaymentMethod",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanFraudByPaymentMethod",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanFraudByPaymentMethod-->sumLossMillions",
+        "source": {
+          "operatorID": "cleanFraudByPaymentMethod",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "sumLossMillions",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

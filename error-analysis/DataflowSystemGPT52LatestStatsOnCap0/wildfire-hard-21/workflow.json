@@ -1,0 +1,249 @@
+{
+  "headId": "step-agent-651-52-1779126118664",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "zhvi",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n\n    pattern = 'data/wildfire/input/ZHVI.csv'\n    matches = glob.glob(pattern)\n    if not matches:\n        # Try case-insensitive-ish common variants in case the provided path casing differs on disk\n        alt_matches = []\n        alt_matches += glob.glob('data/wildfire/input/zhvi*.csv')\n        alt_matches += glob.glob('data/wildfire/input/ZHVI*.csv')\n        alt_matches += glob.glob('data/wildfire/input/*ZHVI*.csv')\n        if alt_matches:\n            matches = sorted(set(alt_matches))\n        else:\n            raise FileNotFoundError(\n                f\"No files matched '{pattern}'. Also tried: \"\n                f\"data/wildfire/input/zhvi*.csv, data/wildfire/input/ZHVI*.csv, data/wildfire/input/*ZHVI*.csv\"\n            )\n\n    path = sorted(matches)[0]\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Zillow ZHVI time-series table by globbing for data/wildfire/input/ZHVI.csv (fallback globs: data/wildfire/input/zhvi*.csv, data/wildfire/input/ZHVI*.csv, data/wildfire/input/*ZHVI*.csv) and reading the first match via pd.read_csv (comma delimiter, header=0, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stateMap",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import json\n    import pandas as pd\n\n    path = 'data/wildfire/input/state_abbreviation_to_state.json'\n    with open(path, 'r', encoding='utf-8') as f:\n        d = json.load(f)\n\n    # Expect mapping like {\"CA\": \"California\", ...}\n    return pd.DataFrame([{'state_abbr': k, 'state_full': v} for k, v in d.items()])"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load state_abbreviation_to_state.json; convert JSON dict mapping state abbreviation -> state full name into a 2-column DataFrame [state_abbr, state_full]",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaWildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv with default parameters (comma delimiter, header row=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfireVarDesc",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # Handle likely Windows-1252 smart quotes (0x92) and similar.\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv with pd.read_csv using encoding='cp1252' (to handle smart-quote bytes like 0x92) to inspect NOAA wildfire column definitions.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "zhviInspect",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(zhvi) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    cols = list(zhvi.columns)\n\n    id_like = []\n    id_pat = re.compile(r\"(state|region|name|county|metro|city|zip|fips|id|abbr|code)\", re.I)\n    for c in cols:\n        if id_pat.search(str(c)):\n            id_like.append(c)\n\n    time_cols = []\n    time_pat = re.compile(r\"^(\\d{4})([-_/](\\d{1,2})([-_/](\\d{1,2}))?)?$\")\n    for c in cols:\n        if time_pat.match(str(c).strip()):\n            time_cols.append(c)\n\n    def find_year_cols(year: str):\n        ys = []\n        for c in time_cols:\n            if str(c).strip().startswith(year):\n                ys.append(c)\n        return ys\n\n    y2005 = find_year_cols('2005')\n    y2010 = find_year_cols('2010')\n\n    sample = zhvi.head(1)\n    sample_dict = {}\n    for c in (id_like[:3] + y2005[:1] + y2010[-1:]):\n        if c in sample.columns:\n            sample_dict[str(c)] = sample.iloc[0][c]\n\n    out = {\n        'nrows': [len(zhvi)],\n        'ncols': [len(cols)],\n        'first25_cols': [', '.join(map(str, cols[:25]))],\n        'id_like_cols': [', '.join(map(str, id_like[:25]))],\n        'time_cols_count': [len(time_cols)],\n        'time_cols_first5': [', '.join(map(str, time_cols[:5]))],\n        'time_cols_last5': [', '.join(map(str, time_cols[-5:]))],\n        'cols_starting_2005': [', '.join(map(str, y2005[:10]))],\n        'cols_starting_2010': [', '.join(map(str, y2010[:10]))],\n        'sample_values': [str(sample_dict)]\n    }\n    return pd.DataFrame(out)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect ZHVI table schema: report row/column counts; list first 25 column names; detect id/geography-like columns via regex (state/region/name/county/metro/city/zip/fips/id/abbr/code); detect time-series columns matching YYYY or YYYY-MM(/DD) patterns; list columns starting with 2005 and 2010; provide a 1-row sample snapshot for up to 3 id-like columns plus one 2005 and one 2010 column when present.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "zhviRawPreview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/ZHVI.csv'\n    # Raw preview without header inference to diagnose structure / locate header row\n    return pd.read_csv(path, header=None, dtype=str, nrows=30)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic raw preview of data/wildfire/input/ZHVI.csv using pd.read_csv(header=None, dtype=str, nrows=30) to locate the true header row / delimiter issues (does not drop any rows; for inspection only).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "top3StatesValueLoss",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(zhvi, stateMap) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import re\n\n    df = zhvi.copy()\n\n    # --- identify state column ---\n    preferred = [\n        'state', 'State', 'state_abbr', 'StateName', 'state_name',\n        'RegionName', 'regionname', 'Region', 'region'\n    ]\n    state_col = None\n    for c in preferred:\n        if c in df.columns:\n            state_col = c\n            break\n    if state_col is None:\n        # regex fallback\n        for c in df.columns:\n            if re.search(r'(?i)\\bstate\\b', str(c)) or re.search(r'(?i)state', str(c)):\n                state_col = c\n                break\n\n    if state_col is None:\n        # Cannot proceed; return diagnostic\n        return pd.DataFrame([{\n            'error': 'Could not identify a state column in ZHVI table',\n            'columns': ','.join(map(str, df.columns[:50]))\n        }])\n\n    # --- detect time series columns ---\n    def parse_date_like(col):\n        s = str(col)\n        # accept YYYY, YYYY-MM, YYYY-MM-DD\n        if re.fullmatch(r'\\d{4}', s):\n            return pd.Timestamp(f'{s}-01-01')\n        if re.fullmatch(r'\\d{4}-\\d{2}', s):\n            return pd.Timestamp(f'{s}-01')\n        if re.fullmatch(r'\\d{4}-\\d{2}-\\d{2}', s):\n            return pd.Timestamp(s)\n        return None\n\n    date_cols = []\n    for c in df.columns:\n        ts = parse_date_like(c)\n        if ts is not None:\n            date_cols.append((c, ts))\n\n    if not date_cols:\n        return pd.DataFrame([{\n            'error': 'Could not detect any time-series columns (YYYY / YYYY-MM / YYYY-MM-DD) in ZHVI table',\n            'state_col': state_col,\n            'n_cols': len(df.columns)\n        }])\n\n    date_df = pd.DataFrame(date_cols, columns=['col', 'ts'])\n\n    # endpoints inclusive between 2005 and 2010\n    start2005 = pd.Timestamp('2005-01-01')\n    end2005 = pd.Timestamp('2005-12-31')\n    start2010 = pd.Timestamp('2010-01-01')\n    end2010 = pd.Timestamp('2010-12-31')\n\n    cols_2005 = date_df[(date_df['ts'] >= start2005) & (date_df['ts'] <= end2005)].sort_values('ts')\n    cols_2010 = date_df[(date_df['ts'] >= start2010) & (date_df['ts'] <= end2010)].sort_values('ts')\n\n    if cols_2005.empty or cols_2010.empty:\n        return pd.DataFrame([{\n            'error': 'Missing required year columns',\n            'state_col': state_col,\n            'min_ts': date_df['ts'].min(),\n            'max_ts': date_df['ts'].max(),\n            'n_2005_cols': int(cols_2005.shape[0]),\n            'n_2010_cols': int(cols_2010.shape[0])\n        }])\n\n    # Use the earliest available observation in 2005 and the latest in 2010\n    col_2005 = cols_2005.iloc[0]['col']\n    col_2010 = cols_2010.iloc[-1]['col']\n\n    # --- compute loss without dropping rows unnecessarily ---\n    v2005 = pd.to_numeric(df[col_2005], errors='coerce')\n    v2010 = pd.to_numeric(df[col_2010], errors='coerce')\n    loss = v2005 - v2010\n\n    out = pd.DataFrame({\n        'state_raw': df[state_col].astype(str),\n        'value_2005_col': col_2005,\n        'value_2010_col': col_2010,\n        'loss': loss\n    })\n\n    # If state column is actually RegionName, it may contain full state names already.\n    # We'll try to map abbreviations first when state_raw is 2-letter.\n    out['state_abbr'] = out['state_raw'].where(out['state_raw'].str.fullmatch(r'[A-Z]{2}'))\n\n    # Aggregate total loss by state_raw (or abbr when available)\n    # Use min_count=1 to avoid turning all-NaN groups into 0.\n    grouped = (\n        out.assign(state_key=np.where(out['state_abbr'].notna(), out['state_abbr'], out['state_raw']))\n           .groupby('state_key', dropna=False)['loss']\n           .sum(min_count=1)\n           .reset_index(name='total_loss')\n    )\n\n    # Keep only positive loss (value decrease)\n    grouped = grouped[grouped['total_loss'] > 0].copy()\n\n    # Map abbreviations to full names where possible\n    sm = stateMap.copy()\n    sm['state_abbr'] = sm['state_abbr'].astype(str)\n    grouped = grouped.merge(sm, left_on='state_key', right_on='state_abbr', how='left')\n    grouped['state_full_final'] = grouped['state_full'].fillna(grouped['state_key'])\n\n    top3 = grouped.sort_values('total_loss', ascending=False).head(3)\n\n    return top3[['state_full_final', 'total_loss', 'value_2005_col', 'value_2010_col']].rename(\n        columns={'state_full_final': 'state_full'}\n    )\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute top 3 states by total residential property value loss between 2005 and 2010 (inclusive) using ZHVI table: (1) identify state column (prefer exact names like state/state_abbr/RegionName else regex 'state'); (2) detect time-series columns formatted as YYYY, YYYY-MM, or YYYY-MM-DD; (3) select earliest column in year 2005 and latest column in year 2010; (4) coerce the two endpoint columns to numeric with errors='coerce' (preserve rows, NaN where non-numeric) and compute per-row loss = value_2005 - value_2010; (5) aggregate total_loss by state_key using sum(min_count=1) to avoid converting all-NaN groups to 0; (6) filter to positive total_loss only; (7) map 2-letter state abbreviations to full names via stateMap (left join) and fall back to original state_key when no mapping; (8) output top 3 states with [state_full, total_loss] plus the chosen endpoint column names.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "zhvi": {
+        "x": 100,
+        "y": 115
+      },
+      "stateMap": {
+        "x": 100,
+        "y": 370
+      },
+      "noaaWildfires": {
+        "x": 100,
+        "y": 550
+      },
+      "wildfireVarDesc": {
+        "x": 100,
+        "y": 730
+      },
+      "zhviInspect": {
+        "x": 400,
+        "y": 40
+      },
+      "zhviRawPreview": {
+        "x": 100,
+        "y": 910
+      },
+      "top3StatesValueLoss": {
+        "x": 400,
+        "y": 295
+      }
+    },
+    "links": [
+      {
+        "linkID": "zhvi-->zhviInspect",
+        "source": {
+          "operatorID": "zhvi",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "zhviInspect",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "zhvi-->top3StatesValueLoss",
+        "source": {
+          "operatorID": "zhvi",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top3StatesValueLoss",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "stateMap-->top3StatesValueLoss",
+        "source": {
+          "operatorID": "stateMap",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top3StatesValueLoss",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

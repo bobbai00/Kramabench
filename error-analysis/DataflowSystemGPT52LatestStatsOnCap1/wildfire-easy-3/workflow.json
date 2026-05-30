@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-174-7-1779102538734",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "usaGpkg",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    path = 'data/wildfire/input/usa.gpkg'\n\n    gdf = gpd.read_file(path)\n    gdf = gdf.copy()\n\n    # Convert geometry to WKT for safe serialization in the tabular runtime\n    gdf['geometry_wkt'] = gdf.geometry.to_wkt()\n    gdf = gdf.drop(columns=['geometry'])\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load usa.gpkg via geopandas.read_file from 'data/wildfire/input/usa.gpkg'; convert native 'geometry' to WKT string column 'geometry_wkt' and drop 'geometry' to avoid MULTIPOLYGON serialization/type mismatch",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifcAreasGpkg",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    path = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n\n    # Read as GeoDataFrame then convert geometry to WKT so the runtime can serialize it\n    gdf = gpd.read_file(path)\n    gdf = gdf.copy()\n    gdf['geometry_wkt'] = gdf.geometry.to_wkt()\n    # drop original geometry to avoid type mismatch in table serialization\n    gdf = gdf.drop(columns=['geometry'])\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_geographic_areas.gpkg via geopandas.read_file from 'data/wildfire/input/nifc_geographic_areas.gpkg'; convert geometry to WKT string column 'geometry_wkt' and drop native 'geometry' column to avoid runtime MULTIPOLYGON serialization/type mismatch",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "statesInMostAreas",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(usaGpkg, nifcAreasGpkg) -> pd.DataFrame:\n    import pandas as pd\n    import geopandas as gpd\n    from shapely import wkt\n\n    # Reconstruct geometries from WKT\n    usa = usaGpkg.copy()\n    areasDf = nifcAreasGpkg.copy()\n\n    if 'geometry_wkt' not in usa.columns:\n        raise ValueError(\"usaGpkg must contain 'geometry_wkt'\")\n    if 'geometry_wkt' not in areasDf.columns:\n        raise ValueError(\"nifcAreasGpkg must contain 'geometry_wkt'\")\n\n    usa['geometry'] = usa['geometry_wkt'].map(wkt.loads)\n    areasDf['geometry'] = areasDf['geometry_wkt'].map(wkt.loads)\n\n    states = gpd.GeoDataFrame(usa, geometry='geometry', crs='EPSG:4326')\n    areas = gpd.GeoDataFrame(areasDf, geometry='geometry', crs='EPSG:4326')\n\n    # usa.gpkg appears to be ADM2 (counties). Roll up to ADM1 (states) by adm1_name\n    if 'adm1_name' not in states.columns:\n        raise ValueError(\"Expected column 'adm1_name' (state full name) in usa.gpkg\")\n\n    statesAdm1 = states.dissolve(by='adm1_name', as_index=False)[['adm1_name', 'geometry']]\n\n    # Spatial join: find which state polygons intersect which NIFC GACC polygons\n    joined = gpd.sjoin(statesAdm1, areas[['GACCName', 'GACCAbbreviation', 'geometry']], how='inner', predicate='intersects')\n\n    # Count distinct areas per state (distinct by GACCName+abbr)\n    joined['area_key'] = joined['GACCName'].astype(str) + '|' + joined['GACCAbbreviation'].astype(str)\n    counts = joined.groupby('adm1_name')['area_key'].nunique().reset_index(name='nifc_area_count')\n\n    max_count = counts['nifc_area_count'].max() if len(counts) else 0\n    top = counts[counts['nifc_area_count'] == max_count].copy().sort_values('adm1_name')\n    top = top.rename(columns={'adm1_name': 'state'})\n    return top[['state', 'nifc_area_count']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Reconstruct geometries from 'geometry_wkt' (WKT->shapely) for usaGpkg and nifcAreasGpkg; build GeoDataFrames in EPSG:4326; dissolve usa counties to state polygons by 'adm1_name' (full state name); spatial-join states to NIFC areas on intersects; count distinct NIFC Geographic Areas per state (nunique of area_key=GACCName|GACCAbbreviation); return state(s) with maximum nifc_area_count plus the count, sorted by state name",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "usaGpkg": {
+        "x": 100,
+        "y": 40
+      },
+      "nifcAreasGpkg": {
+        "x": 100,
+        "y": 220
+      },
+      "statesInMostAreas": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "usaGpkg-->statesInMostAreas",
+        "source": {
+          "operatorID": "usaGpkg",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "statesInMostAreas",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifcAreasGpkg-->statesInMostAreas",
+        "source": {
+          "operatorID": "nifcAreasGpkg",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "statesInMostAreas",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

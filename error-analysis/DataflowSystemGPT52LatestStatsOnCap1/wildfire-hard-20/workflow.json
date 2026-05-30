@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-215-5-1779103251459",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # File appears to contain Windows-1252/Latin-1 smart quotes (0x92). Use cp1252.\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv via pd.read_csv with encoding='cp1252' (fix UnicodeDecodeError from smart-quote bytes); provides NOAA wildfire variable/column definitions",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (defaults: comma delimiter, first row header, UTF-8) containing NOAA wildfire incident records including year and damage metrics",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "housesDamaged90pct2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires) -> pd.DataFrame:\n    import pandas as pd\n    df = wildfires.copy()\n\n    # Residential houses damaged appears to be 'prim_threatened_aggregate' per NOAA naming; confirm via variableDescrip separately.\n    year_df = df[df['start_year'] == 2008].copy()\n\n    # Use numeric, treat negatives as missing (shouldn't exist) and fill NAs with 0.\n    col = 'prim_threatened_aggregate'\n    year_df[col] = pd.to_numeric(year_df[col], errors='coerce').fillna(0)\n    year_df.loc[year_df[col] < 0, col] = 0\n\n    total = year_df[col].sum()\n    if total == 0:\n        # Avoid division by zero; return NaN proportion.\n        return pd.DataFrame([{'proportion': float('nan'), 'n_fires': len(year_df), 'total_houses_damaged': total}])\n\n    # Sort fires descending by houses damaged\n    year_df = year_df.sort_values(col, ascending=False).reset_index(drop=True)\n    year_df['cum'] = year_df[col].cumsum()\n\n    # Minimum number of fires needed to reach at least 90% of total\n    cutoff = 0.9 * total\n    n_needed = int((year_df['cum'] >= cutoff).idxmax()) + 1\n\n    proportion = n_needed / len(year_df) if len(year_df) else float('nan')\n\n    return pd.DataFrame([{\n        'proportion': proportion,\n        'n_needed': n_needed,\n        'n_fires': len(year_df),\n        'total_houses_damaged': total,\n        'houses_damaged_at_n_needed': float(year_df.loc[n_needed-1, 'cum'])\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For year start_year=2008, compute the share of wildfires (count proportion) needed to account for at least 90% of total residential houses damaged: use prim_threatened_aggregate as houses-damaged metric; sort descending, cumulative sum, find smallest n with cum>=0.9*total, return proportion=n/total_fires plus audit fields",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "variableDescrip": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "housesDamaged90pct2008": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfires-->housesDamaged90pct2008",
+        "source": {
+          "operatorID": "wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "housesDamaged90pct2008",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-97-5-1779140459524",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadAllYears",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = [\n        \"data/environment/input/water-body-testing-2002.csv\",\n        \"data/environment/input/water-body-testing-2003.csv\",\n        \"data/environment/input/water-body-testing-2004.csv\",\n        \"data/environment/input/water-body-testing-2005.csv\",\n        \"data/environment/input/water-body-testing-2006.csv\",\n        \"data/environment/input/water-body-testing-2007.csv\",\n        \"data/environment/input/water-body-testing-2008.csv\",\n        \"data/environment/input/water-body-testing-2009.csv\",\n        \"data/environment/input/water-body-testing-2010.csv\",\n        \"data/environment/input/water-body-testing-2011.csv\",\n        \"data/environment/input/water-body-testing-2012.csv\",\n        \"data/environment/input/water-body-testing-2013.csv\",\n        \"data/environment/input/water-body-testing-2014.csv\",\n        \"data/environment/input/water-body-testing-2015.csv\",\n        \"data/environment/input/water-body-testing-2016.csv\",\n        \"data/environment/input/water-body-testing-2017.csv\",\n        \"data/environment/input/water-body-testing-2018.csv\",\n        \"data/environment/input/water-body-testing-2019.csv\",\n        \"data/environment/input/water-body-testing-2020.csv\",\n        \"data/environment/input/water-body-testing-2021.csv\",\n        \"data/environment/input/water-body-testing-2022.csv\",\n        \"data/environment/input/water-body-testing-2023.csv\",\n    ]\n\n    matched = []\n    for p in paths:\n        ms = glob.glob(p)\n        if not ms:\n            raise FileNotFoundError(f\"No match for path: {p}\")\n        matched.extend(ms)\n\n    dfs = []\n    for p in sorted(set(matched)):\n        year = int(p.split(\"water-body-testing-\")[-1].split(\".csv\")[0])\n        df = pd.read_csv(p)\n        df[\"sourceYear\"] = year\n        df[\"sourceFile\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    return pd.concat(dfs, ignore_index=True, sort=False)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and vertically concatenate water-body-testing CSVs for years 2002\u20132023 inclusive from the provided relative paths (glob each path, read via pd.read_csv), adding provenance columns sourceYear (int parsed from filename) and sourceFile (basename).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectColumns",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadAllYears\n    out = []\n    for c in df.columns:\n        s = df[c]\n        out.append({\n            \"column\": c,\n            \"dtype\": str(s.dtype),\n            \"nonNull\": int(s.notna().sum()),\n            \"null\": int(s.isna().sum()),\n            \"distinct\": int(s.nunique(dropna=True))\n        })\n    return pd.DataFrame(out).sort_values(\"column\").reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect schema of the concatenated 2002\u20132023 dataset: for each column, report dtype, non-null count, null count, and distinct count to identify beach name, waterbody type (marine), and violation/safety indicators.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "marineBeachesAlwaysSafe",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadAllYears.copy()\n\n    # Focus on marine beaches only\n    df = df[df[\"Beach Type Description\"].astype(str).str.strip().str.lower() == \"marine\"].copy()\n\n    # Normalize violation flag; treat null/unknown as non-violation per prompt's safety-by-absence framing\n    v = df[\"Violation\"].astype(str).str.strip().str.lower()\n    df[\"isViolation\"] = v.isin([\"yes\", \"y\", \"true\", \"t\", \"1\"])\n\n    # A beach is \"always safe\" if it never has any violation in any sampled record (2002-2023)\n    by_beach = df.groupby(\"Beach Name\", dropna=False)[\"isViolation\"].any().reset_index(name=\"everViolation\")\n    always_safe = by_beach[~by_beach[\"everViolation\"]].copy()\n\n    return pd.DataFrame({\"alwaysSafeMarineBeaches\": [int(always_safe.shape[0])]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter concatenated 2002\u20132023 dataset to Beach Type Description='Marine' (case-insensitive); normalize Violation to boolean isViolation (yes/y/true/1 => True; otherwise False including nulls); group by Beach Name and compute everViolation=any(isViolation); count marine beaches with everViolation=False and return single-row DataFrame with column alwaysSafeMarineBeaches.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadAllYears": {
+        "x": 100,
+        "y": 130
+      },
+      "inspectColumns": {
+        "x": 400,
+        "y": 40
+      },
+      "marineBeachesAlwaysSafe": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadAllYears-->inspectColumns",
+        "source": {
+          "operatorID": "loadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectColumns",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadAllYears-->marineBeachesAlwaysSafe",
+        "source": {
+          "operatorID": "loadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineBeachesAlwaysSafe",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

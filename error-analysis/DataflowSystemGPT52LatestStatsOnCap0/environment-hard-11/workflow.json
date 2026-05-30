@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-572-8-1779124380854",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "pleasureBay",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv\"\n    # Row 0 is a title line; row 1 contains location headers interspersed with blanks;\n    # row 2 contains the actual column headers.\n    return pd.read_csv(path, skiprows=2, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load pleasure_bay_and_castle_island_beach_datasheet.csv via pd.read_csv with skiprows=2 to use the true header row (row 2 in file); read all fields as strings (dtype=str) to preserve symbols like '<' in Enterococcus columns for later parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "rawPreview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv'\n    return pd.read_csv(path, header=None, dtype=str, nrows=40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect pleasure_bay_and_castle_island_beach_datasheet.csv structure by reading first 40 rows with header=None and dtype=str to identify true header row(s) and column layout",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "failedSamplesRainAvg",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pleasureBay) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = pleasureBay.copy()\n\n    # Columns in this file (after skiprows=2) are:\n    # Date, 1-Day Rain, 2-Day Rain, 3-Day Rain,\n    # Tag + Enterococcus for three stations (Broadway, Flagpole, Castle Island Playground)\n    date_col = \"Date\"\n    rain1_col = \"1-Day Rain\"\n    ent_col = \"Enterococcus\"  # Pleasure Bay @ Broadway\n\n    sub = df[[date_col, rain1_col, ent_col]].copy()\n\n    # Parse rainfall\n    sub[rain1_col] = pd.to_numeric(sub[rain1_col].astype(str).str.strip(), errors=\"coerce\")\n\n    # Parse Enterococcus counts:\n    # - Tag column holds '<' when the measurement is below detection; numeric value is in Enterococcus.\n    sub[ent_col] = pd.to_numeric(sub[ent_col].astype(str).str.strip().str.replace(r\"^<\\s*\", \"\", regex=True), errors=\"coerce\")\n\n    failed = sub[ent_col] > 104\n\n    out = pd.DataFrame([{\n        \"n_failed\": int(failed.fillna(False).sum()),\n        \"avg_rain1_failed\": float(sub.loc[failed, rain1_col].mean()),\n    }])\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average 1-day prior rainfall for failed Pleasure Bay Beach samples (standard: Enterococcus > 104 counts/100mL indicates failure): select columns ['Date','1-Day Rain','Enterococcus' (Pleasure Bay @ Broadway)], coerce '1-Day Rain' to numeric, parse Enterococcus by stripping and removing any leading '<', flag failed rows where Enterococcus>104, and return n_failed plus mean(1-Day Rain) over failed rows as avg_rain1_failed",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalAnswer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(failedSamplesRainAvg) -> pd.DataFrame:\n    import pandas as pd\n    avg = float(failedSamplesRainAvg.loc[0, 'avg_rain1_failed'])\n    return pd.DataFrame([{'avg_rain_1day_failed_2dp': round(avg, 2)}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Round the computed average 1-day rainfall before failed Pleasure Bay Beach samples (avg_rain1_failed from failedSamplesRainAvg) to 2 decimal places and output as avg_rain_1day_failed_2dp",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "pleasureBay": {
+        "x": 100,
+        "y": 40
+      },
+      "rawPreview": {
+        "x": 100,
+        "y": 220
+      },
+      "failedSamplesRainAvg": {
+        "x": 400,
+        "y": 40
+      },
+      "finalAnswer": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "pleasureBay-->failedSamplesRainAvg",
+        "source": {
+          "operatorID": "pleasureBay",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "failedSamplesRainAvg",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "failedSamplesRainAvg-->finalAnswer",
+        "source": {
+          "operatorID": "failedSamplesRainAvg",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalAnswer",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-87-9-1779140103979",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n\n    # Row 0: title; Row 1: blank; Row 2: actual header\n    df = pd.read_csv(path, header=2)\n\n    # Drop any blank/footer rows\n    df = df.dropna(subset=[\"State\", \"Category\"]).copy()\n\n    # Clean numeric fields\n    df[\"# of Reports\"] = (\n        df[\"# of Reports\"].astype(str).str.replace(\",\", \"\", regex=False)\n    )\n    df[\"# of Reports\"] = pd.to_numeric(df[\"# of Reports\"], errors=\"coerce\")\n\n    df[\"Percentage\"] = df[\"Percentage\"].astype(str).str.replace(\"%\", \"\", regex=False)\n    df[\"Percentage\"] = pd.to_numeric(df[\"Percentage\"], errors=\"coerce\")\n\n    # Standardize column names\n    df = df.rename(columns={\"# of Reports\": \"numReports\", \"Percentage\": \"percentage\"})\n\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv via pd.read_csv with header=2 (skip title row and blank row; use row with columns State, Category, # of Reports, Percentage); drop rows with null State or Category; parse '# of Reports' by removing commas and coercing to numeric; parse Percentage by stripping '%' and coercing to numeric; rename '# of Reports'\u2192numReports and 'Percentage'\u2192percentage",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectTopTenRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n    df = pd.read_csv(path, header=None, nrows=30)\n    # keep as-is; show raw layout\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 30 rows of 2024_CSN_State_Top_Ten_Report_Categories.csv with pd.read_csv(header=None, nrows=30) to identify the true header row and column names",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "statesWithIdTheftTop",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = topTenCategories.copy()\n\n    # Determine \"top\" as the highest % share within each state (ties allowed)\n    df[\"rankPct\"] = df.groupby(\"State\")[\"percentage\"].rank(method=\"min\", ascending=False)\n\n    out = df[(df[\"Category\"] == \"Identity Theft\") & (df[\"rankPct\"] == 1)].copy()\n\n    # Return unique states (sorted) where Identity Theft is a top category\n    out = (\n        out[[\"State\"]]\n        .drop_duplicates()\n        .sort_values(\"State\")\n        .reset_index(drop=True)\n    )\n\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For each State in topTenCategories, compute within-state rank of 'percentage' descending (rankPct, ties allowed via method='min'); filter rows where Category == 'Identity Theft' and rankPct == 1 (Identity Theft is top category by percentage); return unique State names sorted alphabetically",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "inspectTopTenRaw": {
+        "x": 100,
+        "y": 220
+      },
+      "statesWithIdTheftTop": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories-->statesWithIdTheftTop",
+        "source": {
+          "operatorID": "topTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "statesWithIdTheftTop",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

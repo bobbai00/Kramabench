@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-352-5-1779107644266",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadMmc3",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx\"\n    # Load all sheets to inspect structure\n    xls = pd.ExcelFile(path)\n    rows = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh, header=None, dtype=str, nrows=30)\n        df.insert(0, 'sheet', sh)\n        df.insert(1, 'rowNum', range(len(df)))\n        rows.append(df)\n    out = pd.concat(rows, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect Excel file 1-s2.0-S0092867420301070-mmc3.xlsx by reading first 30 rows of every sheet with header=None (raw cell layout) and returning concatenated preview with added columns [sheet, rowNum] for locating the true header/data table.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadGeneFdr",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n\n    # Load all sheets; identify gene and FDR-like columns; stack into long form\n    xls = pd.ExcelFile(path)\n    records = []\n    for sheet in xls.sheet_names:\n        try:\n            df = pd.read_excel(path, sheet_name=sheet)\n        except Exception:\n            continue\n        if df is None or df.empty:\n            continue\n\n        # Normalize column names\n        cols = [str(c).strip() for c in df.columns]\n        df.columns = cols\n\n        # Find a gene column (prefer exact 'Gene' then anything containing 'gene')\n        gene_col = None\n        for c in cols:\n            if c.lower() == 'gene':\n                gene_col = c\n                break\n        if gene_col is None:\n            for c in cols:\n                if 'gene' in c.lower():\n                    gene_col = c\n                    break\n        if gene_col is None:\n            continue\n\n        # Find an FDR column (prefer exact 'FDR' then contains 'fdr')\n        fdr_col = None\n        for c in cols:\n            if c.lower() == 'fdr':\n                fdr_col = c\n                break\n        if fdr_col is None:\n            for c in cols:\n                if 'fdr' in c.lower():\n                    fdr_col = c\n                    break\n        if fdr_col is None:\n            continue\n\n        out = df[[gene_col, fdr_col]].copy()\n        out.rename(columns={gene_col: 'gene', fdr_col: 'fdr'}, inplace=True)\n        out['sheet'] = sheet\n\n        # Coerce\n        out['gene'] = out['gene'].astype(str).str.strip()\n        out['fdr'] = pd.to_numeric(out['fdr'], errors='coerce')\n\n        # Keep plausible values\n        out = out[(out['gene'].notna()) & (out['gene'] != '')]\n        out = out[out['fdr'].notna()]\n        # some sheets might use percent; keep within [0,1] else drop\n        out = out[(out['fdr'] >= 0) & (out['fdr'] <= 1)]\n\n        if not out.empty:\n            records.append(out)\n\n    if not records:\n        return pd.DataFrame({'gene': [], 'fdr': [], 'sheet': []})\n\n    res = pd.concat(records, ignore_index=True)\n    return res\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc3.xlsx (all sheets) with inferred headers; auto-detect gene column (prefers exact 'Gene' then contains 'gene') and FDR column (prefers exact 'FDR' then contains 'fdr'); output long table with columns [gene, fdr, sheet], coercing fdr to numeric and filtering to non-null fdr within [0,1].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "computeFdrDifference",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadGeneFdr) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadGeneFdr.copy()\n    df['isCbx3'] = df['gene'].astype(str).str.upper().eq('CBX3')\n\n    cbx3_mean = df.loc[df['isCbx3'], 'fdr'].mean()\n    rest_mean = df.loc[~df['isCbx3'], 'fdr'].mean()\n    diff = cbx3_mean - rest_mean\n\n    return pd.DataFrame([{\n        'cbx3_mean_fdr': cbx3_mean,\n        'rest_mean_fdr': rest_mean,\n        'difference': diff,\n        'n_cbx3': int(df['isCbx3'].sum()),\n        'n_rest': int((~df['isCbx3']).sum()),\n        'sheets_with_data': df['sheet'].nunique()\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From stacked [gene,fdr,sheet] table: flag CBX3 genes (gene upper == 'CBX3'); compute mean FDR for CBX3 vs all other genes; output single-row table with cbx3_mean_fdr, rest_mean_fdr, difference (=cbx3-rest), counts n_cbx3/n_rest, and number of sheets contributing data.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadMmc3": {
+        "x": 100,
+        "y": 40
+      },
+      "loadGeneFdr": {
+        "x": 100,
+        "y": 220
+      },
+      "computeFdrDifference": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadGeneFdr-->computeFdrDifference",
+        "source": {
+          "operatorID": "loadGeneFdr",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "computeFdrDifference",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

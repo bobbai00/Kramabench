@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-89-8-1779140130097",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv'\n\n    # Raw preview shows: row0 title, row1 blank, row2 header.\n    df = pd.read_csv(path, header=2)\n\n    # Normalize column names (trim whitespace)\n    df.columns = [str(c).strip() for c in df.columns]\n\n    # Drop trailing source/blank rows\n    for col in ['State', 'Category']:\n        if col in df.columns:\n            df[col] = df[col].astype(str).str.strip()\n    df = df.dropna(subset=['State', 'Category'])\n    df = df[(df['State'] != 'nan') & (df['Category'] != 'nan')]\n\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv via pd.read_csv with header=2 (skip title row and blank row; use third row as header: State, Category, # of Reports, Percentage). Trim column names and whitespace in ['State','Category']; drop blank/footer rows by requiring non-null State and Category.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectTopTenRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv'\n\n    # Read raw rows without header inference to locate the real header row\n    df = pd.read_csv(path, header=None, nrows=40)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 40 rows of 2024_CSN_State_Top_Ten_Report_Categories.csv with pd.read_csv(header=None, nrows=40) to determine the correct header row and column names",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "countPrizeStates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    target = 'Prizes, Sweepstakes and Lotteries'\n\n    df = topTenCategories2024.copy()\n    # Ensure consistent whitespace\n    df['Category'] = df['Category'].astype(str).str.strip()\n    df['State'] = df['State'].astype(str).str.strip()\n\n    states = df.loc[df['Category'] == target, 'State'].dropna().unique()\n    return pd.DataFrame({'count': [len(states)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count distinct states whose Category equals exactly 'Prizes, Sweepstakes and Lotteries' in topTenCategories2024; return single-row DataFrame with column 'count' = number of unique matching State values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "inspectTopTenRaw": {
+        "x": 100,
+        "y": 220
+      },
+      "countPrizeStates": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories2024-->countPrizeStates",
+        "source": {
+          "operatorID": "topTenCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "countPrizeStates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

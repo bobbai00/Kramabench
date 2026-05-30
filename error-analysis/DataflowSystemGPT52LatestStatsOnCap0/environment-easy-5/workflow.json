@@ -1,0 +1,212 @@
+{
+  "headId": "step-agent-136-5-1779101717775",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadAmherst",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_amherst.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_amherst.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadAshburnham",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_ashburnham.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_ashburnham.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadBoston",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_boston.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_boston.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadChatham",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_chatham.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_chatham.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "summer2020Totals",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadBoston, loadChatham, loadAmherst, loadAshburnham) -> pd.DataFrame:\n    import pandas as pd\n\n    def one(df: pd.DataFrame, region: str) -> pd.DataFrame:\n        d = df.copy()\n        # keep only year rows that are numeric\n        d['Year_num'] = pd.to_numeric(d['Year'], errors='coerce')\n        d = d[d['Year_num'].notna()].copy()\n        d['Year_num'] = d['Year_num'].astype(int)\n        d = d[d['Year_num'] == 2020].copy()\n        if d.empty:\n            return pd.DataFrame([{'region': region, 'Jun': pd.NA, 'Jul': pd.NA, 'Aug': pd.NA, 'jjaTotal': pd.NA}])\n\n        for c in ['Jun', 'Jul', 'Aug']:\n            d[c] = pd.to_numeric(d[c].replace({'M': pd.NA, 'T': 0}), errors='coerce')\n\n        out = pd.DataFrame([{\n            'region': region,\n            'Jun': float(d['Jun'].iloc[0]) if pd.notna(d['Jun'].iloc[0]) else pd.NA,\n            'Jul': float(d['Jul'].iloc[0]) if pd.notna(d['Jul'].iloc[0]) else pd.NA,\n            'Aug': float(d['Aug'].iloc[0]) if pd.notna(d['Aug'].iloc[0]) else pd.NA,\n        }])\n        out['jjaTotal'] = out[['Jun', 'Jul', 'Aug']].sum(axis=1, skipna=False)\n        return out\n\n    res = pd.concat([\n        one(loadBoston, 'Boston'),\n        one(loadChatham, 'Chatham'),\n        one(loadAmherst, 'Amherst'),\n        one(loadAshburnham, 'Ashburnham'),\n    ], ignore_index=True)\n\n    # rank only where total is present\n    res['rank'] = res['jjaTotal'].rank(method='min', ascending=False)\n    return res.sort_values(['rank', 'region']).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-3",
+            "displayName": "Input 3",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For each region table (Boston, Chatham, Amherst, Ashburnham): coerce Year to numeric and filter to Year==2020; parse Jun/Jul/Aug precipitation to numeric (treat 'M' as missing, 'T' as 0); compute JJA total rainfall (Jun+Jul+Aug) requiring all three months present (skipna=False); concatenate into one table and rank regions by descending JJA total.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadAmherst": {
+        "x": 100,
+        "y": 400
+      },
+      "loadAshburnham": {
+        "x": 100,
+        "y": 580
+      },
+      "loadBoston": {
+        "x": 100,
+        "y": 40
+      },
+      "loadChatham": {
+        "x": 100,
+        "y": 220
+      },
+      "summer2020Totals": {
+        "x": 400,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadBoston-->summer2020Totals",
+        "source": {
+          "operatorID": "loadBoston",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summer2020Totals",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadChatham-->summer2020Totals",
+        "source": {
+          "operatorID": "loadChatham",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summer2020Totals",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "loadAmherst-->summer2020Totals",
+        "source": {
+          "operatorID": "loadAmherst",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summer2020Totals",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "loadAshburnham-->summer2020Totals",
+        "source": {
+          "operatorID": "loadAshburnham",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summer2020Totals",
+          "portID": "input-3"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

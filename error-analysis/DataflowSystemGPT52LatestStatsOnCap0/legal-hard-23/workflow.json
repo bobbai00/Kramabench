@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-618-6-1779125346927",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "identityTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv\"\n    return pd.read_csv(path, encoding=\"cp1252\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Identity_Theft_Reports.csv using pd.read_csv with encoding='cp1252' (fix UnicodeDecodeError from non-UTF8 bytes); keep comma delimiter and first row as header to obtain state-level identity theft report counts and density per 100K population.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fraudOther",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv\"\n    return pd.read_csv(path, encoding=\"cp1252\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv using pd.read_csv with encoding='cp1252' (fix UnicodeDecodeError from non-UTF8 bytes); keep comma delimiter and first row as header to obtain state-level fraud and other report counts and density per 100K population.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "combinedDensity",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identityTheft, fraudOther) -> pd.DataFrame:\n    import pandas as pd\n\n    def clean(df: pd.DataFrame) -> pd.DataFrame:\n        d = df.copy()\n        d.columns = ['col0', 'state', 'densityPer100k', 'reports']\n        d = d[d['state'].notna()]\n        # drop header row embedded in data\n        d = d[d['state'].str.strip().str.lower() != 'state']\n        # keep plausible state labels (avoid source/footer)\n        d = d[d['col0'].astype(str).str.match(r'^\\d+$', na=False)]\n        d['densityPer100k'] = (\n            d['densityPer100k']\n            .astype(str)\n            .str.replace(',', '', regex=False)\n            .str.strip()\n        )\n        d['reports'] = (\n            d['reports']\n            .astype(str)\n            .str.replace(',', '', regex=False)\n            .str.strip()\n        )\n        d['densityPer100k'] = pd.to_numeric(d['densityPer100k'], errors='coerce')\n        d['reports'] = pd.to_numeric(d['reports'], errors='coerce')\n        d = d.dropna(subset=['state', 'densityPer100k'])\n        return d[['state', 'densityPer100k', 'reports']]\n\n    it = clean(identityTheft).rename(columns={'densityPer100k': 'itDensity', 'reports': 'itReports'})\n    fo = clean(fraudOther).rename(columns={'densityPer100k': 'foDensity', 'reports': 'foReports'})\n\n    merged = it.merge(fo, on='state', how='inner')\n    merged['totalDensityPer100k'] = merged['itDensity'] + merged['foDensity']\n    merged['totalReports'] = merged['itReports'] + merged['foReports']\n\n    top = merged.sort_values(['totalDensityPer100k', 'totalReports'], ascending=[False, False]).head(1)\n    return top[['state', 'totalDensityPer100k', 'totalReports', 'itDensity', 'foDensity']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean both state ranking tables by renaming columns to [col0(rank), state, densityPer100k, reports]; filter out blank/footer rows and the embedded header row where state=='State'; keep only rows with numeric rank; parse densityPer100k and reports by removing commas and converting to numeric. Inner-join identity theft and fraud/other on state; compute totalDensityPer100k = itDensity + foDensity (equivalently total reports per 100K across both types) and totalReports = itReports + foReports; return the top 1 state by totalDensityPer100k (tie-breaker totalReports) with component densities.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "identityTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "fraudOther": {
+        "x": 100,
+        "y": 220
+      },
+      "combinedDensity": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "identityTheft-->combinedDensity",
+        "source": {
+          "operatorID": "identityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combinedDensity",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fraudOther-->combinedDensity",
+        "source": {
+          "operatorID": "fraudOther",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combinedDensity",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

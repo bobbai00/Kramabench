@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-170-7-1779102470473",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "noaaWildfiresMonthlyStats",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_monthly_stats.csv'\n    # File begins with two metadata rows + a blank row before the header.\n    df = pd.read_csv(path, skiprows=3)\n    # Normalize column names (remove surrounding quotes/spaces)\n    df.columns = [c.strip().strip('\"') for c in df.columns]\n    # Parse Date as YYYYMM integer -> datetime (first day of month)\n    df['Date'] = pd.to_datetime(df['Date'].astype(str), format='%Y%m', errors='coerce')\n    # Ensure numeric acres\n    df['Acres Burned'] = pd.to_numeric(df['Acres Burned'], errors='coerce')\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_monthly_stats.csv (data/wildfire/input/noaa_wildfires_monthly_stats.csv) with skiprows=3 to skip metadata lines (Title, Missing, blank) so header row starts at 'Date,...'; strip quotes from column names; parse 'Date' from YYYYMM to datetime; coerce 'Acres Burned' to numeric.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaWildfiresRawInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_monthly_stats.csv'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:40]\n    return pd.DataFrame({'line_number': list(range(1, len(lines)+1)), 'raw_line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 40 raw text lines of noaa_wildfires_monthly_stats.csv (UTF-8 with replacement for bad bytes) to determine delimiter/header/comment structure after pd.read_csv ParserError.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "topThreeMonthAcresSince2000",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfiresMonthlyStats) -> pd.DataFrame:\n    import pandas as pd\n\n    df = noaaWildfiresMonthlyStats.copy()\n    df = df[df['Date'] >= pd.Timestamp('2000-01-01')].sort_values('Date')\n\n    # 3-month rolling sum over monthly acres burned\n    s = df.set_index('Date')['Acres Burned']\n    roll3 = s.rolling(window=3).sum()\n\n    # Identify maximum 3-month window; window ends at the current index date\n    end_date = roll3.idxmax()\n    max_sum = float(roll3.loc[end_date])\n    start_date = (end_date - pd.offsets.MonthBegin(2))  # 2 months before end, at month start\n\n    return pd.DataFrame([{\n        'start_month': start_date.strftime('%Y-%m'),\n        'end_month': end_date.strftime('%Y-%m'),\n        'total_acres_burned_3mo': int(round(max_sum))\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From noaaWildfiresMonthlyStats: filter to Date >= 2000-01-01; sort by Date; compute 3-month rolling sum of 'Acres Burned' (window=3, monthly); take idxmax (window end month) and derive start_month = end_month minus 2 months; output [start_month, end_month, total_acres_burned_3mo] with total rounded to nearest integer.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "noaaWildfiresMonthlyStats": {
+        "x": 100,
+        "y": 40
+      },
+      "noaaWildfiresRawInspect": {
+        "x": 100,
+        "y": 220
+      },
+      "topThreeMonthAcresSince2000": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaaWildfiresMonthlyStats-->topThreeMonthAcresSince2000",
+        "source": {
+          "operatorID": "noaaWildfiresMonthlyStats",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topThreeMonthAcresSince2000",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

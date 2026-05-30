@@ -1,0 +1,258 @@
+{
+  "operators": [
+    {
+      "operatorID": "worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load modern world cities from data/archeology/input/worldcities.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "roman_cities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/roman_cities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load ancient Roman-era cities from data/archeology/input/roman_cities.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "worldcities_100k",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(worldcities):\n    wc = worldcities.copy()\n    # ensure numeric\n    wc['population'] = pd.to_numeric(wc['population'], errors='coerce')\n    wc['lat'] = pd.to_numeric(wc['lat'], errors='coerce')\n    wc['lng'] = pd.to_numeric(wc['lng'], errors='coerce')\n    wc = wc.dropna(subset=['population','lat','lng'])\n    return wc[wc['population'] > 100000][['city','lat','lng','population','country','iso2','id']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter modern worldcities to those with population > 100,000 and valid numeric lat/lng; keep key columns.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "roman_coords",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(roman_cities):\n    import pandas as pd\n    df = roman_cities.copy()\n    df = df.rename(columns={'Longitude (X)':'lng','Latitude (Y)':'lat'})\n    df['lat'] = pd.to_numeric(df['lat'], errors='coerce')\n    df['lng'] = pd.to_numeric(df['lng'], errors='coerce')\n    df = df.dropna(subset=['lat','lng'])\n    return df[['Primary Key','Ancient Toponym','Modern Toponym','Country','lat','lng']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Standardize roman_cities coordinates: rename Latitude (Y)/Longitude (X) to lat/lng, coerce to numeric, drop rows with missing coords, keep identifier/toponyms/country/lat/lng",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "within_0_1deg",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(worldcities_100k, roman_coords):\n    import numpy as np\n    wc = worldcities_100k.copy()\n    rc = roman_coords.copy()\n\n    # Cross join via numpy broadcasting to test proximity in degrees\n    wc_lat = wc['lat'].to_numpy()[:, None]\n    wc_lng = wc['lng'].to_numpy()[:, None]\n    rc_lat = rc['lat'].to_numpy()[None, :]\n    rc_lng = rc['lng'].to_numpy()[None, :]\n\n    close = (np.abs(wc_lat - rc_lat) <= 0.1) & (np.abs(wc_lng - rc_lng) <= 0.1)\n    any_close = close.any(axis=1)\n\n    out = wc.loc[any_close, ['id', 'city', 'country', 'lat', 'lng', 'population']].copy()\n    out['matched_roman_city_count'] = close[any_close].sum(axis=1)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Identify modern cities (pop>100k) that are within 0.1 degrees latitude AND 0.1 degrees longitude of at least one Roman-era city; return the subset plus count of matched Roman cities per modern city.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "count_modern_cities_within",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(within_0_1deg):\n    # Count unique modern cities (by unique id) that matched at least one Roman city\n    return within_0_1deg[['id']].drop_duplicates().assign(count=lambda d: 1)[['count']].sum().to_frame().T\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Count distinct modern city ids in within_0_1deg (modern cities pop>100k within 0.1 degrees of a Roman-era city).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "worldcities": {
+      "x": 100,
+      "y": 40
+    },
+    "roman_cities": {
+      "x": 100,
+      "y": 220
+    },
+    "worldcities_100k": {
+      "x": 430,
+      "y": 40
+    },
+    "roman_coords": {
+      "x": 430,
+      "y": 220
+    },
+    "within_0_1deg": {
+      "x": 760,
+      "y": 130
+    },
+    "count_modern_cities_within": {
+      "x": 1090,
+      "y": 130
+    }
+  },
+  "links": [
+    {
+      "linkID": "worldcities-->worldcities_100k",
+      "source": {
+        "operatorID": "worldcities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "worldcities_100k",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "roman_cities-->roman_coords",
+      "source": {
+        "operatorID": "roman_cities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "roman_coords",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "worldcities_100k-->within_0_1deg",
+      "source": {
+        "operatorID": "worldcities_100k",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "within_0_1deg",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "roman_coords-->within_0_1deg",
+      "source": {
+        "operatorID": "roman_coords",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "within_0_1deg",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "within_0_1deg-->count_modern_cities_within",
+      "source": {
+        "operatorID": "within_0_1deg",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "count_modern_cities_within",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

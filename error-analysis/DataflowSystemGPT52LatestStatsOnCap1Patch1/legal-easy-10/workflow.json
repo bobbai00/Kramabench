@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-30-8-1779139256795",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportsByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv\"\n\n    # True header is on row index 2 (0-based) after title and blank row.\n    df = pd.read_csv(path, header=2)\n    df = df.rename(columns=lambda c: str(c).strip())\n\n    # Keep only rows with a 4-digit year.\n    df = df[df[\"Year\"].astype(str).str.fullmatch(r\"\\d{4}\")].copy()\n\n    # Clean numeric columns (remove thousands separators) and coerce to numeric.\n    for col in [\"Fraud\", \"Identity Theft\", \"Other\"]:\n        df[col] = pd.to_numeric(df[col].astype(str).str.replace(\",\", \"\", regex=False), errors=\"coerce\")\n\n    df[\"Year\"] = df[\"Year\"].astype(int)\n    return df[[\"Year\", \"Fraud\", \"Identity Theft\", \"Other\"]]\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Number_of_Reports_by_Type.csv with header=2 (skip title row and blank row so columns are [Year, Fraud, Identity Theft, Other]); strip column names; keep rows where Year is a 4-digit year; parse Fraud/Identity Theft/Other as numeric by removing thousands separators; return columns [Year, Fraud, Identity Theft, Other].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectReportsRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv\"\n    # Inspect raw structure without header inference\n    df = pd.read_csv(path, header=None, nrows=40)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 2024_CSN_Number_of_Reports_by_Type.csv raw layout \u2014 read first 40 rows with header=None to identify the true header row and column names.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fraudShareYears",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportsByType) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportsByType.copy()\n    df[\"total\"] = df[[\"Fraud\", \"Identity Theft\", \"Other\"]].sum(axis=1)\n    df[\"fraudShare\"] = df[\"Fraud\"] / df[\"total\"]\n\n    out = df.loc[df[\"fraudShare\"] >= 0.5, [\"Year\", \"fraudShare\", \"Fraud\", \"total\"]].copy()\n    out = out.sort_values(\"Year\").reset_index(drop=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute total reports per year as Fraud+Identity Theft+Other; compute fraudShare=Fraud/total; filter years where fraudShare >= 0.5; return [Year, fraudShare, Fraud, total] sorted by Year for verification.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportsByType": {
+        "x": 100,
+        "y": 40
+      },
+      "inspectReportsRaw": {
+        "x": 100,
+        "y": 220
+      },
+      "fraudShareYears": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportsByType-->fraudShareYears",
+        "source": {
+          "operatorID": "reportsByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fraudShareYears",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

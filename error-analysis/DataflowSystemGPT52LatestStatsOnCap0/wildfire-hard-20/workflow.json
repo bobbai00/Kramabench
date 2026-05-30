@@ -1,0 +1,245 @@
+{
+  "headId": "step-agent-247-8-1779103947499",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    return pd.read_csv(path, encoding='latin-1')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv using pd.read_csv with encoding='latin-1' (fallback for non-UTF8 characters like smart quotes); comma-delimited, header in first row; source: data/wildfire/input/noaa_wildfires_variabledescrip.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaWildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (comma-delimited, header in first row, UTF-8) from data/wildfire/input/noaa_wildfires.csv; contains NOAA wildfire records including year and residential houses damaged.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "housesDamageShare2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = noaaWildfires.copy()\n\n    # Use variable description table to locate the correct column name.\n    # Heuristic: look for 'res' (residential) + 'dam' (damaged) and either 'house' or 'primary'\n    # among numeric columns.\n    cols = list(df.columns)\n    numeric_cols = [c for c in cols if pd.api.types.is_numeric_dtype(df[c])]\n\n    def score(col: str) -> int:\n        s = col.lower()\n        sc = 0\n        if 'res' in s:\n            sc += 2\n        if 'dam' in s or 'dmg' in s:\n            sc += 2\n        if 'house' in s or 'housing' in s or 'home' in s:\n            sc += 2\n        if 'prim' in s or 'primary' in s:\n            sc += 1\n        if 'comm' in s or 'commercial' in s:\n            sc -= 1\n        if 'threat' in s or 'threaten' in s:\n            sc -= 2\n        return sc\n\n    scored = sorted([(c, score(c)) for c in numeric_cols], key=lambda x: (-x[1], x[0]))\n    top_score = scored[0][1] if scored else None\n    candidates = [c for c, sc in scored if sc == top_score and sc > 0]\n\n    if len(candidates) != 1:\n        # Return diagnostics to help identify the correct column.\n        diag = pd.DataFrame(scored[:30], columns=['column', 'score'])\n        diag.insert(0, 'note', f\"Ambiguous/missing residential houses damaged column. top_score={top_score}; candidates={candidates}\")\n        return diag\n\n    col = candidates[0]\n\n    df = df[df['start_year'] == 2008].copy()\n    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)\n\n    total = df[col].sum()\n    if total <= 0:\n        return pd.DataFrame([{\n            'year': 2008,\n            'resHousesDamagedCol': col,\n            'numFires2008': int(len(df)),\n            'totalResHousesDamaged': float(total),\n            'numFiresToReach90pctDamage': 0,\n            'shareOfFiresFor90pctDamage': np.nan\n        }])\n\n    df = df.sort_values(col, ascending=False)\n    df['cum_share'] = df[col].cumsum() / total\n    k = int((df['cum_share'] >= 0.90).idxmax())\n    # idxmax returns index label; convert to position\n    k_pos = int(np.where(df.index == k)[0][0]) + 1\n\n    share_fires = k_pos / len(df)\n\n    return pd.DataFrame([{\n        'year': 2008,\n        'resHousesDamagedCol': col,\n        'numFires2008': int(len(df)),\n        'totalResHousesDamaged': float(total),\n        'numFiresToReach90pctDamage': int(k_pos),\n        'shareOfFiresFor90pctDamage': float(share_fires)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For start_year==2008, attempt to identify the numeric column representing 'residential houses damaged' via a token-based scoring over numeric columns (favoring tokens: res, dam/dmg, house/home/housing, prim/primary; penalizing comm/commercial and threat/threaten). If exactly one top-scoring candidate exists, compute total damaged, sort fires by damages descending, compute cumulative share, find the minimum count of fires reaching >=90% of total damages, and return share = count/num_fires with diagnostics (column chosen, totals, counts). If ambiguous, return a diagnostic table of top 30 scored numeric columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "findHousesColumn",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(variableDescrip) -> pd.DataFrame:\n    import pandas as pd\n\n    df = variableDescrip.copy()\n    df.columns = [c.strip() for c in df.columns]\n\n    def norm(s):\n        if pd.isna(s):\n            return ''\n        return str(s).lower()\n\n    df['var'] = df['Variable Name'].astype(str).str.strip()\n    df['desc_young'] = df['Young et al. 2020, Table 1'].map(norm)\n    df['desc_alt'] = df['Alternative description'].map(norm)\n    df['desc'] = (df['desc_young'].fillna('') + ' ' + df['desc_alt'].fillna('')).str.strip()\n\n    # look for relevant keywords\n    pattern = r'(residential|residence|home|house|housing|structure|building|destroy|damage|damaged|loss)'\n    cand = df[df['desc'].str.contains(pattern, regex=True, na=False)].copy()\n\n    # score for residential houses damaged vs threatened\n    def score(text):\n        s = 0\n        if any(k in text for k in ['residential', 'home', 'house', 'housing']):\n            s += 3\n        if any(k in text for k in ['damage', 'damaged', 'destroy', 'loss']):\n            s += 2\n        if 'threat' in text or 'threaten' in text:\n            s -= 2\n        if 'commercial' in text or 'comm ' in text or 'comm_' in text:\n            s -= 1\n        return s\n\n    cand['score'] = cand['desc'].map(score)\n    cand = cand.sort_values(['score', 'var'], ascending=[False, True])\n\n    return cand[['var','score','desc_young','desc_alt']].reset_index(drop=True)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search noaa_wildfires_variabledescrip.csv for variables whose descriptions mention residential/home/house/housing/structure/building and damage/destroy/loss; compute heuristic score favoring residential-damage terms and penalizing threatened/commercial; return candidate variable names with descriptions and scores",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect2008Columns",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires) -> pd.DataFrame:\n    import pandas as pd\n\n    df = noaaWildfires.copy()\n    df2008 = df[df['start_year'] == 2008].copy()\n\n    # summarize columns that could represent houses damaged (threatened aggregates shown too)\n    cols = list(df2008.columns)\n\n    # numeric columns summary\n    num_cols = [c for c in cols if pd.api.types.is_numeric_dtype(df2008[c])]\n\n    rows = []\n    for c in num_cols:\n        s = df2008[c]\n        rows.append({\n            'column': c,\n            'nonNull': int(s.notna().sum()),\n            'numPositive': int((s.fillna(0) > 0).sum()),\n            'sum': float(s.fillna(0).sum()),\n            'max': float(s.max()),\n        })\n\n    out = pd.DataFrame(rows).sort_values(['sum','max'], ascending=[False, False]).reset_index(drop=True)\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For start_year==2008 in noaa_wildfires.csv, compute summary stats for every numeric column (non-null count, count >0, sum, max) and sort by total sum and max to help identify the residential houses damaged field",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "computeResidentialDamageShare2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = noaaWildfires.copy()\n\n    # Residential houses damaged: not explicitly present; use primary residences threatened as best available proxy.\n    col = 'prim_threatened_aggregate'\n    if col not in df.columns:\n        return pd.DataFrame([{\n            'error': f\"Expected column '{col}' not found\",\n            'available_cols': ','.join(df.columns)\n        }])\n\n    d2008 = df[df['start_year'] == 2008].copy()\n    d2008[col] = pd.to_numeric(d2008[col], errors='coerce').fillna(0)\n\n    total = float(d2008[col].sum())\n    n = int(len(d2008))\n\n    if n == 0 or total <= 0:\n        return pd.DataFrame([{\n            'year': 2008,\n            'column_used': col,\n            'num_fires': n,\n            'total_residential': total,\n            'k_to_reach_90pct': np.nan,\n            'share_fires': np.nan\n        }])\n\n    s = d2008[[col]].sort_values(col, ascending=False).reset_index(drop=True)\n    s['cum'] = s[col].cumsum()\n    s['cum_share'] = s['cum'] / total\n\n    k = int((s['cum_share'] >= 0.9).idxmax() + 1)\n    share = k / n\n\n    return pd.DataFrame([{\n        'year': 2008,\n        'column_used': col,\n        'num_fires': n,\n        'total_residential': total,\n        'k_to_reach_90pct': k,\n        'share_fires': share\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For start_year==2008 in noaa_wildfires.csv, use prim_threatened_aggregate (primary residences impacted; closest available field) as a proxy for 'residential houses damaged'; compute total, sort incidents by this value descending, compute cumulative share, find minimal k incidents reaching >=90% of total, and return share_fires=k/num_fires with diagnostics (year, column_used, num_fires, total_residential, k_to_reach_90pct).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "variableDescrip": {
+        "x": 100,
+        "y": 40
+      },
+      "noaaWildfires": {
+        "x": 100,
+        "y": 400
+      },
+      "housesDamageShare2008": {
+        "x": 400,
+        "y": 220
+      },
+      "findHousesColumn": {
+        "x": 400,
+        "y": 40
+      },
+      "inspect2008Columns": {
+        "x": 400,
+        "y": 400
+      },
+      "computeResidentialDamageShare2008": {
+        "x": 400,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaaWildfires-->housesDamageShare2008",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "housesDamageShare2008",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "variableDescrip-->findHousesColumn",
+        "source": {
+          "operatorID": "variableDescrip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "findHousesColumn",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaaWildfires-->inspect2008Columns",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect2008Columns",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaaWildfires-->computeResidentialDamageShare2008",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "computeResidentialDamageShare2008",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

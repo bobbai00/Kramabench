@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-235-7-1779103557654",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # File appears to contain Windows-1252 smart quotes (0x92), so use cp1252.\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv via pd.read_csv with encoding='cp1252' (fix UnicodeDecodeError from smart-quote bytes); comma delimiter, first row as header; source of NOAA variable definitions/units",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaWildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (comma delimiter, first row as header, UTF-8) from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "julyFireWindCorr",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaaWildfires) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = noaaWildfires.copy()\n\n    # Parse start_date and keep July starts\n    dt = pd.to_datetime(df['start_date'], errors='coerce')\n    july = df[dt.dt.month == 7].copy()\n\n    wind_col = 'wind_med'\n\n    # Choose a fire-size column. Prefer HEC (burned area / fire size proxy) if present.\n    size_candidates = ['hec', 'fire_size', 'fire_size_acres', 'acres', 'burned_area', 'area', 'size']\n    size_col = next((c for c in size_candidates if c in july.columns), None)\n\n    if size_col is None or wind_col not in july.columns:\n        return pd.DataFrame([{'size_col': size_col, 'wind_col': wind_col if wind_col in july.columns else None,\n                              'corr_pearson': np.nan, 'n': 0}])\n\n    x = pd.to_numeric(july[size_col], errors='coerce')\n    y = pd.to_numeric(july[wind_col], errors='coerce')\n    m = x.notna() & y.notna()\n\n    if int(m.sum()) < 2:\n        corr = np.nan\n    else:\n        corr = float(pd.Series(x[m]).corr(pd.Series(y[m]), method='pearson'))\n\n    return pd.DataFrame([{\n        'size_col': size_col,\n        'wind_col': wind_col,\n        'corr_pearson': corr,\n        'n': int(m.sum())\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From noaa_wildfires.csv: parse start_date to datetime; filter to July fires (start_date month==7); use wind_med as median wind speed; select fire-size proxy column preferring 'hec' (else first available among ['fire_size','fire_size_acres','acres','burned_area','area','size']); coerce size and wind to numeric; drop rows with NA in either; compute Pearson correlation corr_pearson and sample size n; output chosen size_col and wind_col for traceability",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "corrToYesNo",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(julyFireWindCorr) -> pd.DataFrame:\n    import pandas as pd\n    r = float(julyFireWindCorr.loc[0, 'corr_pearson'])\n    n = int(julyFireWindCorr.loc[0, 'n'])\n\n    strong = abs(r) >= 0.7\n    ans = 'Yes' if strong else 'No'\n\n    return pd.DataFrame([{\n        'answer': ans,\n        'corr_pearson': r,\n        'n': n,\n        'threshold_abs_r': 0.7\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert July fire-size vs median-wind-speed Pearson correlation into Yes/No using strong-correlation threshold |r|>=0.7; read corr_pearson and n from julyFireWindCorr; output answer plus corr_pearson, n, and threshold_abs_r for traceability",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "variableDescrip": {
+        "x": 100,
+        "y": 40
+      },
+      "noaaWildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "julyFireWindCorr": {
+        "x": 400,
+        "y": 220
+      },
+      "corrToYesNo": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaaWildfires-->julyFireWindCorr",
+        "source": {
+          "operatorID": "noaaWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "julyFireWindCorr",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "julyFireWindCorr-->corrToYesNo",
+        "source": {
+          "operatorID": "julyFireWindCorr",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "corrToYesNo",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

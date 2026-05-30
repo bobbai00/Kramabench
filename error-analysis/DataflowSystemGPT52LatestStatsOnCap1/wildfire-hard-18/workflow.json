@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-643-7-1779125649940",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (comma delimiter, first row header, UTF-8 defaults) from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # File appears to be encoded in a Windows codepage (contains smart quotes).\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv via pd.read_csv with encoding='cp1252' (fix UnicodeDecodeError from UTF-8); comma delimiter, first row header; source for variable definitions/semantics",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "suppressionWeatherModel",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import statsmodels.api as sm\n\n    df = wildfires.copy()\n\n    # Outcomes\n    df['logDuration'] = np.log(pd.to_numeric(df['duration'], errors='coerce').clip(lower=1))\n\n    buildings = (\n        pd.to_numeric(df['prim_threatened_aggregate'], errors='coerce').fillna(0)\n        + pd.to_numeric(df['comm_threatened_aggregate'], errors='coerce').fillna(0)\n        + pd.to_numeric(df['outb_threatened_aggregate'], errors='coerce').fillna(0)\n    )\n    df['logBuildingsThreatened'] = np.log1p(buildings)\n\n    # Treatment\n    df['aggressive'] = (df['dominant_strategy_50_s'] == 'Full Suppression').astype(int)\n\n    # Controls (weather)\n    weather_cols = ['avrh_mean', 'wind_med', 'erc_med', 'rain_sum']\n    for c in weather_cols:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    model_df = df[['aggressive'] + weather_cols + ['region', 'start_year', 'logDuration', 'logBuildingsThreatened']].copy()\n    model_df['start_year'] = pd.to_numeric(model_df['start_year'], errors='coerce')\n\n    model_df = model_df.dropna(subset=weather_cols + ['region', 'start_year', 'logDuration', 'logBuildingsThreatened'])\n\n    # Fixed effects dummies\n    X = pd.concat(\n        [\n            model_df[['aggressive'] + weather_cols],\n            pd.get_dummies(model_df['region'], prefix='region', drop_first=True, dtype=float),\n            pd.get_dummies(model_df['start_year'].astype(int), prefix='year', drop_first=True, dtype=float),\n        ],\n        axis=1,\n    )\n\n    # Ensure all numeric for statsmodels\n    X = X.apply(pd.to_numeric, errors='coerce').astype(float)\n    X = sm.add_constant(X, has_constant='add')\n\n    y1 = pd.to_numeric(model_df['logDuration'], errors='coerce').astype(float)\n    y2 = pd.to_numeric(model_df['logBuildingsThreatened'], errors='coerce').astype(float)\n\n    m1 = sm.OLS(y1, X, missing='drop').fit(cov_type='HC1')\n    m2 = sm.OLS(y2, X, missing='drop').fit(cov_type='HC1')\n\n    def extract(model, var='aggressive'):\n        b = float(model.params.get(var, np.nan))\n        se = float(model.bse.get(var, np.nan))\n        p = float(model.pvalues.get(var, np.nan))\n        if var in model.params.index:\n            ci = model.conf_int().loc[var]\n            l, h = float(ci.iloc[0]), float(ci.iloc[1])\n        else:\n            l, h = np.nan, np.nan\n        pct = (np.exp(b) - 1.0) * 100.0\n        return b, se, p, l, h, pct\n\n    b1, se1, p1, l1, h1, pct1 = extract(m1)\n    b2, se2, p2, l2, h2, pct2 = extract(m2)\n\n    return pd.DataFrame(\n        [\n            {\n                'outcome': 'duration_days (log)',\n                'coef_aggressive': b1,\n                'se': se1,\n                'pct_change_if_aggressive': pct1,\n                'p_value': p1,\n                'ci_low': l1,\n                'ci_high': h1,\n                'n': int(m1.nobs),\n                'r2': float(m1.rsquared),\n            },\n            {\n                'outcome': 'buildings_threatened (log1p)',\n                'coef_aggressive': b2,\n                'se': se2,\n                'pct_change_if_aggressive': pct2,\n                'p_value': p2,\n                'ci_low': l2,\n                'ci_high': h2,\n                'n': int(m2.nobs),\n                'r2': float(m2.rsquared),\n            },\n        ]\n    )\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Estimate weather-controlled associations between aggressive suppression and (1) fire duration and (2) buildings threatened, with careful numeric casting to avoid object dtypes. Define aggressive=1 if dominant_strategy_50_s == 'Full Suppression'. Outcomes: log(duration) and log1p(prim+comm+outb threatened aggregates). Controls: avrh_mean, wind_med, erc_med, rain_sum (coerced to numeric) plus region and start_year fixed-effects via one-hot dummies; fit robust (HC1) OLS; output aggressive coefficient, SE, implied % change, p-value, CI, N, and R\u00b2.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wildfires": {
+        "x": 100,
+        "y": 40
+      },
+      "variableDescrip": {
+        "x": 100,
+        "y": 220
+      },
+      "suppressionWeatherModel": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfires-->suppressionWeatherModel",
+        "source": {
+          "operatorID": "wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "suppressionWeatherModel",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,313 @@
+{
+  "headId": "step-agent-454-9-1779120094442",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "climateMeasurements",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n    # Row 5 (0-based) contains the true header.\n    return pd.read_excel(path, sheet_name='Sheet1', header=5)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx (Sheet1) via pd.read_excel with header=5 (0-based; 6th row contains true column labels such as Age_ky and elemental concentrations incl. K); returns full dataset with proper headers for downstream numeric/time parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "radiocarbonRegional",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/radiocarbon_database_regional.xlsx'\n    # Read as strings to avoid schema/type mismatch in Texera; parse numeric columns later.\n    return pd.read_excel(path, sheet_name='Sheet1', dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load radiocarbon_database_regional.xlsx (Sheet1) via pd.read_excel with dtype=str to avoid mixed numeric/string typing errors (e.g., Longitude floats); returns all cells as strings for downstream filtering/parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectSheets",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from pandas import ExcelFile\n\n    paths = [\n        'data/archeology/input/climateMeasurements.xlsx',\n        'data/archeology/input/radiocarbon_database_regional.xlsx'\n    ]\n    rows = []\n    for p in paths:\n        xf = ExcelFile(p)\n        for s in xf.sheet_names:\n            rows.append({'file': p.split('/')[-1], 'sheet': s})\n    return pd.DataFrame(rows)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List sheet names for climateMeasurements.xlsx and radiocarbon_database_regional.xlsx (ExcelFile.sheet_names) to determine which sheets contain Potassium ppm and Maltese-area radiocarbon records",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectClimateRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n    df = pd.read_excel(path, sheet_name='Sheet1', header=None, dtype=str, nrows=40)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect climateMeasurements.xlsx Sheet1 raw layout \u2014 read first 40 rows with header=None and dtype=str to identify true header row and the Potassium (ppm) + time columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "maltaTimeRange",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(radiocarbonRegional) -> pd.DataFrame:\n    import pandas as pd\n    df = radiocarbonRegional.copy()\n\n    # filter to Maltese area based on Region column\n    malta = df[df['Region'].str.strip().str.lower().eq('malta')].copy()\n\n    # Use uncalibrated radiocarbon 'date' as the study time axis (years BP)\n    malta['dateNum'] = pd.to_numeric(malta['date'], errors='coerce')\n\n    out = pd.DataFrame([{\n        'nRecords': int(malta.shape[0]),\n        'minDateBP': float(malta['dateNum'].min()),\n        'maxDateBP': float(malta['dateNum'].max())\n    }])\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter radiocarbon_database_regional.xlsx to Region == 'Malta' (case/whitespace-insensitive); parse numeric radiocarbon 'date' (years BP); return count and min/max dateBP for first/last Maltese records",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectClimateCols",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climateMeasurements) -> pd.DataFrame:\n    import pandas as pd\n    cols = list(climateMeasurements.columns)\n    # show first 30 column names and last 10 to spot Potassium/time columns\n    preview = []\n    for i, c in enumerate(cols[:30]):\n        preview.append({'pos': i, 'col': c})\n    offset = max(0, len(cols) - 10)\n    for i, c in enumerate(cols[offset:]):\n        preview.append({'pos': offset + i, 'col': c})\n    return pd.DataFrame(preview)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect climateMeasurements loaded column names by position \u2014 output first 30 and last 10 column names to help locate time axis and Potassium (ppm) fields",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectClimateHeader",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(inspectClimateRaw) -> pd.DataFrame:\n    import pandas as pd\n\n    df = inspectClimateRaw.copy()\n    # find first row that contains multiple non-null cells and likely header keywords\n    candidates = []\n    for i in range(len(df)):\n        row = df.iloc[i]\n        nonnull = row.notna().sum()\n        txt = ' '.join([str(x) for x in row.dropna().tolist()])\n        candidates.append({'row': i, 'nonnullCells': int(nonnull), 'textSnippet': txt[:200]})\n    out = pd.DataFrame(candidates)\n    # show rows with relatively many filled cells\n    return out.sort_values(['nonnullCells','row'], ascending=[False, True]).head(15)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From inspectClimateRaw (first 40 rows of climateMeasurements.xlsx, header=None), compute per-row non-null cell count and a text snippet; return top 15 rows by non-null density to identify the true header row containing time + Potassium(ppm) labels",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avgKBetweenMalteseRecords",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climateMeasurements, maltaTimeRange) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    # Maltese first/last appearance in radiocarbon database (years BP)\n    min_bp = float(maltaTimeRange.loc[0, 'minDateBP'])\n    max_bp = float(maltaTimeRange.loc[0, 'maxDateBP'])\n    # Convert years BP to kilo-years BP to match climate Age_ky (0=present)\n    start_ky = min_bp / 1000.0\n    end_ky = max_bp / 1000.0\n    lo, hi = (min(start_ky, end_ky), max(start_ky, end_ky))\n\n    df = climateMeasurements[['Age_ky', 'K']].copy()\n    df['Age_ky'] = pd.to_numeric(df['Age_ky'], errors='coerce')\n    df['K'] = pd.to_numeric(df['K'], errors='coerce')\n    df = df.dropna(subset=['Age_ky', 'K']).sort_values('Age_ky')\n\n    # Restrict to just the span that brackets [lo, hi] so interpolation is valid\n    # Find nearest samples at/just below lo and at/just above hi\n    below_lo = df[df['Age_ky'] <= lo].tail(1)\n    above_hi = df[df['Age_ky'] >= hi].head(1)\n    mid = df[(df['Age_ky'] >= lo) & (df['Age_ky'] <= hi)]\n    bracketed = pd.concat([below_lo, mid, above_hi], ignore_index=True).drop_duplicates(subset=['Age_ky'])\n    bracketed = bracketed.sort_values('Age_ky')\n\n    # Ensure endpoints exist for interpolation; if lo/hi outside range, result would be NaN\n    ages = bracketed['Age_ky'].to_numpy()\n    ks = bracketed['K'].to_numpy()\n\n    # Create a series on a continuous axis and linearly interpolate K at lo and hi\n    # We'll insert the endpoints then interpolate.\n    endpoints = pd.DataFrame({'Age_ky': [lo, hi], 'K': [np.nan, np.nan]})\n    allpts = pd.concat([bracketed, endpoints], ignore_index=True).drop_duplicates(subset=['Age_ky']).sort_values('Age_ky')\n    allpts['K'] = allpts['K'].interpolate(method='linear', limit_direction='both')\n\n    # Now compute average value of linearly interpolated function over [lo, hi]\n    seg = allpts[(allpts['Age_ky'] >= lo) & (allpts['Age_ky'] <= hi)].sort_values('Age_ky')\n    x = seg['Age_ky'].to_numpy()\n    y = seg['K'].to_numpy()\n\n    # Trapezoidal integral / interval length\n    area = np.trapz(y, x)\n    avg = area / (hi - lo)\n\n    return pd.DataFrame([{\n        'minDateBP': min_bp,\n        'maxDateBP': max_bp,\n        'loAgeKy': lo,\n        'hiAgeKy': hi,\n        'avgKppm': float(avg)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average Potassium (K, ppm) between first and last Maltese radiocarbon records: read min/max date (years BP) from maltaTimeRange, convert to Age_ky (kyr BP), linearly interpolate climateMeasurements K over Age_ky and compute interval mean via trapezoidal integral of interpolated K on [loAgeKy, hiAgeKy]; return avgKppm plus the interval endpoints used",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "climateMeasurements": {
+        "x": 400,
+        "y": 115
+      },
+      "radiocarbonRegional": {
+        "x": 100,
+        "y": 370
+      },
+      "inspectSheets": {
+        "x": 100,
+        "y": 550
+      },
+      "inspectClimateRaw": {
+        "x": 100,
+        "y": 730
+      },
+      "maltaTimeRange": {
+        "x": 400,
+        "y": 370
+      },
+      "inspectClimateCols": {
+        "x": 700,
+        "y": 40
+      },
+      "inspectClimateHeader": {
+        "x": 400,
+        "y": 730
+      },
+      "avgKBetweenMalteseRecords": {
+        "x": 700,
+        "y": 295
+      }
+    },
+    "links": [
+      {
+        "linkID": "radiocarbonRegional-->maltaTimeRange",
+        "source": {
+          "operatorID": "radiocarbonRegional",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maltaTimeRange",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "climateMeasurements-->inspectClimateCols",
+        "source": {
+          "operatorID": "climateMeasurements",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectClimateCols",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "inspectClimateRaw-->inspectClimateHeader",
+        "source": {
+          "operatorID": "inspectClimateRaw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectClimateHeader",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "climateMeasurements-->avgKBetweenMalteseRecords",
+        "source": {
+          "operatorID": "climateMeasurements",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgKBetweenMalteseRecords",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "maltaTimeRange-->avgKBetweenMalteseRecords",
+        "source": {
+          "operatorID": "maltaTimeRange",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgKBetweenMalteseRecords",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows from data/archeology/input/worldcities.csv to inspect columns and basic data types.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load complete data/archeology/input/worldcities.csv with city-level information including country and population.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "country_avg_pop",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(worldcities):\n    import pandas as pd\n    df = worldcities.copy()\n    # Ensure population numeric; treat missing as NaN\n    df['population'] = pd.to_numeric(df['population'], errors='coerce')\n    # Exclude rows with missing or non-positive population (0 likely placeholder)\n    df = df[df['population'].notna() & (df['population'] > 0)]\n    out = (df.groupby('country', as_index=False)['population']\n             .mean()\n             .rename(columns={'population': 'avg_city_population'}))\n    return out.sort_values('avg_city_population', ascending=False)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Convert population to numeric, filter to population > 0, compute mean city population per country, sort descending by avg_city_population.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_worldcities": {
+      "x": 100,
+      "y": 40
+    },
+    "worldcities": {
+      "x": 100,
+      "y": 220
+    },
+    "country_avg_pop": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "worldcities-->country_avg_pop",
+      "source": {
+        "operatorID": "worldcities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "country_avg_pop",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

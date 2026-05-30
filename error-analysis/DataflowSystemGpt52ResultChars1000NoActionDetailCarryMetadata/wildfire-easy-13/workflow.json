@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_requests",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/cleaned_helicopter_requests_by_region.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of data/wildfire/input/cleaned_helicopter_requests_by_region.csv to inspect columns, types, and potential cleaning needs",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "requests",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/cleaned_helicopter_requests_by_region.csv'\n    return pd.read_csv(path)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full data from data/wildfire/input/cleaned_helicopter_requests_by_region.csv containing Region and Total Helicopter Requests",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "max_region",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(requests):\n    import pandas as pd\n    df = requests.copy()\n    # Ensure numeric\n    df['Total Helicopter Requests'] = pd.to_numeric(df['Total Helicopter Requests'], errors='coerce').fillna(0)\n    # Exclude non-NICC geographic areas / non-area rollups\n    exclude = {\n        'National Interagency Coordination Center',\n        'Other',\n        'Canada'\n    }\n    df = df[~df['Region'].isin(exclude)]\n    # Take max\n    top = df.sort_values('Total Helicopter Requests', ascending=False).head(1)\n    return top"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Convert Total Helicopter Requests to numeric, exclude non-NICC regions (National Interagency Coordination Center, Other, Canada), then select the region with the maximum total requests",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_requests": {
+      "x": 100,
+      "y": 40
+    },
+    "requests": {
+      "x": 100,
+      "y": 220
+    },
+    "max_region": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "requests-->max_region",
+      "source": {
+        "operatorID": "requests",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "max_region",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

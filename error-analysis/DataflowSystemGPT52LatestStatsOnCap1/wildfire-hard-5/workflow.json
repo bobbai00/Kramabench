@@ -1,0 +1,152 @@
+{
+  "headId": "step-agent-180-7-1779102622322",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "nifcWildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_wildfires.csv'\n    # File appears to be whitespace-delimited with header row.\n    return pd.read_csv(path, sep=r\"\\s+\", engine='python')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/wildfire/input/nifc_wildfires.csv as a whitespace-delimited table (sep=\\\\s+, engine='python') with header row containing columns [Year, Fires, Acres]",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaMonthlyStats",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_monthly_stats.csv'\n    # File has 3 metadata rows then a proper CSV header on the 4th line.\n    df = pd.read_csv(path, skiprows=3)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/wildfire/input/noaa_wildfires_monthly_stats.csv via pd.read_csv with skiprows=3 to skip metadata lines (Title/Missing/blank) so the header row is 'Date,\"Acres Burned\",\"Number of Fires\",\"Acres Burned per Fire\"' and monthly records parse correctly",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaaMonthlyStatsInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_monthly_stats.csv'\n    # Read raw lines for inspection (avoid CSV parser errors due to irregular structure).\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = [next(f) for _ in range(30)]\n    return pd.DataFrame({'line': [l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect raw first 30 lines of data/wildfire/input/noaa_wildfires_monthly_stats.csv by reading as text (encoding='utf-8', errors='replace') into a one-column DataFrame 'line' to diagnose delimiter/header issues (diagnostic preview)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "annualFireDiffSince2000",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(nifcWildfires, noaaMonthlyStats) -> pd.DataFrame:\n    import pandas as pd\n\n    # NIFC: parse numeric and filter since 2000\n    nifc = nifcWildfires.copy()\n    nifc['Year'] = pd.to_numeric(nifc['Year'], errors='coerce').astype('Int64')\n    nifc['Fires'] = (\n        nifc['Fires']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n    )\n    nifc['Fires'] = pd.to_numeric(nifc['Fires'], errors='coerce')\n    nifc = nifc[(nifc['Year'] >= 2000) & nifc['Year'].notna()].copy()\n    nifcAnnual = nifc[['Year', 'Fires']].rename(columns={'Fires': 'nifcFires'})\n\n    # NOAA: derive year from YYYYMM in Date, sum monthly Number of Fires, filter since 2000\n    noaa = noaaMonthlyStats.copy()\n    noaa = noaa.rename(columns=lambda c: c.strip())\n    # Handle both 'Number of Fires' and possible variants\n    fireColCandidates = [c for c in noaa.columns if c.lower().replace(' ', '') in ['numberoffires', 'fires']]\n    fireCol = fireColCandidates[0] if fireColCandidates else 'Number of Fires'\n\n    noaa['Date'] = pd.to_numeric(noaa['Date'], errors='coerce')\n    noaa['Year'] = (noaa['Date'] // 100).astype('Int64')\n    noaa[fireCol] = pd.to_numeric(noaa[fireCol], errors='coerce')\n    noaa = noaa[(noaa['Year'] >= 2000) & noaa['Year'].notna()].copy()\n\n    noaaAnnual = (\n        noaa.groupby('Year', as_index=False)[fireCol]\n        .sum(min_count=1)\n        .rename(columns={fireCol: 'noaaFires'})\n    )\n\n    # Compare only years available in both series\n    merged = noaaAnnual.merge(nifcAnnual, on='Year', how='inner')\n    merged['diff'] = merged['noaaFires'] - merged['nifcFires']\n\n    avgDiff = merged['diff'].mean()\n\n    return pd.DataFrame([\n        {\n            'avgNoaaMinusNifcSince2000': float(avgDiff),\n            'yearsCompared': int(merged.shape[0]),\n            'rounded': int(round(avgDiff))\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average annual difference (NOAA annual fires minus NIFC annual fires) for years >=2000: parse NIFC Fires by removing commas and numeric-cast; NOAA derive Year=floor(Date/100) from YYYYMM and sum monthly 'Number of Fires' to annual totals; inner-join on Year; compute diff=noaaFires-nifcFires; return mean diff plus yearsCompared and rounded integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "nifcWildfires": {
+        "x": 100,
+        "y": 40
+      },
+      "noaaMonthlyStats": {
+        "x": 100,
+        "y": 220
+      },
+      "noaaMonthlyStatsInspect": {
+        "x": 100,
+        "y": 400
+      },
+      "annualFireDiffSince2000": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "nifcWildfires-->annualFireDiffSince2000",
+        "source": {
+          "operatorID": "nifcWildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "annualFireDiffSince2000",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaaMonthlyStats-->annualFireDiffSince2000",
+        "source": {
+          "operatorID": "noaaMonthlyStats",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "annualFireDiffSince2000",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-42-5-1779139513145",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTestingAll",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = [\n        \"data/environment/input/water-body-testing-2002.csv\",\n        \"data/environment/input/water-body-testing-2003.csv\",\n        \"data/environment/input/water-body-testing-2004.csv\",\n        \"data/environment/input/water-body-testing-2005.csv\",\n        \"data/environment/input/water-body-testing-2006.csv\",\n        \"data/environment/input/water-body-testing-2007.csv\",\n        \"data/environment/input/water-body-testing-2008.csv\",\n        \"data/environment/input/water-body-testing-2009.csv\",\n        \"data/environment/input/water-body-testing-2010.csv\",\n        \"data/environment/input/water-body-testing-2011.csv\",\n        \"data/environment/input/water-body-testing-2012.csv\",\n        \"data/environment/input/water-body-testing-2013.csv\",\n        \"data/environment/input/water-body-testing-2014.csv\",\n        \"data/environment/input/water-body-testing-2015.csv\",\n        \"data/environment/input/water-body-testing-2016.csv\",\n        \"data/environment/input/water-body-testing-2017.csv\",\n        \"data/environment/input/water-body-testing-2018.csv\",\n        \"data/environment/input/water-body-testing-2019.csv\",\n        \"data/environment/input/water-body-testing-2020.csv\",\n        \"data/environment/input/water-body-testing-2021.csv\",\n        \"data/environment/input/water-body-testing-2022.csv\",\n    ]\n\n    matched = []\n    for p in paths:\n        ms = glob.glob(p)\n        if not ms:\n            raise FileNotFoundError(f\"No files matched: {p}\")\n        matched.extend(ms)\n\n    dfs = []\n    for p in sorted(set(matched)):\n        df = pd.read_csv(p)\n        df[\"sourceFile\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and vertically concatenate water-body-testing yearly CSVs for 2002-2022: read each file via pd.read_csv (comma delimiter, header inferred), add provenance column 'sourceFile' (basename), and concat into one table.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marineExceedanceRate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTestingAll):\n    import pandas as pd\n\n    df = waterBodyTestingAll.copy()\n\n    # Focus years requested; dataset currently spans 2002-2022 (inclusive)\n    df = df[(df['Year'] >= 2002) & (df['Year'] <= 2023)]\n\n    # Marine beaches only\n    df = df[df['Beach Type Description'].astype(str).str.strip().str.lower() == 'marine']\n\n    # Normalize violation flag to boolean exceedance\n    v = df['Violation'].astype(str).str.strip().str.lower()\n    exceed = v.eq('yes')\n\n    # Exclude unknown / missing / other tokens from denominator\n    valid = v.isin(['yes', 'no'])\n    rate = exceed[valid].mean() * 100  # percent\n\n    return pd.DataFrame([{\n        'marineExceedanceRatePercent': rate,\n        'nSamplesMarineValid': int(valid.sum()),\n        'nExceedMarine': int(exceed[valid].sum()),\n        'minYear': int(df['Year'].min()) if len(df) else None,\n        'maxYear': int(df['Year'].max()) if len(df) else None,\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute historical exceedance rate for marine beaches (2002-2023 inclusive): filter Year between 2002 and 2023; filter Beach Type Description == 'Marine' (case/whitespace-insensitive); normalize Violation to lowercase tokens; treat 'yes' as exceedance and 'no' as non-exceedance; exclude other/missing Violation values from denominator; return single-row table with exceedance rate as percent plus sample counts and min/max year coverage.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTestingAll": {
+        "x": 100,
+        "y": 40
+      },
+      "marineExceedanceRate": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyTestingAll-->marineExceedanceRate",
+        "source": {
+          "operatorID": "waterBodyTestingAll",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineExceedanceRate",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -53,6 +53,7 @@ class DataflowSystem(System):
         compact_stats: bool = False,
         lineage_timeline: bool = False,
         few_shot_prompt: bool = False,
+        table_structure_hint: bool = False,
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
@@ -125,6 +126,7 @@ class DataflowSystem(System):
         self.compact_stats = compact_stats
         self.lineage_timeline = lineage_timeline
         self.few_shot_prompt = few_shot_prompt
+        self.table_structure_hint = table_structure_hint
         self.max_result_rows = max_result_rows
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
@@ -261,6 +263,7 @@ class DataflowSystem(System):
             compact_stats=self.compact_stats,
             lineage_timeline=self.lineage_timeline,
             few_shot_prompt=self.few_shot_prompt,
+            table_structure_hint=self.table_structure_hint,
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
@@ -388,6 +391,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "compact_stats": self.compact_stats,
                 "lineage_timeline": self.lineage_timeline,
                 "few_shot_prompt": self.few_shot_prompt,
+                "table_structure_hint": self.table_structure_hint,
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
@@ -1391,3 +1395,19 @@ class DataflowSystemLocalLlm(DataflowSystem):
             *args,
             **kwargs,
         )
+
+
+class DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct(DataflowSystem):
+    """gpt-5-mini converge + compact dataflow-aware stats."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, table_structure_hint=True,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).

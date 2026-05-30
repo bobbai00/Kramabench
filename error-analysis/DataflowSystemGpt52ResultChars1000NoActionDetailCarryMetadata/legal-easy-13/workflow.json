@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # Try common encodings for Windows-exported CSVs\n    for enc in ['utf-8', 'utf-8-sig', 'cp1252', 'latin1']:\n        try:\n            df = pd.read_csv(path, encoding=enc)\n            df['__encoding_used__'] = enc\n            return pd.concat([df.head(5), df.tail(5)])\n        except UnicodeDecodeError:\n            continue\n    # Fallback: replace undecodable bytes\n    df = pd.read_csv(path, encoding='utf-8', encoding_errors='replace')\n    df['__encoding_used__'] = 'utf-8(replace)'\n    return pd.concat([df.head(5), df.tail(5)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of 2024_CSN_Report_Categories.csv, trying multiple encodings (utf-8/utf-8-sig/cp1252/latin1) to handle UnicodeDecodeError and inspect schema",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # Use encoding found in sampling\n    df = pd.read_csv(path, encoding='cp1252', header=None)\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Report_Categories.csv as raw table (no header) using cp1252 encoding",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "clean_categories",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(categories):\n    import pandas as pd\n    df = categories.copy()\n    df.columns = ['col0','col1','col2','col3']\n\n    # Keep rows where rank is numeric\n    df = df[df['col0'].astype(str).str.fullmatch(r'\\d+')]\n    df = df.rename(columns={'col0':'rank','col1':'category','col2':'reports_raw','col3':'percentage_raw'})\n\n    df['rank'] = df['rank'].astype(int)\n    # parse reports with commas\n    df['reports'] = (\n        df['reports_raw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n\n    # parse percentage\n    df['percentage'] = (\n        df['percentage_raw']\n        .astype(str)\n        .str.replace('%', '', regex=False)\n        .str.strip()\n    )\n    df['percentage'] = pd.to_numeric(df['percentage'], errors='coerce')\n\n    # basic sanity: drop rows with missing key fields\n    df = df.dropna(subset=['category','reports'])\n\n    return df[['rank','category','reports','percentage']].sort_values('rank').reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean categories table: keep numeric Rank rows, rename columns, parse '# of Reports' (remove commas -> numeric) and Percentage (strip % -> numeric), return tidy table",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "ratio_most_least",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(clean_categories) -> pd.DataFrame:\n    import pandas as pd\n    df = clean_categories.copy()\n    max_reports = df['reports'].max()\n    min_reports = df['reports'].min()\n    ratio = max_reports / min_reports if min_reports != 0 else float('inf')\n    return pd.DataFrame([{\n        'max_reports': int(max_reports),\n        'min_reports': int(min_reports),\n        'ratio': ratio\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute most frequent and least frequent category report counts from clean_categories, then compute ratio = max/min",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_categories": {
+      "x": 100,
+      "y": 40
+    },
+    "categories": {
+      "x": 100,
+      "y": 220
+    },
+    "clean_categories": {
+      "x": 430,
+      "y": 220
+    },
+    "ratio_most_least": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "categories-->clean_categories",
+      "source": {
+        "operatorID": "categories",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "clean_categories",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "clean_categories-->ratio_most_least",
+      "source": {
+        "operatorID": "clean_categories",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "ratio_most_least",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

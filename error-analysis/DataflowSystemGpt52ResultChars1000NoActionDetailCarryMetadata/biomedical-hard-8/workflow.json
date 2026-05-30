@@ -1,0 +1,378 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_hyperactivated",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    df = pd.read_csv('data/biomedical/input/hyperactivated.csv')\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of data/biomedical/input/hyperactivated.csv to inspect columns and content for hyperactivated protein sites in CNV-high endometrioid samples.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "hyperactivated",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/biomedical/input/hyperactivated.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full hyperactivated.csv containing hyperactivated protein sites (or proteins) in CNV-high endometrioid samples; columns include sample_id and protein.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_mmc1",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path='data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    xl = pd.ExcelFile(path)\n    # show sheet names\n    df = pd.DataFrame({'sheet_name': xl.sheet_names})\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List sheet names in mmc1.xlsx (supplementary table) to locate FDA-approved drug targeting information.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_mmc6",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path='data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx'\n    xl = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xl.sheet_names})"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List sheet names in mmc6.xlsx to locate drug-target annotations (e.g., FDA-approved drugs) or phosphosite-level tables.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_fda_sheet",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx'\n    df = pd.read_excel(path, sheet_name='G-FDA approved drugs')\n    return pd.concat([df.head(5), df.tail(5)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of mmc6.xlsx sheet 'G-FDA approved drugs' to inspect columns for drug-target mapping (FDA-approved drugs).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fda_drugs",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx'\n    return pd.read_excel(path, sheet_name='G-FDA approved drugs')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full FDA-approved drugs sheet (G-FDA approved drugs) from data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx with gene_name and drug fields for drug-target mapping.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "hyperactivated_targets",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(hyperactivated, fda_drugs) -> pd.DataFrame:\n    import pandas as pd\n\n    hyp = hyperactivated.copy()\n    fda = fda_drugs.copy()\n\n    # normalize symbols\n    hyp['protein_norm'] = hyp['protein'].astype(str).str.strip().str.upper()\n    fda['gene_norm'] = fda['gene_name'].astype(str).str.strip().str.upper()\n\n    # mmc6 sheet is titled 'FDA approved drugs' already; do NOT filter by interaction_claim_source\n    merged = hyp.merge(fda, left_on='protein_norm', right_on='gene_norm', how='inner')\n\n    out = (merged[['protein_norm', 'gene_name', 'drug_name']]\n           .rename(columns={'protein_norm': 'protein'})\n           .dropna(subset=['drug_name']))\n\n    # Return unique proteins targeted by at least one drug\n    res = (out.groupby('protein', as_index=False)\n             .agg(fda_approved_drugs=('drug_name', lambda s: sorted(set(map(str, s))))))\n\n    return res.sort_values('protein').reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Intersect hyperactivated proteins with mmc6 'G-FDA approved drugs' targets by symbol match (case/whitespace normalized) without filtering interaction_claim_source; output each hyperactivated protein with list of distinct FDA-approved drug_name values targeting it.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "fda_sources",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fda_drugs):\n    import pandas as pd\n    s = fda_drugs['interaction_claim_source'].astype(str).str.strip()\n    out = s.value_counts(dropna=False).reset_index()\n    out.columns = ['interaction_claim_source','count']\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Check distribution of interaction_claim_source values in FDA-approved drugs sheet to see whether 'FDA' is the correct filter or if other sources are used.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "site_list",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(hyperactivated):\n    import pandas as pd\n    s = hyperactivated['protein'].astype(str)\n    # treat 'protein' column as site or protein identifier; keep as-is\n    sites = (\n        s.str.strip()\n         .replace({'': pd.NA})\n         .dropna()\n         .drop_duplicates()\n         .sort_values()\n    )\n    return pd.DataFrame({'site': sites.values})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Create sorted unique list of hyperactivated identifiers from hyperactivated.csv (treating column 'protein' as the protein site/identifier to be reported).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "hyperactivated_fda_targets_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(hyperactivated, fda_drugs):\n    import pandas as pd\n    import numpy as np\n    \n    hyp = hyperactivated.copy()\n    hyp['protein_norm'] = hyp['protein'].astype(str).str.strip().str.upper()\n    \n    fda = fda_drugs.copy()\n    fda['gene_norm'] = fda['gene_name'].astype(str).str.strip().str.upper()\n    \n    # Keep only rows that are truly FDA-approved drugs: either explicit FDA source OR sheet title implies FDA-approved.\n    # The sheet is already named 'G-FDA approved drugs', so include all but clean obvious junk.\n    fda['drug_name_clean'] = fda['drug_name'].astype(str).str.strip()\n    fda = fda[fda['drug_name_clean'].notna()]\n    fda = fda[~fda['drug_name_clean'].isin(['', 'nan', 'NaN', 'None'])]\n    # remove boolean-like artifacts\n    fda = fda[~fda['drug_name_clean'].str.fullmatch('False|True', case=False, na=False)]\n\n    merged = hyp.merge(fda, left_on='protein_norm', right_on='gene_norm', how='inner')\n\n    out = (merged.groupby('protein_norm')['drug_name_clean']\n           .apply(lambda s: sorted(set(s)))\n           .reset_index())\n    out.columns = ['protein_site', 'fda_approved_drugs']\n    return out.sort_values('protein_site').reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean intersection between hyperactivated proteins (treated as protein_site identifiers) and FDA-approved drug targets: normalize symbols, drop junk drug_name (e.g., 'False'), group to unique sorted drug_name list per protein_site.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_hyperactivated": {
+      "x": 100,
+      "y": 40
+    },
+    "hyperactivated": {
+      "x": 100,
+      "y": 220
+    },
+    "sample_mmc1": {
+      "x": 100,
+      "y": 400
+    },
+    "sample_mmc6": {
+      "x": 100,
+      "y": 580
+    },
+    "sample_fda_sheet": {
+      "x": 100,
+      "y": 760
+    },
+    "fda_drugs": {
+      "x": 100,
+      "y": 940
+    },
+    "hyperactivated_targets": {
+      "x": 430,
+      "y": 55
+    },
+    "fda_sources": {
+      "x": 430,
+      "y": 1120
+    },
+    "site_list": {
+      "x": 430,
+      "y": 235
+    },
+    "hyperactivated_fda_targets_clean": {
+      "x": 430,
+      "y": 865
+    }
+  },
+  "links": [
+    {
+      "linkID": "fda_drugs-->fda_sources",
+      "source": {
+        "operatorID": "fda_drugs",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fda_sources",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "hyperactivated-->hyperactivated_targets",
+      "source": {
+        "operatorID": "hyperactivated",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "hyperactivated_targets",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fda_drugs-->hyperactivated_targets",
+      "source": {
+        "operatorID": "fda_drugs",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "hyperactivated_targets",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "hyperactivated-->site_list",
+      "source": {
+        "operatorID": "hyperactivated",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "site_list",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "hyperactivated-->hyperactivated_fda_targets_clean",
+      "source": {
+        "operatorID": "hyperactivated",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "hyperactivated_fda_targets_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fda_drugs-->hyperactivated_fda_targets_clean",
+      "source": {
+        "operatorID": "fda_drugs",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "hyperactivated_fda_targets_clean",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

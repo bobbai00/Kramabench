@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-92-6-1779140184261",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadStateMsaFraudFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        try:\n            df = pd.read_csv(p)\n        except Exception:\n            # fallback for odd encodings/delimiters\n            df = pd.read_csv(p, encoding=\"latin-1\")\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSVs matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' using glob; read each via pd.read_csv (fallback encoding='latin-1' if needed); concatenate into one DataFrame and add provenance column '__source_file' (basename).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanStateMsaFraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadStateMsaFraudFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadStateMsaFraudFiles.copy()\n    df = df.rename(columns={\n        \"Metropolitan Areas: Fraud and Other Reports\": \"msa\",\n        \"Unnamed: 1\": \"reports_raw\",\n    })\n\n    # Keep rows that look like data (msa present, not headers/footers)\n    df = df[df[\"msa\"].notna()].copy()\n    bad = {\n        \"Metropolitan Area\",\n        \"Metropolitan Areas: Fraud and Other Reports\",\n        \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\",\n    }\n    df = df[~df[\"msa\"].isin(bad)].copy()\n\n    # Parse state from source file name (e.g., Alabama.csv -> Alabama)\n    df[\"state\"] = df[\"__source_file\"].str.replace(\".csv\", \"\", regex=False)\n\n    # Parse report count, handling commas and possible non-numeric entries\n    df[\"reports\"] = (\n        df[\"reports_raw\"].astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.extract(r\"(\\d+)\")[0]\n        .astype(float)\n    )\n    df = df[df[\"reports\"].notna()].copy()\n    df[\"reports\"] = df[\"reports\"].astype(int)\n\n    # Keep relevant columns\n    return df[[\"state\", \"msa\", \"reports\"]].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean concatenated State MSA Fraud CSVs: rename columns to [msa, reports_raw]; drop NaN/header/footer rows (e.g., 'Metropolitan Area', 'Source: ...'); derive 'state' from '__source_file' basename without .csv; parse integer 'reports' from reports_raw by removing commas and extracting digits; return columns [state, msa, reports].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "topMsaFraudShareWithinEligibleStates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanStateMsaFraud) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanStateMsaFraud.copy()\n\n    # Only Metropolitan Statistical Areas (exclude Micropolitan)\n    df = df[df[\"msa\"].str.contains(r\"Metropolitan Statistical Area$\", regex=True, na=False)].copy()\n\n    # States with 5+ metro areas\n    metroCounts = df.groupby(\"state\")[\"msa\"].nunique().reset_index(name=\"metro_count\")\n    eligibleStates = metroCounts[metroCounts[\"metro_count\"] >= 5][[\"state\"]]\n\n    dfEligible = df.merge(eligibleStates, on=\"state\", how=\"inner\")\n\n    # Compute share of fraud reports within each state\n    stateTotals = dfEligible.groupby(\"state\", as_index=False)[\"reports\"].sum().rename(columns={\"reports\": \"state_reports\"})\n    dfEligible = dfEligible.merge(stateTotals, on=\"state\", how=\"inner\")\n    dfEligible[\"pct_of_state\"] = dfEligible[\"reports\"] / dfEligible[\"state_reports\"]\n\n    # Find the maximum share MSA across all eligible states\n    out = (\n        dfEligible.sort_values([\"pct_of_state\", \"reports\"], ascending=[False, False])\n        .head(1)[[\"msa\", \"state\", \"reports\", \"state_reports\", \"pct_of_state\"]]\n        .reset_index(drop=True)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter clean State-MSA fraud table to rows whose 'msa' endswith 'Metropolitan Statistical Area' (exclude Micropolitan); compute number of metro areas per state (nunique msa) and keep states with metro_count>=5; within eligible states compute state_reports=sum(reports) and pct_of_state=reports/state_reports for each MSA; return the single MSA row with the maximum pct_of_state (tie-breaker: higher reports).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadStateMsaFraudFiles": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanStateMsaFraud": {
+        "x": 400,
+        "y": 40
+      },
+      "topMsaFraudShareWithinEligibleStates": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadStateMsaFraudFiles-->cleanStateMsaFraud",
+        "source": {
+          "operatorID": "loadStateMsaFraudFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanStateMsaFraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanStateMsaFraud-->topMsaFraudShareWithinEligibleStates",
+        "source": {
+          "operatorID": "cleanStateMsaFraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topMsaFraudShareWithinEligibleStates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

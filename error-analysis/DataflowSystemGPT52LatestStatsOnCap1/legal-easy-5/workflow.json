@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-27-6-1779099887134",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudByPaymentMethod",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv\"\n    # File includes title/blank row; real header is on the 2nd row (0-based index 1)\n    return pd.read_csv(path, header=1)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud_Reports_by_Payment_Method.csv via pd.read_csv with header=1 (skip title/blank first row; use 'Payment Method', '# of Reports', ' Total $ Loss ' as columns) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "totalBefraudedMillions",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudByPaymentMethod) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    df = fraudByPaymentMethod.copy()\n    # first row is the real header; promote it\n    df.columns = df.iloc[0].astype(str).str.strip()\n    df = df.iloc[1:].copy()\n\n    # keep only actual payment-method rows: require a dollar amount like \"$123M\" in Total $ Loss\n    loss_col = [c for c in df.columns if 'loss' in c.lower()][0]\n    pm_col = [c for c in df.columns if 'payment method' in c.lower()][0]\n    mask = df[loss_col].astype(str).str.contains(r\"\\$\\s*[0-9,]+\\s*M\", regex=True, na=False)\n    df = df.loc[mask, [pm_col, loss_col]].copy()\n\n    def parse_millions(x: str) -> float:\n        s = str(x)\n        m = re.search(r\"\\$\\s*([0-9,]+)\\s*M\", s)\n        if not m:\n            return float('nan')\n        return float(m.group(1).replace(',', ''))\n\n    df['loss_millions'] = df[loss_col].map(parse_millions)\n    total_millions = df['loss_millions'].sum(skipna=True)\n\n    return pd.DataFrame([{'total_millions': int(round(total_millions))}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean fraudByPaymentMethod table by promoting first data row to header (strip whitespace); filter to rows where 'Total $ Loss' matches pattern like '$<number>M' (exclude totals/source/blank rows); parse numeric millions from dollar strings (remove commas) into loss_millions; sum across all payment methods; output single-row DataFrame with total_millions rounded to nearest integer.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudByPaymentMethod": {
+        "x": 100,
+        "y": 40
+      },
+      "totalBefraudedMillions": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudByPaymentMethod-->totalBefraudedMillions",
+        "source": {
+          "operatorID": "fraudByPaymentMethod",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "totalBefraudedMillions",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

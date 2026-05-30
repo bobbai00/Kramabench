@@ -1,0 +1,436 @@
+{
+  "headId": "step-agent-281-40-1779113859721",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "omniSpec",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    # The prompt says the OMNI2 format specification is at 'omni2.text' (not omni2.txt)\n    path = 'data/astronomy/input/omni2_low_res/omni2.text'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        content = f.read()\n    return pd.DataFrame([{'path': path, 'content': content}])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load OMNI2 format specification file omni2.text from relative path data/astronomy/input/omni2_low_res/omni2.text into a single-row DataFrame with columns ['path','content'] (full text) for mapping OMNI2 column positions to variables (F10.7, F10.7A, Ap, etc.).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omni2023",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2023.dat'\n    # fixed-width ASCII; start by reading as whitespace-delimited with no header\n    df = pd.read_csv(path, header=None, delim_whitespace=True, dtype=str)\n    df.insert(0, 'source_file', path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Initial load of omni2_2023.dat as whitespace-delimited table with no header (header=None, delim_whitespace=True, dtype=str); prepend 'source_file' column to track provenance.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omni2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n    df = pd.read_csv(path, header=None, delim_whitespace=True, dtype=str)\n    df.insert(0, 'source_file', path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Initial load of omni2_2024.dat as whitespace-delimited table with no header (header=None, delim_whitespace=True, dtype=str); prepend 'source_file' column to track provenance.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmBFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    pattern = 'data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt'\n    files = sorted(glob.glob(pattern))\n    if not files:\n        raise FileNotFoundError(f'No files matched: {pattern}')\n    return pd.DataFrame({'file': files})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List Swarm-B POD DNS files matching wildcard pattern SB_DNS_POD_2024_*.txt via glob; return one-row-per-file DataFrame with column 'file'.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmBInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n\n    files = sorted(glob.glob('data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt'))\n    if not files:\n        raise FileNotFoundError('No Swarm-B 2024 POD DNS files found')\n\n    path = files[0]\n    # Swarm POD files are often whitespace-delimited with header/comment lines.\n    # Read raw first 40 lines to detect header structure.\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:40]\n    return pd.DataFrame({'path':[path]*len(lines), 'line_no': list(range(1, len(lines)+1)), 'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the raw text structure of the first Swarm-B POD DNS file (SB_DNS_POD_2024_*.txt) by returning the first 40 lines with line numbers; used to determine delimiter, header row, and column names for proper parsing.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omniInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n    # Read a small sample as raw whitespace-delimited strings for quick inspection\n    df = pd.read_csv(path, header=None, delim_whitespace=True, dtype=str, nrows=5)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 5 rows of omni2_2024.dat as whitespace-delimited strings (header=None, delim_whitespace=True) to help align column positions with OMNI2 spec before casting types.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmBLoad",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import re\n    import pandas as pd\n\n    pattern = 'data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt'\n    files = sorted(glob.glob(pattern))\n    if not files:\n        raise FileNotFoundError(f'No files matched pattern: {pattern}')\n\n    dfs = []\n    data_re = re.compile(r'^\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\.\\d{3}\\s+UTC\\b')\n\n    for f in files:\n        start = None\n        with open(f, 'r', errors='ignore') as fh:\n            for i, line in enumerate(fh):\n                if data_re.match(line):\n                    start = i\n                    break\n        if start is None:\n            continue\n\n        df = pd.read_csv(\n            f,\n            sep=r'\\s+',\n            header=None,\n            skiprows=start,\n            dtype=str,\n            engine='python'\n        )\n        df['source_file'] = f\n        dfs.append(df)\n\n    if not dfs:\n        return pd.DataFrame({'error': ['No Swarm-B rows loaded from matched files'], 'pattern': [pattern]})\n\n    out = pd.concat(dfs, ignore_index=True)\n    out.columns = [str(c) for c in out.columns]\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load+concatenate Swarm-B POD DNS files matching wildcard pattern SB_DNS_POD_2024_*.txt via glob('data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt'); for each file find first data row by regex '^YYYY-MM-DD HH:MM:SS.fff UTC' then read whitespace-delimited via pd.read_csv(sep='\\s+', header=None, skiprows=<first_data_line>, dtype=str, engine='python'); append 'source_file' column; concatenate all months; coerce column labels to strings.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmBParse",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(swarmBLoad) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    import re\n\n    df = swarmBLoad.copy()\n    if 'error' in df.columns:\n        return df\n\n    # columns are strings '0','1',... plus 'source_file'\n    colnames = [c for c in df.columns if c != 'source_file']\n    # ensure numeric ordering\n    int_cols = sorted([int(c) for c in colnames if str(c).isdigit()])\n\n    if len(int_cols) < 8:\n        return pd.DataFrame({'error': [f'Unexpected number of columns in Swarm-B load: {len(int_cols)}'], 'nrows':[len(df)]})\n\n    # Parse timestamp: date col0, time col1, col2 should be 'UTC'\n    date_str = df[str(int_cols[0])].astype(str)\n    time_str = df[str(int_cols[1])].astype(str)\n    ts = pd.to_datetime(date_str + ' ' + time_str, errors='coerce', utc=True)\n\n    # Known positions from file line preview: col3=mjd2000_s, col4=lat, col5=lon, col6=alt_km\n    mjd2000_s = pd.to_numeric(df[str(int_cols[3])], errors='coerce')\n    lat = pd.to_numeric(df[str(int_cols[4])], errors='coerce')\n    lon = pd.to_numeric(df[str(int_cols[5])], errors='coerce')\n    alt_km = pd.to_numeric(df[str(int_cols[6])], errors='coerce')\n\n    # Find rho column: first column after alt (>= col7) with scientific notation exponent\n    exp_re = re.compile(r'[EDed][+-]?\\d{2,3}')\n    rho_col = None\n    for c in int_cols[7:]:\n        ser = df[str(c)].astype(str)\n        if ser.str.contains(exp_re).mean() > 0.5:  # majority look like scientific notation\n            rho_col = str(c)\n            break\n    if rho_col is None:\n        # fallback: just take first after alt\n        rho_col = str(int_cols[7])\n\n    rho = pd.to_numeric(df[rho_col].astype(str).str.replace('D', 'E', regex=False), errors='coerce')\n\n    out = pd.DataFrame({\n        'timestamp': ts,\n        'mjd2000_s': mjd2000_s,\n        'lat_deg': lat,\n        'lon_deg': lon,\n        'alt_km': alt_km,\n        'rho_meas': rho,\n        'source_file': df['source_file'].astype(str),\n        'rho_col': rho_col\n    })\n\n    out = out.dropna(subset=['timestamp','lat_deg','lon_deg','alt_km','rho_meas'])\n\n    # bounds + year restriction\n    out = out[(out['timestamp'] >= pd.Timestamp('2024-01-01T00:00:00Z')) & (out['timestamp'] < pd.Timestamp('2025-01-01T00:00:00Z'))]\n    out = out[(out['lat_deg'].between(-90, 90)) & (out['lon_deg'].between(-180, 360)) & (out['alt_km'] > 0) & (out['alt_km'] < 2000)]\n    out = out[out['rho_meas'] > 0]\n\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse concatenated Swarm-B POD DNS rows: build UTC timestamp from date/time columns [0],[1]; parse mjd2000_s=[3], lat_deg=[4], lon_deg=[5], alt_km=[6] as numeric; detect measured neutral density rho_meas as first column after altitude with majority scientific-notation exponent pattern (E/D); coerce 'D'->'E'; drop rows with missing/invalid fields; filter to 2024 timestamps, valid lat/lon, 0<alt_km<2000, rho_meas>0; output columns [timestamp,mjd2000_s,lat_deg,lon_deg,alt_km,rho_meas,source_file,rho_col].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "omniParse2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omni2024) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = omni2024.copy()\n\n    # Column labels may come in as strings like '0','1',... from whitespace read.\n    df.columns = [str(c) for c in df.columns]\n\n    data_cols = [c for c in df.columns if c != 'source_file']\n    for c in data_cols:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    # Build timestamp from YEAR, DOY, HOUR\n    year = df['0'].astype('Int64')\n    doy = df['1'].astype('Int64')\n    hour = df['2'].astype('Int64')\n\n    base = pd.to_datetime(year.astype(str) + '-01-01', errors='coerce', utc=True)\n    timestamp = base + pd.to_timedelta(doy - 1, unit='D') + pd.to_timedelta(hour, unit='h')\n\n    # OMNI2 hourly layout (per omni2.text): use indices known for this file family\n    # Ap index: col 38; F10.7: col 50; F10.7A: col 49 (may be fill)\n    out = pd.DataFrame({\n        'timestamp': timestamp,\n        'ap': df.get('38'),\n        'f107a': df.get('49'),\n        'f107': df.get('50'),\n    })\n\n    # Replace standard OMNI fill values with NaN\n    def to_nan(series, fills):\n        if series is None:\n            return None\n        s = series.copy()\n        for v in fills:\n            s = s.mask(s == v)\n        return s\n\n    out['ap'] = to_nan(out['ap'], [999, 999.0, 999.9])\n    out['f107'] = to_nan(out['f107'], [999.9, 999.0, 99.9])\n    out['f107a'] = to_nan(out['f107a'], [999.9, 999.0, 99.9])\n\n    out = out.dropna(subset=['timestamp', 'ap', 'f107']).sort_values('timestamp')\n\n    # If F10.7A missing, approximate with centered 81-day mean of F10.7 (hourly -> 24*81 window)\n    if out['f107a'].isna().all():\n        out['f107a'] = out['f107'].rolling(24 * 81, center=True, min_periods=24 * 10).mean()\n\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse OMNI2 2024 hourly table with robust column naming: coerce column labels to strings ('0','1',...), cast numeric columns (excluding source_file) to numeric; build UTC timestamp from YEAR='0', DOY='1', HOUR='2'; extract Ap='38', F10.7A='49', F10.7='50'; convert OMNI fill values (Ap: 999/999.9; F10.7/F10.7A: 99.9/999/999.9) to NaN; drop rows missing [timestamp, ap, f107]; if F10.7A entirely missing, approximate via centered 81-day (24*81 hourly) rolling mean of F10.7; output columns [timestamp, ap, f107, f107a].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "msiseRmse",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(swarmBParse, omniParse2024) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    try:\n        from pymsis import msis\n    except Exception as e:\n        return pd.DataFrame({'error':[f'pymsis import failed: {e}'], 'n':[0]})\n\n    sw = swarmBParse.copy()\n    om = omniParse2024.copy()\n\n    if 'error' in sw.columns:\n        return pd.DataFrame({'error':[str(sw.iloc[0].get('error'))], 'n':[0]})\n    if 'error' in om.columns:\n        return pd.DataFrame({'error':[str(om.iloc[0].get('error'))], 'n':[0]})\n\n    req_sw = {'timestamp','lat_deg','lon_deg','alt_km','rho_meas'}\n    req_om = {'timestamp','ap','f107','f107a'}\n    if not req_sw.issubset(sw.columns):\n        return pd.DataFrame({'error':[f'Missing Swarm columns: {sorted(req_sw - set(sw.columns))}'], 'n':[0]})\n    if not req_om.issubset(om.columns):\n        return pd.DataFrame({'error':[f'Missing OMNI columns: {sorted(req_om - set(om.columns))}'], 'n':[0]})\n\n    sw = sw.dropna(subset=['timestamp','lat_deg','lon_deg','alt_km','rho_meas'])\n    sw = sw[(sw['rho_meas']>0) & (sw['alt_km']>0) & (sw['alt_km']<2000)]\n\n    om = om.dropna(subset=['timestamp','ap','f107'])\n\n    # 3-hour bin on OMNI timestamps\n    om['timestamp'] = pd.to_datetime(om['timestamp'], utc=True)\n    om['t3'] = om['timestamp'].dt.floor('3h')\n    ap3 = om.groupby('t3', as_index=False).agg(\n        ap3=('ap','mean'),\n        f107=('f107','mean'),\n        f107a=('f107a','mean')\n    )\n\n    # daily Ap from hourly ap\n    om['day'] = om['timestamp'].dt.floor('D')\n    daily = om.groupby('day', as_index=False).agg(dailyAp=('ap','mean'))\n\n    ap3['day'] = ap3['t3'].dt.floor('D')\n    ap3 = ap3.merge(daily, on='day', how='left')\n\n    ap3 = ap3.sort_values('t3').reset_index(drop=True)\n    # build shifted ap3 series by 3h steps\n    for k, shift in [('ap0',0),('apm3',1),('apm6',2),('apm9',3)]:\n        ap3[k] = ap3['ap3'].shift(shift)\n\n    # means for windows: 12-33h => bins 4..11 back (8 bins)\n    ap3['apm12to33'] = pd.concat([ap3['ap3'].shift(i) for i in range(4,12)], axis=1).mean(axis=1, skipna=False)\n    # 36-57h => bins 12..19 back\n    ap3['apm36to57'] = pd.concat([ap3['ap3'].shift(i) for i in range(12,20)], axis=1).mean(axis=1, skipna=False)\n\n    # Construct aps vector per row\n    ap3['aps'] = ap3.apply(lambda r: [r['dailyAp'], r['ap0'], r['apm3'], r['apm6'], r['apm9'], r['apm12to33'], r['apm36to57']], axis=1)\n\n    drivers = ap3[['t3','f107','f107a','aps']].copy()\n\n    # bin swarm to 3-hour\n    sw['timestamp'] = pd.to_datetime(sw['timestamp'], utc=True)\n    sw['t3'] = sw['timestamp'].dt.floor('3h')\n\n    merged = sw.merge(drivers, on='t3', how='inner')\n    if merged.empty:\n        return pd.DataFrame({'error':['No Swarm samples matched to OMNI 3-hour bins'], 'n':[0]})\n\n    # ensure finite\n    merged = merged.dropna(subset=['f107','f107a'])\n    merged = merged[merged['rho_meas'].notna()]\n\n    # Prepare inputs for pymsis\n    times = merged['timestamp'].dt.to_pydatetime()\n    lats = merged['lat_deg'].to_numpy(dtype=float)\n    lons = merged['lon_deg'].to_numpy(dtype=float)\n    alts = (merged['alt_km'].to_numpy(dtype=float) * 1000.0)\n    f107 = merged['f107'].to_numpy(dtype=float)\n    f107a = merged['f107a'].to_numpy(dtype=float)\n    aps = np.vstack(merged['aps'].to_numpy())\n\n    # pymsis expects lon in degrees east [-180,180], wrap if needed\n    lons = ((lons + 180) % 360) - 180\n\n    try:\n        out = msis.run(times, lons, lats, alts, f107=f107, f107a=f107a, aps=aps)\n    except Exception as e:\n        return pd.DataFrame({'error':[f'msis.run failed: {e}'], 'n':[len(merged)]})\n\n    # pymsis output: (N, 10) with species + T; total mass density is column 0? Actually pymsis returns structured array with names.\n    rho_model = None\n    if hasattr(out, 'dtype') and out.dtype.names is not None:\n        # look for total mass density key\n        for key in ['rho','Total','DENS','dens','mass_density']:\n            if key in out.dtype.names:\n                rho_model = out[key]\n                break\n        if rho_model is None:\n            # common name in pymsis: 'RHO'\n            if 'RHO' in out.dtype.names:\n                rho_model = out['RHO']\n    if rho_model is None:\n        # fallback assume first column\n        rho_model = np.asarray(out)[:,0]\n\n    rho_model = np.asarray(rho_model, dtype=float)\n    rho_meas = merged['rho_meas'].to_numpy(dtype=float)\n\n    m = np.isfinite(rho_model) & np.isfinite(rho_meas) & (rho_model>0) & (rho_meas>0)\n    if m.sum() == 0:\n        return pd.DataFrame({'error':['No finite positive modeled/measured density pairs'], 'n':[0]})\n\n    rmse = float(np.sqrt(np.mean((rho_model[m] - rho_meas[m])**2)))\n\n    return pd.DataFrame({'rmse':[rmse], 'n':[int(m.sum())]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute 2024 Swarm-B neutral density RMSE vs NRLMSISE-00 using pymsis.msis.run with OMNI2-derived inputs: build 3-hour bins from OMNI hourly timestamps; compute ap3 (mean hourly Ap per 3h bin) and dailyAp (mean hourly Ap per day); construct 7-element Ap vector per MathWorks definition [dailyAp, ap(t), ap(t-3h), ap(t-6h), ap(t-9h), mean(ap(t-12..-33h)), mean(ap(t-36..-57h))] using shifted 3h ap3; compute f107/f107a as mean per 3h bin; join Swarm samples to drivers on floored 3h bin; run msis.run for each sample using (time, lon, lat, alt_m, f107, f107a, aps); extract modeled mass density (prefer named field 'RHO' or 'rho'); compute RMSE over all finite positive modeled/measured pairs; output [rmse,n] or [error,n].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalAnswer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(msiseRmse) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    if msiseRmse is None or msiseRmse.empty:\n        return pd.DataFrame({'error':['msiseRmse produced no rows'], 'n':[0], 'final_str':[None], 'final':[np.nan]})\n\n    if 'error' in msiseRmse.columns and msiseRmse['error'].notna().any():\n        err = msiseRmse.loc[msiseRmse['error'].notna(), 'error'].astype(str).iloc[0]\n        n = int(msiseRmse['n'].iloc[0]) if 'n' in msiseRmse.columns else 0\n        return pd.DataFrame({'error':[err], 'n':[n], 'final_str':[None], 'final':[np.nan]})\n\n    if 'rmse' not in msiseRmse.columns:\n        return pd.DataFrame({'error':['rmse column missing from msiseRmse'], 'n':[0], 'final_str':[None], 'final':[np.nan]})\n\n    rmse = float(msiseRmse['rmse'].iloc[0])\n    n = int(msiseRmse['n'].iloc[0]) if 'n' in msiseRmse.columns else 0\n\n    if not np.isfinite(rmse):\n        return pd.DataFrame({'error':['rmse is not finite'], 'n':[n], 'final_str':[None], 'final':[rmse]})\n\n    final_str = f\"{rmse:.3e}\"  # 4 sig figs\n    return pd.DataFrame({'final':[rmse], 'final_str':[final_str], 'n':[n], 'error':[None]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Format RMSE scalar from msiseRmse into scientific notation with 4 significant figures using Python f'{rmse:.3e}'; if msiseRmse contains an error or missing rmse, propagate error and set final_str null; output single row with [final, final_str, n, error].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalAnswerResult",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(finalAnswer) -> pd.DataFrame:\n    # Return a single-cell numeric-like answer if available; otherwise surface error.\n    if 'final_str' in finalAnswer.columns and finalAnswer['final_str'].notna().any():\n        return pd.DataFrame({'value':[finalAnswer['final_str'].dropna().iloc[0]]})\n    if 'final' in finalAnswer.columns and finalAnswer['final'].notna().any():\n        v = float(finalAnswer['final'].dropna().iloc[0])\n        return pd.DataFrame({'value':[f\"{v:.3e}\"]})\n    err = None\n    if 'error' in finalAnswer.columns and finalAnswer['error'].notna().any():\n        err = str(finalAnswer['error'].dropna().iloc[0])\n    return pd.DataFrame({'value':[None],'error':[err]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract final RMSE formatted string from finalAnswer.final_str (or format numeric final as '%.3e'); return one-row DataFrame with column 'value' (scientific notation, 4 significant figures) and optional 'error' if missing.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "omniSpec": {
+        "x": 100,
+        "y": 40
+      },
+      "omni2023": {
+        "x": 100,
+        "y": 220
+      },
+      "omni2024": {
+        "x": 100,
+        "y": 1120
+      },
+      "swarmBFiles": {
+        "x": 100,
+        "y": 580
+      },
+      "swarmBInspect": {
+        "x": 100,
+        "y": 760
+      },
+      "omniInspect": {
+        "x": 100,
+        "y": 940
+      },
+      "swarmBLoad": {
+        "x": 100,
+        "y": 400
+      },
+      "swarmBParse": {
+        "x": 400,
+        "y": 400
+      },
+      "omniParse2024": {
+        "x": 400,
+        "y": 1120
+      },
+      "msiseRmse": {
+        "x": 700,
+        "y": 760
+      },
+      "finalAnswer": {
+        "x": 1000,
+        "y": 760
+      },
+      "finalAnswerResult": {
+        "x": 1300,
+        "y": 760
+      }
+    },
+    "links": [
+      {
+        "linkID": "omni2024-->omniParse2024",
+        "source": {
+          "operatorID": "omni2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "omniParse2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "swarmBLoad-->swarmBParse",
+        "source": {
+          "operatorID": "swarmBLoad",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "swarmBParse",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "swarmBParse-->msiseRmse",
+        "source": {
+          "operatorID": "swarmBParse",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "msiseRmse",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omniParse2024-->msiseRmse",
+        "source": {
+          "operatorID": "omniParse2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "msiseRmse",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "msiseRmse-->finalAnswer",
+        "source": {
+          "operatorID": "msiseRmse",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalAnswer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "finalAnswer-->finalAnswerResult",
+        "source": {
+          "operatorID": "finalAnswer",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalAnswerResult",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,213 @@
+{
+  "operators": [
+    {
+      "operatorID": "aqi_2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/annual_aqi_by_county_2024.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load annual AQI by county for 2024 from data/wildfire/input/annual_aqi_by_county_2024.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fires_state",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/Wildfire_Acres_by_State.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load wildfire acres by state from data/wildfire/input/Wildfire_Acres_by_State.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "aqi_state_prop",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(aqi_2024):\n    import pandas as pd\n    df = aqi_2024.copy()\n    # Generally unsafe days per EPA = USG + Unhealthy + Very Unhealthy + Hazardous\n    unsafe = (\n        df['Unhealthy for Sensitive Groups Days']\n        + df['Unhealthy Days']\n        + df['Very Unhealthy Days']\n        + df['Hazardous Days']\n    )\n    df['unsafe_prop'] = unsafe / df['Days with AQI']\n    # Aggregate to state level by summing days across counties (weighted by Days with AQI)\n    state = (\n        df.groupby('State', as_index=False)\n          .agg({\n              'Days with AQI': 'sum',\n              'Unhealthy for Sensitive Groups Days': 'sum',\n              'Unhealthy Days': 'sum',\n              'Very Unhealthy Days': 'sum',\n              'Hazardous Days': 'sum'\n          })\n    )\n    state['unsafe_days'] = (\n        state['Unhealthy for Sensitive Groups Days']\n        + state['Unhealthy Days']\n        + state['Very Unhealthy Days']\n        + state['Hazardous Days']\n    )\n    state['unsafe_prop'] = state['unsafe_days'] / state['Days with AQI']\n    return state[['State','unsafe_prop','unsafe_days','Days with AQI']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute state-level proportion of generally unsafe AQI days (USG+Unhealthy+Very Unhealthy+Hazardous) divided by total Days with AQI, aggregating by summing days across counties (weighted by monitoring days).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "aqi_fires_join",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(aqi_state_prop, fires_state):\n    import pandas as pd\n    # normalize state naming for join\n    a = aqi_state_prop.copy()\n    f = fires_state.copy()\n    a['State_norm'] = a['State'].str.strip()\n    f['State_norm'] = f['State'].str.strip()\n\n    merged = a.merge(f, on='State_norm', how='inner', suffixes=('_aqi','_fire'))\n    # keep relevant columns\n    out = merged[[\n        'State_norm',\n        'unsafe_prop',\n        'Total Acres Burned'\n    ]].rename(columns={'State_norm':'State', 'Total Acres Burned':'acres_burned'})\n    # drop missing acres\n    out = out.dropna(subset=['acres_burned','unsafe_prop'])\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inner join state-level unsafe air quality proportion with wildfire total acres burned by state (normalize State strings), keep (State, unsafe_prop, acres_burned) and drop missing acres.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "corr_calc",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(aqi_fires_join):\n    import pandas as pd\n    df = aqi_fires_join.copy()\n    # Pearson correlation between unsafe proportion and acres burned\n    corr = df['unsafe_prop'].corr(df['acres_burned'])\n    return pd.DataFrame([{'correlation': corr}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute Pearson correlation between state-level unsafe air quality day proportion (unsafe_prop) and wildfire acres burned (acres_burned) across joined states",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "aqi_2024": {
+      "x": 100,
+      "y": 40
+    },
+    "fires_state": {
+      "x": 430,
+      "y": 220
+    },
+    "aqi_state_prop": {
+      "x": 430,
+      "y": 40
+    },
+    "aqi_fires_join": {
+      "x": 760,
+      "y": 130
+    },
+    "corr_calc": {
+      "x": 1090,
+      "y": 130
+    }
+  },
+  "links": [
+    {
+      "linkID": "aqi_2024-->aqi_state_prop",
+      "source": {
+        "operatorID": "aqi_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "aqi_state_prop",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "aqi_state_prop-->aqi_fires_join",
+      "source": {
+        "operatorID": "aqi_state_prop",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "aqi_fires_join",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fires_state-->aqi_fires_join",
+      "source": {
+        "operatorID": "fires_state",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "aqi_fires_join",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "aqi_fires_join-->corr_calc",
+      "source": {
+        "operatorID": "aqi_fires_join",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "corr_calc",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-70-6-1779100642638",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadStateMsaIdTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"\n    files = sorted(glob.glob(pattern))\n    if not files:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for fp in files:\n        # Most CSN databook CSVs are clean comma-separated with a single header row.\n        df = pd.read_csv(fp, dtype=str)\n        df[\"__source_file\"] = fp.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files matching pattern 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv' via glob; read each with pd.read_csv(dtype=str) and add '__source_file' column with basename; concatenate into a single table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanStateMsaIdTheft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadStateMsaIdTheft) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    df = loadStateMsaIdTheft.copy()\n\n    # Identify actual data rows: must have metro name and a numeric report count\n    df = df.rename(columns={\n        'Metropolitan Areas: Identity Theft Reports': 'metro_area_raw',\n        'Unnamed: 1': 'reports_raw'\n    })\n\n    # Drop obvious non-data rows\n    df = df[df['metro_area_raw'].notna()]\n    df = df[~df['metro_area_raw'].astype(str).str.strip().isin([\n        'Metropolitan Area',\n        'Metropolitan Areas: Identity Theft Reports',\n        'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission'\n    ])]\n\n    # Parse reports as integer\n    rep = df['reports_raw'].astype(str).str.replace(',', '', regex=False).str.strip()\n    df['reports'] = pd.to_numeric(rep, errors='coerce')\n    df = df[df['reports'].notna()].copy()\n    df['reports'] = df['reports'].astype(int)\n\n    # State comes from filename\n    df['state'] = df['__source_file'].str.replace('.csv', '', regex=False)\n\n    # Extract the state abbreviations appearing after the last comma in the metro label.\n    # Examples:\n    #   \"Kansas City, MO-KS Metropolitan Statistical Area\" -> \"MO-KS\"\n    #   \"Anniston-Oxford, AL Metropolitan Statistical Area\" -> \"AL\"\n    def extract_state_abbrs(metro: str) -> list:\n        m = re.search(r',\\s*([A-Z]{2}(?:-[A-Z]{2})*)\\b', metro)\n        if not m:\n            return []\n        return m.group(1).split('-')\n\n    df['state_abbrs_in_metro'] = df['metro_area_raw'].astype(str).apply(extract_state_abbrs)\n\n    # Map full state name to USPS abbr (for membership checks)\n    name_to_abbr = {\n        'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA','Colorado':'CO','Connecticut':'CT',\n        'Delaware':'DE','District of Columbia':'DC','Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID','Illinois':'IL',\n        'Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD','Massachusetts':'MA',\n        'Michigan':'MI','Minnesota':'MN','Mississippi':'MS','Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV',\n        'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND',\n        'Ohio':'OH','Oklahoma':'OK','Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD',\n        'Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY'\n    }\n    df['state_abbr'] = df['state'].map(name_to_abbr)\n\n    # Keep only metros that belong to the state's own abbreviation.\n    # This ensures multi-state metros are counted in each relevant state's file.\n    df = df[df.apply(lambda r: r['state_abbr'] in r['state_abbrs_in_metro'], axis=1)].copy()\n\n    # Build a standardized metro key (without trailing \"Metropolitan Statistical Area\")\n    df['metro_area'] = df['metro_area_raw'].astype(str).str.replace(r'\\s+Metropolitan Statistical Area\\s*$', '', regex=True).str.strip()\n\n    return df[['state', 'state_abbr', 'metro_area', 'reports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and structure State MSA identity theft table: rename columns to [metro_area_raw, reports_raw]; drop header/source/blank rows; parse reports to int; derive state (full name) from __source_file; extract state abbreviation(s) from metro label after comma (e.g., 'MO-KS' -> ['MO','KS']); map state name to USPS abbreviation; keep only rows where the state's abbreviation is included in the metro's abbreviations (so multi-state metros are counted separately in each state); standardize metro_area by removing trailing 'Metropolitan Statistical Area'; output columns [state, state_abbr, metro_area, reports]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "stateHighestConcentration",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanStateMsaIdTheft):\n    import pandas as pd\n\n    df = cleanStateMsaIdTheft.copy()\n\n    # Only states with at least two metro areas\n    state_counts = df.groupby('state', as_index=False).agg(n_metros=('metro_area', 'nunique'))\n    eligible_states = state_counts[state_counts['n_metros'] >= 2]['state']\n    df = df[df['state'].isin(eligible_states)]\n\n    # Concentration = max metro reports / total state reports\n    state_totals = df.groupby('state', as_index=False).agg(state_reports=('reports', 'sum'))\n    state_max = df.groupby('state', as_index=False).agg(max_metro_reports=('reports', 'max'))\n\n    out = state_totals.merge(state_max, on='state', how='inner')\n    out['concentration'] = out['max_metro_reports'] / out['state_reports']\n\n    # Pick the single highest concentration; tie-breakers: larger concentration, then larger max_metro_reports\n    out = out.sort_values(['concentration', 'max_metro_reports', 'state_reports', 'state'], ascending=[False, False, False, True])\n    return out.head(1)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For each state with >=2 metropolitan areas (counting multi-state metros separately per state as already expanded in cleanStateMsaIdTheft), compute total identity theft reports (sum reports) and highest single-metro reports (max reports); calculate concentration = max_metro_reports/state_reports; return the top state by concentration (tie-break by max_metro_reports, then state_reports, then state name).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadStateMsaIdTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanStateMsaIdTheft": {
+        "x": 400,
+        "y": 40
+      },
+      "stateHighestConcentration": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadStateMsaIdTheft-->cleanStateMsaIdTheft",
+        "source": {
+          "operatorID": "loadStateMsaIdTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanStateMsaIdTheft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanStateMsaIdTheft-->stateHighestConcentration",
+        "source": {
+          "operatorID": "cleanStateMsaIdTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateHighestConcentration",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

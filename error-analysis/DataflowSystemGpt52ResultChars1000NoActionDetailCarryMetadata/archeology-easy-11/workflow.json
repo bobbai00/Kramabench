@@ -1,0 +1,126 @@
+{
+  "operators": [
+    {
+      "operatorID": "worldcities",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load city-level dataset from data/archeology/input/worldcities.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "capitals",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(worldcities):\n    import pandas as pd\n\n    df = worldcities.copy()\n    # Keep only rows explicitly marked as capitals (any type: primary/admin/etc.)\n    df = df[df['capital'].notna()]\n\n    # Ensure numeric types\n    df['population'] = pd.to_numeric(df['population'], errors='coerce')\n    df['lat'] = pd.to_numeric(df['lat'], errors='coerce')\n\n    # For each country, select the capital with the largest population\n    # (drop capitals without population or lat)\n    df = df.dropna(subset=['country', 'population', 'lat'])\n    idx = df.groupby('country')['population'].idxmax()\n    chosen = df.loc[idx, ['country', 'city', 'lat', 'population']].reset_index(drop=True)\n    return chosen"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter to capital cities (capital not null). Convert population/lat to numeric, drop missing. For each country choose the capital with maximum population, returning country/city/lat/population.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "avg_lat",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(capitals) -> pd.DataFrame:\n    import pandas as pd\n    avg = capitals['lat'].mean()\n    return pd.DataFrame([{'avg_latitude': round(float(avg), 4)}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute mean latitude across selected (largest-population) capital per country and round to 4 decimals",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "worldcities": {
+      "x": 100,
+      "y": 40
+    },
+    "capitals": {
+      "x": 430,
+      "y": 40
+    },
+    "avg_lat": {
+      "x": 760,
+      "y": 40
+    }
+  },
+  "links": [
+    {
+      "linkID": "worldcities-->capitals",
+      "source": {
+        "operatorID": "worldcities",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "capitals",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "capitals-->avg_lat",
+      "source": {
+        "operatorID": "capitals",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "avg_lat",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

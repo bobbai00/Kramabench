@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-599-6-1779125089272",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "newEnglandStates",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/new_england_states.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load new_england_states.csv via pd.read_csv (defaults: comma delimiter, header=0, UTF-8) from data/legal/input/new_england_states.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msaIdTheft2024Raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import os\n    import pandas as pd\n\n    pattern = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'\n    files = sorted(glob.glob(pattern))\n    if not files:\n        raise FileNotFoundError(f'No files matched glob pattern: {pattern}')\n\n    dfs = []\n    for fp in files:\n        df = pd.read_csv(fp)\n        df['__source_file'] = os.path.basename(fp)\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and concatenate all CSV files matching data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv using glob; read each via pd.read_csv (defaults), add __source_file=basename, concat into one DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msaIdTheft2024Clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(msaIdTheft2024Raw) -> pd.DataFrame:\n    import pandas as pd\n\n    df = msaIdTheft2024Raw.copy()\n\n    # Drop obvious non-data rows\n    df = df[df['Metropolitan Areas: Identity Theft Reports'].notna()].copy()\n\n    # Remove repeated header rows and source/footer rows\n    bad = {\n        'Metropolitan Area',\n        'Metropolitan Areas: Identity Theft Reports',\n        'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission',\n    }\n    df = df[~df['Metropolitan Areas: Identity Theft Reports'].isin(bad)].copy()\n\n    df = df.rename(\n        columns={\n            'Metropolitan Areas: Identity Theft Reports': 'metropolitan_area',\n            'Unnamed: 1': 'reports',\n        }\n    )\n\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df[df['reports'].notna()].copy()\n\n    # Extract state abbreviation after last comma (e.g., \"Boston-Cambridge-Newton, MA-NH ...\")\n    df['state_abbrev'] = df['metropolitan_area'].str.extract(r',\\s*([A-Z]{2})(?:-|\\s)')\n\n    return df[['metropolitan_area', 'state_abbrev', 'reports', '__source_file']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean concatenated State MSA Identity Theft CSVs: drop rows where 'Metropolitan Areas: Identity Theft Reports' is null; remove repeated header/footer rows (values in {'Metropolitan Area','Metropolitan Areas: Identity Theft Reports','Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission'}); rename columns to [metropolitan_area, reports]; coerce reports to numeric and drop non-numeric; extract leading 2-letter state_abbrev from metropolitan_area (regex after last comma); output [metropolitan_area, state_abbrev, reports, __source_file].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "newEnglandStateAbbrev",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(newEnglandStates) -> pd.DataFrame:\n    import pandas as pd\n\n    df = newEnglandStates.copy()\n    name_to_abbrev = {\n        'Connecticut': 'CT',\n        'Maine': 'ME',\n        'Massachusetts': 'MA',\n        'New Hampshire': 'NH',\n        'Rhode Island': 'RI',\n        'Vermont': 'VT',\n    }\n    df['state_abbrev'] = df['Name'].map(name_to_abbrev)\n    out = df[['Name', 'state_abbrev']].dropna().drop_duplicates().reset_index(drop=True)\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Map New England state names from new_england_states.csv ('Name') to USPS abbreviations using explicit dict {Connecticut:CT, Maine:ME, Massachusetts:MA, New Hampshire:NH, Rhode Island:RI, Vermont:VT}; output distinct [Name, state_abbrev].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "newEnglandMsaTop5",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(msaIdTheft2024Clean, newEnglandStateAbbrev) -> pd.DataFrame:\n    import pandas as pd\n\n    ne_abbrevs = set(newEnglandStateAbbrev['state_abbrev'].dropna().unique())\n\n    df = msaIdTheft2024Clean.copy()\n\n    # Keep MSAs whose extracted state abbrev is one of New England states\n    ne = df[df['state_abbrev'].isin(ne_abbrevs)].copy()\n\n    # Some MSAs might appear in multiple state files; sum within metro name to get total reports\n    agg = (\n        ne.groupby('metropolitan_area', as_index=False)\n          .agg(total_reports=('reports', 'sum'),\n               states_included=('state_abbrev', lambda s: ','.join(sorted(set(s)))))\n    )\n\n    top5 = agg.sort_values(['total_reports', 'metropolitan_area'], ascending=[False, True]).head(5)\n    return top5"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter cleaned identity-theft-by-MSA rows to those whose extracted state_abbrev is in New England (CT, ME, MA, NH, RI, VT) from newEnglandStateAbbrev; group by metropolitan_area and sum reports as total_reports (to combine potential duplicates across state files); sort by total_reports desc then name asc; return top 5 MSAs with [metropolitan_area, total_reports, states_included].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "newEnglandStates": {
+        "x": 100,
+        "y": 220
+      },
+      "msaIdTheft2024Raw": {
+        "x": 100,
+        "y": 40
+      },
+      "msaIdTheft2024Clean": {
+        "x": 400,
+        "y": 40
+      },
+      "newEnglandStateAbbrev": {
+        "x": 400,
+        "y": 220
+      },
+      "newEnglandMsaTop5": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "msaIdTheft2024Raw-->msaIdTheft2024Clean",
+        "source": {
+          "operatorID": "msaIdTheft2024Raw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "msaIdTheft2024Clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "newEnglandStates-->newEnglandStateAbbrev",
+        "source": {
+          "operatorID": "newEnglandStates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "newEnglandStateAbbrev",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "msaIdTheft2024Clean-->newEnglandMsaTop5",
+        "source": {
+          "operatorID": "msaIdTheft2024Clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "newEnglandMsaTop5",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "newEnglandStateAbbrev-->newEnglandMsaTop5",
+        "source": {
+          "operatorID": "newEnglandStateAbbrev",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "newEnglandMsaTop5",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

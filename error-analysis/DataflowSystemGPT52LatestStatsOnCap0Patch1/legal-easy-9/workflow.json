@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-38-6-1779139361146",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv\"\n    # The CSV contains a title row, blank rows, and a source footer.\n    # Data header appears on the second non-empty row: [Year, # of Reports].\n    df = pd.read_csv(path, header=None)\n\n    # Keep only rows where first col looks like a year and second col looks like a number.\n    df = df.rename(columns={0: \"year\", 1: \"reports_raw\"})\n    df = df[df[\"year\"].astype(str).str.fullmatch(r\"\\d{4}\", na=False)].copy()\n\n    df[\"year\"] = df[\"year\"].astype(int)\n    # Remove thousands separators and cast to int\n    df[\"reports\"] = (\n        df[\"reports_raw\"]\n        .astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.strip()\n        .astype(float)\n        .astype(int)\n    )\n\n    return df[[\"year\", \"reports\"]].sort_values(\"year\").reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv with header=None; extract rows where column 0 is a 4-digit year; parse '# of Reports' by removing commas; return cleaned table with columns [year (int), reports (int)] sorted by year.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "maxRelativeIncreaseYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCount.copy().sort_values('year')\n    df = df[(df['year'] >= 2002) & (df['year'] <= 2024)].copy()\n    df['prev_reports'] = df['reports'].shift(1)\n    df['rel_increase'] = (df['reports'] - df['prev_reports']) / df['prev_reports']\n\n    # Drop first year in range if it lacks previous-year value\n    df = df.dropna(subset=['prev_reports'])\n\n    best = df.loc[df['rel_increase'].idxmax(), ['year', 'rel_increase']]\n    return pd.DataFrame([best.to_dict()])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From reportCount, filter years 2002\u20132024; compute previous-year reports via shift(1) and relative increase (reports-prev)/prev; drop rows without previous-year value; return the single year with maximum rel_increase (also output rel_increase for verification).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCount": {
+        "x": 100,
+        "y": 40
+      },
+      "maxRelativeIncreaseYear": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCount-->maxRelativeIncreaseYear",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maxRelativeIncreaseYear",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

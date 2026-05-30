@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-45-6-1779100193633",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "numberOfReportsByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv\"\n\n    # File includes blank row, then header row: Year, Fraud, Identity Theft, Other\n    df = pd.read_csv(path, skiprows=1, dtype=str)\n\n    # Drop possible footer/source rows or empty rows\n    df = df.dropna(how=\"all\")\n\n    # Standardize column names\n    df = df.rename(columns={\n        \"Fraud \": \"Fraud\",\n        \"Identity Theft \": \"Identity Theft\",\n        \"Other \": \"Other\",\n    })\n\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Number_of_Reports_by_Type.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv via pd.read_csv with skiprows=1 (first row is blank) and dtype=str; drop fully-empty rows; normalize column names by stripping trailing spaces for [Fraud, Identity Theft, Other].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fraudAtLeastHalfYears",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(numberOfReportsByType):\n    import pandas as pd\n\n    df = numberOfReportsByType.copy()\n\n    # First row contains the real headers\n    df.columns = df.iloc[0].astype(str).str.strip()\n    df = df.iloc[1:].copy()\n\n    # Remove source/footer rows and keep only 4-digit years\n    df['Year'] = df['Year'].astype(str).str.strip()\n    df = df[df['Year'].str.fullmatch(r\"\\d{4}\")].copy()\n\n    # Parse numeric columns (remove commas)\n    for c in ['Fraud', 'Identity Theft', 'Other']:\n        df[c] = (\n            df[c]\n            .astype(str)\n            .str.replace(',', '', regex=False)\n            .str.strip()\n        )\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    df['total'] = df[['Fraud', 'Identity Theft', 'Other']].sum(axis=1, min_count=3)\n    df['fraudShare'] = df['Fraud'] / df['total']\n\n    out = df.loc[df['fraudShare'] >= 0.5, ['Year']].copy()\n    out['Year'] = out['Year'].astype(int)\n    out = out.sort_values('Year').reset_index(drop=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean numberOfReportsByType table by promoting first data row to header (strip spaces); filter to rows where Year matches 4-digit pattern; parse [Fraud, Identity Theft, Other] counts to numeric (remove commas); compute total reports as sum of the three types and fraudShare=Fraud/total; return sorted years where fraudShare >= 0.5 as integer Year column.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "numberOfReportsByType": {
+        "x": 100,
+        "y": 40
+      },
+      "fraudAtLeastHalfYears": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "numberOfReportsByType-->fraudAtLeastHalfYears",
+        "source": {
+          "operatorID": "numberOfReportsByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fraudAtLeastHalfYears",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-48-6-1779100245977",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # Try common Windows encodings used in published CSVs.\n    try:\n        return pd.read_csv(path, encoding=\"cp1252\")\n    except Exception:\n        return pd.read_csv(path, encoding=\"latin1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv using pd.read_csv with encoding=cp1252 fallback latin1 (handles smart quotes / Windows-1252 bytes); comma delimiter, first row as header",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "topCategoriesFor50Pct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories2024) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = reportCategories2024.copy()\n\n    # The file contains a title row and footer rows; the real header row is embedded in row where col0 == 'Rank'\n    df = df.rename(\n        columns={\n            df.columns[0]: 'col0',\n            df.columns[1]: 'col1',\n            df.columns[2]: 'col2',\n            df.columns[3]: 'col3',\n        }\n    )\n\n    header_idx = df.index[df['col0'].astype(str).str.strip().eq('Rank')]\n    if len(header_idx) == 0:\n        raise ValueError(\"Could not find embedded header row with 'Rank' in first column\")\n    header_idx = int(header_idx[0])\n\n    data = df.loc[header_idx + 1 :].copy()\n    data = data[~data['col0'].isna()]\n\n    # Rename to meaningful fields\n    data = data.rename(\n        columns={\n            'col0': 'rank',\n            'col1': 'category',\n            'col2': 'numReports',\n            'col3': 'percentage',\n        }\n    )\n\n    # Parse percentage (e.g., '20.91%')\n    data['percentage'] = (\n        data['percentage']\n        .astype(str)\n        .str.strip()\n        .str.replace('%', '', regex=False)\n    )\n    data['percentage'] = pd.to_numeric(data['percentage'], errors='coerce') / 100.0\n\n    # In case percentages are missing, fall back to numReports\n    data['numReports'] = (\n        data['numReports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    data['numReports'] = pd.to_numeric(data['numReports'], errors='coerce')\n\n    # Keep valid rows\n    data = data.dropna(subset=['category'])\n\n    if data['percentage'].notna().any():\n        data = data.sort_values(['percentage', 'numReports'], ascending=[False, False])\n        data['cumPct'] = data['percentage'].cumsum()\n        min_n = int((data['cumPct'] >= 0.5).idxmax() - data.index.min() + 1)\n    else:\n        data = data.sort_values('numReports', ascending=False)\n        total = data['numReports'].sum()\n        data['cumPct'] = data['numReports'].cumsum() / total\n        min_n = int((data['cumPct'] >= 0.5).idxmax() - data.index.min() + 1)\n\n    return pd.DataFrame([{'minCategoriesFor50Pct': min_n}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean embedded-header table from reportCategories2024 by locating row where first column equals 'Rank', taking subsequent non-null rows as data; parse 'Percentage' (strip % and convert to fraction) and '# of Reports' (remove commas to numeric); sort categories descending by percentage (fallback to numReports) and compute cumulative share; output single-row DataFrame with minCategoriesFor50Pct = minimal number of categories whose cumulative share reaches >= 50%.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "topCategoriesFor50Pct": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCategories2024-->topCategoriesFor50Pct",
+        "source": {
+          "operatorID": "reportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topCategoriesFor50Pct",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

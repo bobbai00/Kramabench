@@ -1,0 +1,483 @@
+{
+  "operators": [
+    {
+      "operatorID": "rc_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd, glob\n\ndef load() -> pd.DataFrame:\n    paths = glob.glob('data/archeology/input/radiocarbon_database_regional.xlsx')\n    return pd.DataFrame({'path': paths})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Locate radiocarbon_database_regional.xlsx file path(s) via glob",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "radiocarbon",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(rc_files) -> pd.DataFrame:\n    import pandas as pd\n    path = rc_files['path'].iloc[0]\n    xl = pd.ExcelFile(path)\n    # Prefer a sheet that contains Maltese/region data; otherwise read first sheet\n    sheet = None\n    for s in xl.sheet_names:\n        ls = s.lower()\n        if 'malta' in ls or 'maltese' in ls or 'regional' in ls or 'database' in ls:\n            sheet = s\n            break\n    if sheet is None:\n        sheet = xl.sheet_names[0]\n    df = pd.read_excel(path, sheet_name=sheet)\n    # standardize columns\n    df.columns = [str(c).strip() for c in df.columns]\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Read radiocarbon_database_regional.xlsx (auto-select relevant sheet if named), return raw table with standardized column names",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = sorted(glob.glob('data/archeology/input/climateMeasurements.xlsx'))\n    return pd.DataFrame({'path': paths})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Locate climateMeasurements.xlsx file path(s) via glob (data/archeology/input/climateMeasurements.xlsx)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "radiocarbon_fixcoords",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(radiocarbon):\n    import pandas as pd\n    df = radiocarbon.copy()\n    # Coerce Latitude/Longitude to numeric; in the provided table they appear swapped/mis-typed\n    for col in ['Latitude','Longitude']:\n        df[col] = pd.to_numeric(df[col], errors='coerce')\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Coerce radiocarbon Latitude and Longitude columns to numeric (fix mis-typed datetime in stats) for proper northernmost selection",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "malta_neolithic_northernmost_year",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(radiocarbon_fixcoords):\n    import pandas as pd\n    df = radiocarbon_fixcoords.copy()\n    df = df[(df['Region'] == 'Malta') & (df['Culture'] == 'Neolithic')]\n    # ensure numeric coords\n    df['Latitude'] = pd.to_numeric(df['Latitude'], errors='coerce')\n    df['date'] = pd.to_numeric(df['date'], errors='coerce')\n    # most northern = max latitude; break ties by later year (= larger date BP? wait date likely 14C age BP; later calendar year would be smaller BP.\n    # Question says \"year\" without specifying BP/BC; use provided 'date' as year-like numeric and treat larger as later.\n    # Implement as: pick max Latitude; among those pick max date.\n    max_lat = df['Latitude'].max()\n    cand = df[df['Latitude'] == max_lat]\n    year = cand['date'].max()\n    return pd.DataFrame([{'target_year': float(year), 'max_latitude': float(max_lat), 'n_candidates': int((cand['date']==year).sum()), 'site': cand.loc[cand['date'].idxmax(), 'Site']}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter radiocarbon to Region='Malta' and Culture='Neolithic'; find maximum Latitude (most northern). Break ties by selecting the later year using max(date). Output target_year and context.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate_files) -> pd.DataFrame:\n    import pandas as pd\n    path = climate_files['path'].iloc[0]\n    xl = pd.ExcelFile(path)\n    # pick first sheet by default\n    df = pd.read_excel(path, sheet_name=xl.sheet_names[0])\n    # standardize column names\n    df.columns = [str(c).strip() for c in df.columns]\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Read climateMeasurements.xlsx (first sheet) into a raw table with cleaned column names",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_tidy",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate):\n    import pandas as pd\n    import numpy as np\n\n    df = climate.copy()\n\n    # Drop fully empty rows/cols\n    df = df.dropna(how='all')\n    df = df.dropna(axis=1, how='all')\n\n    # Identify header row as the first row that contains the string 'Year' (common)\n    # otherwise fallback to first row with many non-nulls.\n    header_idx = None\n    for idx, row in df.iterrows():\n        vals = row.astype(str).str.strip().str.lower()\n        if (vals == 'year').any() or (vals.str.contains('year', na=False)).any():\n            header_idx = idx\n            break\n    if header_idx is None:\n        nn = df.notna().sum(axis=1)\n        header_idx = nn[nn >= max(3, int(df.shape[1]*0.3))].index.min()\n\n    header = df.loc[header_idx].astype(str).str.strip().tolist()\n    data = df.loc[df.index > header_idx].copy()\n    data.columns = header\n\n    # Clean column names\n    data.columns = (\n        pd.Index(data.columns)\n        .astype(str)\n        .str.replace(r'\\s+', ' ', regex=True)\n        .str.strip()\n    )\n\n    # Drop any duplicate columns keeping first\n    data = data.loc[:, ~data.columns.duplicated()]\n\n    # Coerce numeric for each column safely\n    for c in data.columns:\n        data[c] = pd.to_numeric(data[c].astype(str).str.strip().replace({'': np.nan, 'nan': np.nan, 'NaN': np.nan}), errors='coerce')\n\n    # Drop rows with all NaN after coercion\n    data = data.dropna(how='all')\n\n    return data"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse climateMeasurements.xlsx by finding embedded header row (prefer row containing 'Year'), set column names, coerce all columns to numeric safely, and drop empty rows/cols.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_tidy2",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate):\n    import pandas as pd\n    import numpy as np\n\n    df = climate.copy()\n\n    # Find header row that contains 'Year' and 'Al' (aluminum)\n    header_row = None\n    for i in range(min(len(df), 200)):\n        row = df.iloc[i].astype(str).str.lower().tolist()\n        if any('year' in x for x in row) and any(x.strip() in ['al', 'al (ppm)', 'al(ppm)', 'aluminum', 'aluminium'] or 'al' == x.strip() for x in row):\n            header_row = i\n            break\n    if header_row is None:\n        # fallback: look for just 'year'\n        for i in range(min(len(df), 200)):\n            row = df.iloc[i].astype(str).str.lower().tolist()\n            if any('year' in x for x in row):\n                header_row = i\n                break\n\n    if header_row is None:\n        return pd.DataFrame({'error':['Could not locate header row']})\n\n    # build column names\n    cols = df.iloc[header_row].tolist()\n    cols = [str(c).strip() if pd.notna(c) else '' for c in cols]\n    # de-duplicate blanks\n    new_cols = []\n    blank_count = 0\n    for c in cols:\n        if c == '' or c.lower() == 'nan':\n            blank_count += 1\n            new_cols.append(f'blank_{blank_count}')\n        else:\n            new_cols.append(c)\n\n    data = df.iloc[header_row+1:].copy()\n    data.columns = new_cols\n\n    # drop fully empty rows\n    data = data.dropna(how='all')\n\n    # coerce numeric for all columns where possible\n    for c in data.columns:\n        data[c] = pd.to_numeric(data[c], errors='coerce')\n\n    # Identify year column\n    year_col = None\n    for c in data.columns:\n        if 'year' in c.lower():\n            year_col = c\n            break\n\n    # Identify Al column\n    al_col = None\n    for c in data.columns:\n        cl = c.lower().replace(' ', '')\n        if cl in ['al','al(ppm)','alppm','aluminum','aluminium','al(ppm)'] or 'al(ppm' in cl or (cl.startswith('al') and 'ppm' in cl):\n            al_col = c\n            break\n    if al_col is None:\n        # if header didn't carry names, use heuristic: second numeric column with high magnitude typical of ppm\n        num_cols = [c for c in data.columns if c != year_col]\n        # prefer columns with mean > 1000\n        best = None\n        best_mean = -np.inf\n        for c in num_cols:\n            m = data[c].mean(skipna=True)\n            if pd.notna(m) and m > best_mean:\n                best_mean = m\n                best = c\n        al_col = best\n\n    out = data[[year_col, al_col]].copy() if year_col is not None else data[[al_col]].copy()\n    out = out.rename(columns={year_col:'year', al_col:'aluminum'})\n    out = out.dropna(subset=['year','aluminum'])\n    out['year'] = out['year'].astype(int)\n    return out.sort_values('year').reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Re-parse climateMeasurements.xlsx: detect true header row containing 'Year' and aluminum (Al) columns; return tidy table with integer year and aluminum numeric values.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_peek",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate_files) -> pd.DataFrame:\n    import pandas as pd\n    path = climate_files['path'].iloc[0]\n    raw = pd.read_excel(path, sheet_name=0, header=None)\n    # show first 40 rows\n    out = raw.head(40).copy()\n    out.columns = [f'c{i}' for i in range(out.shape[1])]\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect first 40 rows of climateMeasurements.xlsx (sheet 0) without headers to find the real header row (Year/Aluminum columns).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "climate_parse",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate_files):\n    import pandas as pd\n    import numpy as np\n    path = climate_files['path'].iloc[0]\n\n    raw = pd.read_excel(path, sheet_name=0, header=None)\n\n    # find first data row: c0 like 'ODP 967' and c1 in {A,B,C,D}\n    s0 = raw.iloc[:, 0].astype(str)\n    s1 = raw.iloc[:, 1].astype(str)\n    mask = s0.str.contains('ODP 967', na=False) & s1.isin(['A','B','C','D'])\n    if not mask.any():\n        return pd.DataFrame({'error':['No ODP 967 data rows detected']})\n    start = int(np.where(mask.values)[0][0])\n    dat = raw.iloc[start:].copy()\n\n    # keep needed columns: age (c7) and Al (c19)\n    dat = dat.iloc[:, [7, 19]].copy()\n    dat.columns = ['age_ma', 'aluminum']\n\n    dat['age_ma'] = pd.to_numeric(dat['age_ma'], errors='coerce')\n    dat['aluminum'] = pd.to_numeric(dat['aluminum'], errors='coerce')\n    dat = dat.dropna(subset=['age_ma', 'aluminum'])\n\n    # convert to years BP (approx): age in Ma -> years\n    dat['year'] = (dat['age_ma'] * 1_000_000).round().astype('int64')\n\n    return dat[['year', 'aluminum']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse climateMeasurements.xlsx (sheet0) by taking ODP 967 rows: use column c7 as age (Ma) and c19 as aluminum; coerce numeric; convert Ma to integer years (age*1e6) and output [year, aluminum].",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "closest_aluminum",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(malta_neolithic_northernmost_year, climate_parse):\n    import pandas as pd\n    target = float(malta_neolithic_northernmost_year['target_year'].iloc[0])\n    df = climate_parse.dropna(subset=['year','aluminum']).copy()\n    df['year'] = pd.to_numeric(df['year'], errors='coerce')\n    df['aluminum'] = pd.to_numeric(df['aluminum'], errors='coerce')\n    df = df.dropna(subset=['year','aluminum'])\n    # closest year(s)\n    df['abs_diff'] = (df['year'] - target).abs()\n    min_diff = df['abs_diff'].min()\n    closest = df[df['abs_diff'] == min_diff]\n    return pd.DataFrame({\n        'target_year':[target],\n        'min_abs_diff':[min_diff],\n        'n_closest_years':[closest['year'].nunique()],\n        'max_aluminum_closest':[closest['aluminum'].max()],\n        'closest_year_min':[closest['year'].min()],\n        'closest_year_max':[closest['year'].max()],\n    })\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Given Maltese northernmost Neolithic target_year, find climate years with minimum absolute difference to target, then take max aluminum across those closest years; output diagnostics and max_aluminum_closest.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "rc_files": {
+      "x": 100,
+      "y": 40
+    },
+    "radiocarbon": {
+      "x": 430,
+      "y": 40
+    },
+    "climate_files": {
+      "x": 760,
+      "y": 400
+    },
+    "radiocarbon_fixcoords": {
+      "x": 760,
+      "y": 40
+    },
+    "malta_neolithic_northernmost_year": {
+      "x": 1090,
+      "y": 40
+    },
+    "climate": {
+      "x": 1090,
+      "y": 580
+    },
+    "climate_tidy": {
+      "x": 1420,
+      "y": 490
+    },
+    "climate_tidy2": {
+      "x": 1420,
+      "y": 670
+    },
+    "climate_peek": {
+      "x": 1090,
+      "y": 400
+    },
+    "climate_parse": {
+      "x": 1090,
+      "y": 220
+    },
+    "closest_aluminum": {
+      "x": 1420,
+      "y": 130
+    }
+  },
+  "links": [
+    {
+      "linkID": "rc_files-->radiocarbon",
+      "source": {
+        "operatorID": "rc_files",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "radiocarbon",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "radiocarbon-->radiocarbon_fixcoords",
+      "source": {
+        "operatorID": "radiocarbon",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "radiocarbon_fixcoords",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "radiocarbon_fixcoords-->malta_neolithic_northernmost_year",
+      "source": {
+        "operatorID": "radiocarbon_fixcoords",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "malta_neolithic_northernmost_year",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate_files-->climate",
+      "source": {
+        "operatorID": "climate_files",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate-->climate_tidy",
+      "source": {
+        "operatorID": "climate",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_tidy",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate-->climate_tidy2",
+      "source": {
+        "operatorID": "climate",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_tidy2",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate_files-->climate_peek",
+      "source": {
+        "operatorID": "climate_files",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_peek",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate_files-->climate_parse",
+      "source": {
+        "operatorID": "climate_files",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_parse",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "malta_neolithic_northernmost_year-->closest_aluminum",
+      "source": {
+        "operatorID": "malta_neolithic_northernmost_year",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "closest_aluminum",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate_parse-->closest_aluminum",
+      "source": {
+        "operatorID": "climate_parse",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "closest_aluminum",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

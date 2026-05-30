@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_wildfire_acres",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    path = 'data/wildfire/input/Wildfire_Acres_by_State.csv'\n    files = glob.glob(path)\n    df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 5 rows from data/wildfire/input/Wildfire_Acres_by_State.csv to inspect schema and potential cleaning needs",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "wildfire_acres",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Wildfire_Acres_by_State.csv'\n    df = pd.read_csv(path)\n    # Standardize column names\n    df.columns = [c.strip() for c in df.columns]\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load complete data/wildfire/input/Wildfire_Acres_by_State.csv and standardize column names",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "acres_per_capita",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(wildfire_acres):\n    import pandas as pd\n    df = wildfire_acres.copy()\n\n    # Clean numeric columns (handle any stray commas/strings) and drop rows with missing acres\n    df['Total Acres Burned'] = pd.to_numeric(df['Total Acres Burned'], errors='coerce')\n    df['Population'] = pd.to_numeric(df['Population'], errors='coerce')\n    df = df.dropna(subset=['Total Acres Burned', 'Population'])\n    df = df[df['Population'] > 0]\n\n    df['acres_per_capita'] = df['Total Acres Burned'] / df['Population']\n\n    # Return sorted table for inspection\n    return df.sort_values('acres_per_capita', ascending=False).reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute acres_per_capita = Total Acres Burned / Population (drop rows with missing acres or nonpositive population) and sort descending",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_wildfire_acres": {
+      "x": 100,
+      "y": 40
+    },
+    "wildfire_acres": {
+      "x": 100,
+      "y": 220
+    },
+    "acres_per_capita": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "wildfire_acres-->acres_per_capita",
+      "source": {
+        "operatorID": "wildfire_acres",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "acres_per_capita",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

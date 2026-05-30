@@ -1,0 +1,178 @@
+{
+  "headId": "step-agent-436-7-1779116020179",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1Preview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    return pd.read_excel(path, header=None, dtype=str, nrows=40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 1-s2.0-S0092867420301070-mmc1.xlsx by reading first 40 rows with header=None and dtype=str to discover sheet structure and header row(s)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc7Preview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    return pd.read_excel(path, header=None, dtype=str, nrows=40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 1-s2.0-S0092867420301070-mmc7.xlsx by reading first 40 rows with header=None and dtype=str to discover sheet structure and header row(s)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    # Force all cells to string to avoid Texera schema type mismatch across rows\n    return pd.read_excel(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx via pd.read_excel with dtype=str (force all columns to string to avoid mixed-type schema issues); contains clinical/participant metadata incl. Age and participant IDs",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc7",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    # Sheet B-APM subtypes contains immune scores including APP-Z\n    return pd.read_excel(path, sheet_name='B-APM subtypes', dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc7.xlsx sheet_name='B-APM subtypes' via pd.read_excel with dtype=str; includes participant IDs and immune-related scores including APP-Z",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "lowestAppZAge",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc7, mmc1) -> pd.DataFrame:\n    import pandas as pd\n\n    df7 = mmc7.copy()\n    df1 = mmc1.copy()\n\n    # Parse numeric score\n    df7['APP_Z_score_num'] = pd.to_numeric(df7['APP_Z_score'], errors='coerce')\n\n    # Find the patient (idx) with the minimum APP-Z score\n    min_row = df7.loc[df7['APP_Z_score_num'].idxmin()][['idx', 'APP_Z_score_num']]\n    min_idx = min_row['idx']\n\n    # Bring age from mmc1\n    df1_small = df1[['idx', 'Age']].copy()\n    df1_small['Age_num'] = pd.to_numeric(df1_small['Age'], errors='coerce')\n\n    out = (\n        pd.DataFrame([{'idx': min_idx, 'APP_Z_score': float(min_row['APP_Z_score_num'])}])\n        .merge(df1_small[['idx', 'Age_num']], on='idx', how='left')\n        .rename(columns={'Age_num': 'Age'})\n    )\n\n    # Return as a one-row table (Age may be float if missing; caller will cast)\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute patient with lowest APP_Z_score from mmc7 (convert APP_Z_score to numeric; take idxmin over all 95 patients); left-join to mmc1 on idx to fetch Age (convert Age to numeric); output one-row table with [idx, APP_Z_score, Age]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1Preview": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc7Preview": {
+        "x": 100,
+        "y": 220
+      },
+      "mmc1": {
+        "x": 100,
+        "y": 580
+      },
+      "mmc7": {
+        "x": 100,
+        "y": 400
+      },
+      "lowestAppZAge": {
+        "x": 400,
+        "y": 490
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc7-->lowestAppZAge",
+        "source": {
+          "operatorID": "mmc7",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "lowestAppZAge",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc1-->lowestAppZAge",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "lowestAppZAge",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

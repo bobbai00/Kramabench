@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "var_desc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    # Try common encodings for NOAA/legacy CSV exports\n    for enc in ['cp1252', 'latin1', 'utf-8']:\n        try:\n            return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding=enc)\n        except UnicodeDecodeError:\n            continue\n    # Fallback: replace undecodable bytes\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='utf-8', encoding_errors='replace')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv, handling non-UTF8 encodings (cp1252/latin1 fallback).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fires",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv', low_memory=False)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NOAA wildfire incident dataset from data/wildfire/input/noaa_wildfires.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "suppression_model_data",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\nimport numpy as np\n\ndef process(fires: pd.DataFrame) -> pd.DataFrame:\n    df = fires.copy()\n\n    # Outcome variables\n    df['duration'] = pd.to_numeric(df['duration'], errors='coerce')\n    df['buildings_threatened'] = (\n        pd.to_numeric(df['prim_threatened_aggregate'], errors='coerce').fillna(0)\n        + pd.to_numeric(df['comm_threatened_aggregate'], errors='coerce').fillna(0)\n        + pd.to_numeric(df['outb_threatened_aggregate'], errors='coerce').fillna(0)\n    )\n\n    # Treatment proxy: Full Suppression vs Other (dominant strategy at 50% containment)\n    df['full_suppression'] = (df['dominant_strategy_50_s'].astype(str).str.strip().str.lower() == 'full suppression').astype(int)\n\n    # Weather controls\n    for c in ['avrh_mean', 'wind_med', 'erc_med', 'rain_sum']:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    # Additional controls often correlated with outcomes\n    df['cause_ind'] = pd.to_numeric(df['cause_ind'], errors='coerce')\n    df['region_ind'] = pd.to_numeric(df['region_ind'], errors='coerce')\n    df['start_year'] = pd.to_numeric(df['start_year'], errors='coerce')\n\n    keep = ['duration','buildings_threatened','full_suppression','avrh_mean','wind_med','erc_med','rain_sum','cause_ind','region_ind','start_year']\n    out = df[keep].dropna(subset=['duration','buildings_threatened','full_suppression','avrh_mean','wind_med','erc_med','rain_sum','region_ind','start_year'])\n\n    # Winsorize outcomes a bit to reduce extreme leverage\n    def winsor(s, p=0.01):\n        lo, hi = s.quantile(p), s.quantile(1-p)\n        return s.clip(lo, hi)\n\n    out['duration_w'] = winsor(out['duration'])\n    out['buildings_w'] = winsor(out['buildings_threatened'])\n\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Prepare modeling table: outcomes (duration, total buildings threatened), treatment proxy (full_suppression from dominant_strategy_50_s), and weather controls (avrh_mean, wind_med, erc_med, rain_sum) plus region/year/cause. Drop NAs for modeling and winsorize outcomes at 1%.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "suppression_ols",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\nimport numpy as np\nimport statsmodels.api as sm\n\ndef process(suppression_model_data) -> pd.DataFrame:\n    df = suppression_model_data.copy()\n\n    base = df[['full_suppression','avrh_mean','wind_med','erc_med','rain_sum','cause_ind','region_ind','start_year']].copy()\n\n    # Ensure numeric types for continuous vars\n    for c in ['full_suppression','avrh_mean','wind_med','erc_med','rain_sum']:\n        base[c] = pd.to_numeric(base[c], errors='coerce')\n\n    # Dummies for fixed effects\n    X = pd.get_dummies(base, columns=['cause_ind','region_ind','start_year'], drop_first=True, dtype=float)\n    X = sm.add_constant(X, has_constant='add')\n\n    # Ensure all columns numeric\n    X = X.apply(pd.to_numeric, errors='coerce').astype(float)\n\n    out_rows = []\n    for ycol in ['duration_w','buildings_w']:\n        y = pd.to_numeric(df[ycol], errors='coerce').astype(float)\n\n        reg_df = pd.concat([y.rename('y'), X], axis=1).dropna()\n        y2 = reg_df['y'].values\n        X2 = reg_df.drop(columns=['y']).values\n\n        model = sm.OLS(y2, X2)\n        res = model.fit(cov_type='HC3')\n\n        # Map coefficient index back to column names\n        colnames = reg_df.drop(columns=['y']).columns.tolist()\n        idx = colnames.index('full_suppression')\n        coef = res.params[idx]\n        se = res.bse[idx]\n        p = res.pvalues[idx]\n        ci = res.conf_int(alpha=0.05)[idx]\n\n        out_rows.append({\n            'outcome': ycol,\n            'coef_full_suppression': float(coef),\n            'se': float(se),\n            'p_value': float(p),\n            'ci95_low': float(ci[0]),\n            'ci95_high': float(ci[1]),\n            'n': int(res.nobs),\n            'r2': float(res.rsquared)\n        })\n\n    return pd.DataFrame(out_rows)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Fix OLS dtype issue by coercing all regressors to numeric, building dummies with dtype=float, dropping NAs explicitly, and fitting robust OLS for duration_w and buildings_w; report full_suppression effect.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "var_desc": {
+      "x": 100,
+      "y": 40
+    },
+    "fires": {
+      "x": 100,
+      "y": 220
+    },
+    "suppression_model_data": {
+      "x": 430,
+      "y": 220
+    },
+    "suppression_ols": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "fires-->suppression_model_data",
+      "source": {
+        "operatorID": "fires",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "suppression_model_data",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "suppression_model_data-->suppression_ols",
+      "source": {
+        "operatorID": "suppression_model_data",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "suppression_ols",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_it_reports",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv')\n    df = pd.read_csv(paths[0])\n    return pd.concat([df.head(5), df.tail(5)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample the first/last 5 rows of 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv to inspect schema and any header/format issues",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "it_reports",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv'\n    # File has a title row, blank rows, and a header row within the file.\n    df = pd.read_csv(path, header=None)\n    df.columns = ['col0','col1','col2']\n    # Keep only rows where col0 looks like a year\n    df = df[df['col0'].astype(str).str.fullmatch(r'\\d{4}', na=False)].copy()\n    df = df.rename(columns={'col0':'Year','col1':'Theft Type','col2':'Reports'})\n    df['Year'] = df['Year'].astype(int)\n    df['Reports'] = (\n        df['Reports']\n          .astype(str)\n          .str.replace(',', '', regex=False)\n          .str.strip()\n    )\n    df['Reports'] = pd.to_numeric(df['Reports'], errors='coerce')\n    df = df.dropna(subset=['Reports','Theft Type','Year'])\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv, skipping title/source/blank rows by reading header=None and filtering Year rows; parse Reports as numeric and standardize columns Year, Theft Type, Reports",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "growth_2020_2024",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(it_reports):\n    import pandas as pd\n    df = it_reports.copy()\n    # Pivot to get 2020 and 2024 per theft type\n    piv = df.pivot(index='Theft Type', columns='Year', values='Reports')\n    # Keep only 2020 and 2024\n    piv = piv[[2020, 2024]].dropna()\n    piv.columns = ['reports_2020', 'reports_2024']\n    piv = piv.reset_index()\n    # Relative growth = (2024-2020)/2020\n    piv['relative_growth'] = (piv['reports_2024'] - piv['reports_2020']) / piv['reports_2020']\n    # Also compute multiplier for readability\n    piv['growth_multiplier'] = piv['reports_2024'] / piv['reports_2020']\n    return piv.sort_values('relative_growth', ascending=False)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute relative growth from 2020 to 2024 for each Theft Type: (Reports_2024-Reports_2020)/Reports_2020; sort descending",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_it_reports": {
+      "x": 100,
+      "y": 40
+    },
+    "it_reports": {
+      "x": 100,
+      "y": 220
+    },
+    "growth_2020_2024": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "it_reports-->growth_2020_2024",
+      "source": {
+        "operatorID": "it_reports",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "growth_2020_2024",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

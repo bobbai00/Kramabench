@@ -1,0 +1,212 @@
+{
+  "headId": "step-agent-220-5-1779103385711",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load0309",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/geomag_forecast/0309geomag_forecast.txt'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [ln.rstrip('\\n') for ln in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 0309geomag_forecast.txt (NOAA SWPC geomagnetic forecast text) as raw lines into a single-column DataFrame 'line' (UTF-8 with replacement for decode errors)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load0311",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/geomag_forecast/0311geomag_forecast.txt'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [ln.rstrip('\\n') for ln in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 0311geomag_forecast.txt (NOAA SWPC geomagnetic forecast text) as raw lines into a single-column DataFrame 'line' (UTF-8 with replacement for decode errors)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load0312",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/geomag_forecast/0312geomag_forecast.txt'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [ln.rstrip('\\n') for ln in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 0312geomag_forecast.txt (NOAA SWPC geomagnetic forecast text) as raw lines into a single-column DataFrame 'line' (UTF-8 with replacement for decode errors)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load0313",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/geomag_forecast/0313geomag_forecast.txt'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [ln.rstrip('\\n') for ln in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 0313geomag_forecast.txt (NOAA SWPC geomagnetic forecast text) as raw lines into a single-column DataFrame 'line' (UTF-8 with replacement for decode errors)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "maeAp0310to0312",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load0309, load0311, load0312, load0313) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    def extract_predicted_ap(lines_df):\n        # Example: 'Predicted Ap 10 Mar-12 Mar 025-020-012'\n        pat = re.compile(r'^Predicted\\s+Ap\\s+(\\d{2})\\s+Mar-\\s*(\\d{2})\\s+Mar\\s+([0-9]{3})-([0-9]{3})-([0-9]{3})')\n        for ln in lines_df['line'].astype(str):\n            m = pat.match(ln.strip())\n            if m:\n                d1, d3, a1, a2, a3 = m.groups()\n                return {\n                    f'2025-03-{d1}': int(a1),\n                    f'2025-03-{str(int(d1)+1).zfill(2)}': int(a2),\n                    f'2025-03-{d3}': int(a3),\n                }\n        raise ValueError('Predicted Ap line not found')\n\n    def extract_observed_ap(lines_df):\n        # Example: 'Observed Ap 10 Mar 010'\n        pat = re.compile(r'^Observed\\s+Ap\\s+(\\d{2})\\s+Mar\\s+([0-9]{3})')\n        obs = {}\n        for ln in lines_df['line'].astype(str):\n            m = pat.match(ln.strip())\n            if m:\n                d, a = m.groups()\n                obs[f'2025-03-{d}'] = int(a)\n        if not obs:\n            raise ValueError('No Observed Ap lines found')\n        return obs\n\n    predicted = extract_predicted_ap(load0309)\n\n    observed = {}\n    for df in [load0311, load0312, load0313]:\n        observed.update(extract_observed_ap(df))\n\n    target_days = ['2025-03-10', '2025-03-11', '2025-03-12']\n    rows = []\n    abs_errors = []\n    for day in target_days:\n        if day not in predicted:\n            raise ValueError(f'Missing predicted Ap for {day}')\n        if day not in observed:\n            raise ValueError(f'Missing observed Ap for {day}')\n        err = abs(predicted[day] - observed[day])\n        abs_errors.append(err)\n        rows.append({'date': day, 'predictedAp': predicted[day], 'observedAp': observed[day], 'absError': err})\n\n    mae = sum(abs_errors) / len(abs_errors)\n\n    out = pd.DataFrame(rows)\n    out['mae'] = mae\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-3",
+            "displayName": "Input 3",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute MAE of NOAA SWPC 3-day Predicted Ap from 0309geomag_forecast.txt for dates 2025-03-10..2025-03-12 by: (1) regex-parse 'Predicted Ap 10 Mar-12 Mar 025-020-012' into daily predicted Ap; (2) regex-parse 'Observed Ap <day> Mar <Ap>' from 0311/0312/0313 files to get observed Ap for 10/11/12 Mar; (3) compute per-day absolute error and mean absolute error (MAE) across the three target days; return per-day table with mae scalar column",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load0309": {
+        "x": 100,
+        "y": 40
+      },
+      "load0311": {
+        "x": 100,
+        "y": 220
+      },
+      "load0312": {
+        "x": 100,
+        "y": 400
+      },
+      "load0313": {
+        "x": 100,
+        "y": 580
+      },
+      "maeAp0310to0312": {
+        "x": 400,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "load0309-->maeAp0310to0312",
+        "source": {
+          "operatorID": "load0309",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maeAp0310to0312",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load0311-->maeAp0310to0312",
+        "source": {
+          "operatorID": "load0311",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maeAp0310to0312",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "load0312-->maeAp0310to0312",
+        "source": {
+          "operatorID": "load0312",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maeAp0310to0312",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "load0313-->maeAp0310to0312",
+        "source": {
+          "operatorID": "load0313",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maeAp0310to0312",
+          "portID": "input-3"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

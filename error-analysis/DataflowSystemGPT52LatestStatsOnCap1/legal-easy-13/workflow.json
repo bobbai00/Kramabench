@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-38-6-1779100112023",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # File appears to be Windows-1252 / Latin-1 encoded (curly quotes, etc.).\n    return pd.read_csv(path, dtype=str, encoding=\"cp1252\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv from data/legal/input/csn-data-book-2024-csv/CSVs/ using pd.read_csv with dtype=str and encoding='cp1252' (fix UnicodeDecodeError from non-UTF8 curly-quote bytes).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "categoryReportRatio2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCategories2024.copy()\n\n    # The CSV is a formatted table with a blank row then a header row (Rank, Category, # of Reports, Percentage)\n    df = df.rename(\n        columns={\n            \"Unnamed: 1\": \"Category\",\n            \"Unnamed: 2\": \"NumReports\",\n            \"Unnamed: 3\": \"Percentage\",\n        }\n    )\n\n    # Keep only data rows where Rank is an integer (1..n)\n    df = df[df[\"Report Categories\"].astype(str).str.fullmatch(r\"\\d+\")].copy()\n\n    # Parse # of Reports like \"1,353,175\" -> 1353175\n    df[\"NumReports\"] = (\n        df[\"NumReports\"].astype(str).str.replace(\",\", \"\", regex=False).astype(\"int64\")\n    )\n\n    max_reports = int(df[\"NumReports\"].max())\n    min_reports = int(df[\"NumReports\"].min())\n\n    ratio = max_reports / min_reports if min_reports != 0 else float(\"nan\")\n\n    return pd.DataFrame(\n        [\n            {\n                \"max_reports\": max_reports,\n                \"min_reports\": min_reports,\n                \"ratio\": ratio,\n            }\n        ]\n    )\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From reportCategories2024 (formatted table), rename Unnamed columns to [Category, NumReports, Percentage]; filter to rows where 'Report Categories' is an integer rank; parse NumReports by removing commas and converting to int; compute ratio = max(NumReports)/min(NumReports); return single-row DataFrame with max_reports, min_reports, ratio.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "categoryReportRatio2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCategories2024-->categoryReportRatio2024",
+        "source": {
+          "operatorID": "reportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "categoryReportRatio2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

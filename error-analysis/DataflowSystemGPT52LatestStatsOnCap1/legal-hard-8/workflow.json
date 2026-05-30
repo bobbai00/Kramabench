@@ -1,0 +1,152 @@
+{
+  "headId": "step-agent-31-8-1779099995174",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "floridaIdentityTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/Florida.csv\"\n    return pd.read_csv(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Florida.csv from 'State MSA Identity Theft data' via pd.read_csv(path, dtype=str)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "floridaFraudOther",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv\"\n    # File includes a title row and then a header row (\"Metropolitan Area\", \"# of Reports\").\n    return pd.read_csv(path, dtype=str, header=None)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Florida.csv from 'State MSA Fraud and Other data' with raw rows preserved (pd.read_csv(header=None, dtype=str)) because the file has a title row and an embedded header row ('Metropolitan Area', '# of Reports') that must be parsed downstream",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "metroFraudOther2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv\"\n    # File contains non-UTF8 characters; try Windows-1252 then Latin-1 as common fallbacks\n    try:\n        return pd.read_csv(path, dtype=str, encoding=\"cp1252\")\n    except UnicodeDecodeError:\n        return pd.read_csv(path, dtype=str, encoding=\"latin1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv via pd.read_csv(dtype=str) using encoding fallback (cp1252, then latin1) to avoid UTF-8 UnicodeDecodeError",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "miamiConsistency",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(floridaFraudOther, metroFraudOther2024) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    def norm(s: str) -> str:\n        s = str(s) if s is not None else \"\"\n        s = s.lower().strip()\n        s = re.sub(r\"\\s+\", \" \", s)\n        s = s.replace(\"-\", \" \")\n        s = re.sub(r\"[^a-z0-9 ]\", \"\", s)\n        s = re.sub(r\"\\s+\", \" \", s).strip()\n        return s\n\n    def to_num(x):\n        if x is None or (isinstance(x, float) and pd.isna(x)):\n            return None\n        s = str(x).strip()\n        if s == \"\" or s.lower() in {\"nan\", \"na\", \"n/a\"}:\n            return None\n        s = re.sub(r\"[^0-9\\.-]\", \"\", s)\n        if s in {\"\", \".\", \"-\"}:\n            return None\n        try:\n            return float(s)\n        except Exception:\n            return None\n\n    target = norm(\"Miami-Fort Lauderdale-West Palm Beach\")\n\n    def find_row(df: pd.DataFrame, candidate_cols):\n        for c in candidate_cols:\n            if c in df.columns:\n                m = df[c].astype(str).map(norm).str.contains(target, na=False)\n                if m.any():\n                    return df[m].copy(), c\n        return df.iloc[0:0].copy(), None\n\n    # --- Florida fraud/other table ---\n    fl = floridaFraudOther.copy()\n    fl_cols = list(fl.columns)\n    fl_match, fl_col = find_row(fl, [\n        \"Metropolitan Areas: Fraud and Other Reports\",\n        \"Metropolitan Area\",\n        fl_cols[0] if fl_cols else \"\"\n    ])\n\n    # Try to pick report count column\n    fl_count_cols = [c for c in fl_match.columns if re.search(r\"# of reports|reports$|number of reports\", str(c), flags=re.I)]\n    # also unnamed numeric col likely second column\n    if not fl_count_cols and fl_cols:\n        if len(fl_cols) >= 2:\n            fl_count_cols = [fl_cols[1]]\n        elif len(fl_cols) == 1:\n            fl_count_cols = [fl_cols[0]]\n\n    fl_val = None\n    if len(fl_match) > 0 and fl_count_cols:\n        nums = []\n        for c in fl_count_cols:\n            nums.extend([to_num(v) for v in fl_match[c].tolist()])\n        nums = [n for n in nums if n is not None]\n        if nums:\n            fl_val = max(nums)\n\n    # --- Metro fraud/other 2024 table ---\n    metro = metroFraudOther2024.copy()\n    metro_cols = list(metro.columns)\n    metro_match, metro_col = find_row(metro, [\n        \"Metropolitan Area\",\n        \"Unnamed: 1\",\n        \"Metropolitan Areas: Fraud and Other Reports\"\n    ])\n\n    # likely count is '# of Reports' which appears as a data row in row 1; actual column is Unnamed: 3\n    metro_count_candidates = []\n    # detect by scanning row 1 header-like content\n    if len(metro) >= 2:\n        header_like = metro.iloc[1].astype(str).tolist()\n        for j, cell in enumerate(header_like):\n            if re.search(r\"#\\s*of\\s*reports\", cell, flags=re.I):\n                metro_count_candidates.append(metro.columns[j])\n    if not metro_count_candidates:\n        # fallback to common unnamed col\n        for c in [\"Unnamed: 3\", \"# of Reports\"]:\n            if c in metro.columns:\n                metro_count_candidates.append(c)\n    if not metro_count_candidates and metro_cols:\n        metro_count_candidates = [metro_cols[-1]]\n\n    metro_val = None\n    if len(metro_match) > 0 and metro_count_candidates:\n        nums = []\n        for c in metro_count_candidates:\n            if c in metro_match.columns:\n                nums.extend([to_num(v) for v in metro_match[c].tolist()])\n        nums = [n for n in nums if n is not None]\n        if nums:\n            metro_val = max(nums)\n\n    consistent = (fl_val is not None) and (metro_val is not None) and (abs(fl_val - metro_val) < 1e-9)\n\n    return pd.DataFrame([{\n        \"repCountFloridaFraudOther\": None if fl_val is None else int(fl_val) if float(fl_val).is_integer() else fl_val,\n        \"repCountMetroFraudOther2024\": None if metro_val is None else int(metro_val) if float(metro_val).is_integer() else metro_val,\n        \"consistent\": bool(consistent),\n        \"matchedRowsFlorida\": int(len(fl_match)),\n        \"matchedRowsMetro\": int(len(metro_match)),\n        \"matchedColFlorida\": fl_col,\n        \"matchedColMetro\": metro_col,\n        \"metroCountColsUsed\": \",\".join(metro_count_candidates) if metro_count_candidates else None,\n        \"flCountColsUsed\": \",\".join(fl_count_cols) if fl_count_cols else None,\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check 2024 'Fraud and Other' report count consistency for the Miami-Fort Lauderdale-West Palm Beach MSA between floridaFraudOther and metroFraudOther2024: normalize strings (lower/strip, punctuation/hyphen removal), find matching MSA row(s) by substring match, infer report-count column(s) (Florida: '# of Reports' or second column; Metro: detect '# of Reports' via row-1 header-like labels or fallback to Unnamed: 3), parse numeric counts (remove commas/non-numeric), compute representative count as max across candidate count columns, and return both counts plus boolean 'consistent' (exact equality) and match diagnostics.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "floridaIdentityTheft": {
+        "x": 100,
+        "y": 40
+      },
+      "floridaFraudOther": {
+        "x": 100,
+        "y": 220
+      },
+      "metroFraudOther2024": {
+        "x": 100,
+        "y": 400
+      },
+      "miamiConsistency": {
+        "x": 400,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "floridaFraudOther-->miamiConsistency",
+        "source": {
+          "operatorID": "floridaFraudOther",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "miamiConsistency",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metroFraudOther2024-->miamiConsistency",
+        "source": {
+          "operatorID": "metroFraudOther2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "miamiConsistency",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-224-5-1779103430872",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fireWeather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv\"\n    # read as strings first to avoid dtype issues; we'll coerce needed columns later\n    return pd.read_csv(path, dtype=str, low_memory=False)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Fire_Weather_Data_2002-2014_2016.csv via pd.read_csv from data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv; read all columns as strings (dtype=str, low_memory=False) to preserve raw values for later coercion",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "causeOver100Counts",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fireWeather):\n    import pandas as pd\n\n    df = fireWeather.copy()\n\n    # Ensure we're only considering fires impacting >100 acres.\n    # 'gt_100' is a binary indicator in this dataset (all 1s per profile), but keep filter for correctness.\n    df = df[df['gt_100'].astype(str).str.strip().eq('1')]\n\n    # Map cause codes to the two categories requested.\n    # Observed codes: L=Lightning, H=Human, others (U,N,O) ignored for this question.\n    cause = df['cause'].astype(str).str.strip().str.upper()\n    df = df.assign(causeCategory=cause.map({'L': 'Lightning', 'H': 'Human'}))\n    df = df[df['causeCategory'].isin(['Lightning', 'Human'])]\n\n    out = (\n        df.groupby('causeCategory', dropna=False)\n          .size()\n          .reset_index(name='fireCountOver100Acres')\n          .sort_values('fireCountOver100Acres', ascending=False, kind='mergesort')\n          .reset_index(drop=True)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter fireWeather to fires with gt_100 == '1' (impacting >100 acres); map cause codes using cause column (L\u2192Lightning, H\u2192Human), drop other/unknown causes; groupby causeCategory and count rows as fireCountOver100Acres; sort descending by fireCountOver100Acres",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fireWeather": {
+        "x": 100,
+        "y": 40
+      },
+      "causeOver100Counts": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fireWeather-->causeOver100Counts",
+        "source": {
+          "operatorID": "fireWeather",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "causeOver100Counts",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-24-5-1779099865627",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topThreeIdentityTheftReportsByYear",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv via pd.read_csv (comma delimiter, first row header, UTF-8) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "creditCardFraudRatio2024to2020",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topThreeIdentityTheftReportsByYear) -> pd.DataFrame:\n    import pandas as pd\n\n    df = topThreeIdentityTheftReportsByYear.copy()\n    # Keep the real header row and data rows only (drop blank rows / notes)\n    df = df.dropna(how='all')\n\n    # Rename columns to semantic names\n    df = df.rename(columns={\n        'Top Three Identity Theft Reports by Year': 'year',\n        'Unnamed: 1': 'theftType',\n        'Unnamed: 2': 'reports'\n    })\n\n    # Remove the repeated header row embedded in the data (year='Theft Type', theftType='Year')\n    df = df[~((df['year'] == 'Theft Type') & (df['theftType'] == 'Year'))]\n\n    # Normalize types\n    df['year'] = df['year'].astype(str).str.strip()\n    df['theftType'] = df['theftType'].astype(str).str.strip()\n    df['reports'] = (\n        df['reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n\n    # Filter to Credit Card reports for 2020 and 2024\n    cc = df[df['theftType'].str.casefold() == 'credit card']\n    reports2020 = cc.loc[cc['year'] == '2020', 'reports'].sum(min_count=1)\n    reports2024 = cc.loc[cc['year'] == '2024', 'reports'].sum(min_count=1)\n\n    ratio = reports2024 / reports2020\n\n    return pd.DataFrame([{\n        'reports2024': float(reports2024),\n        'reports2020': float(reports2020),\n        'ratio': float(ratio),\n        'ratioRounded4': round(float(ratio), 4)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute ratio of Credit Card identity theft reports (as proxy for reported credit card frauds) between 2024 and 2020 from topThreeIdentityTheftReportsByYear: drop all-null rows; rename columns to [year, theftType, reports]; remove embedded header row where year='Theft Type' and theftType='Year'; parse reports by removing commas and converting to numeric; filter theftType=='Credit Card'; sum reports for year 2024 and 2020; compute ratio=reports2024/reports2020 and include ratioRounded4.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topThreeIdentityTheftReportsByYear": {
+        "x": 100,
+        "y": 40
+      },
+      "creditCardFraudRatio2024to2020": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topThreeIdentityTheftReportsByYear-->creditCardFraudRatio2024to2020",
+        "source": {
+          "operatorID": "topThreeIdentityTheftReportsByYear",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "creditCardFraudRatio2024to2020",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

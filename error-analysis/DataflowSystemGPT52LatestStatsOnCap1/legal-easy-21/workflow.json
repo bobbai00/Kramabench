@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-611-6-1779125196595",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "stateIdentityTheftReports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Identity_Theft_Reports.csv\"\n    # File has a title row then header row; skip blank/title row and use the next row as header\n    df = pd.read_csv(path, skiprows=1)\n    # Normalize column names\n    df = df.rename(columns={\n        df.columns[0]: \"state\",\n        df.columns[1]: \"theftType\",\n        df.columns[2]: \"reports\",\n        df.columns[3]: \"percentage\",\n    })\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Identity_Theft_Reports.csv with skiprows=1 to drop the leading title/blank row; use the next row as header; rename columns to [state, theftType, reports, percentage]",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "alabamaTotalReporters",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(stateIdentityTheftReports) -> pd.DataFrame:\n    import pandas as pd\n\n    df = stateIdentityTheftReports.copy()\n\n    # Keep only Alabama rows with actual theft categories (exclude header/footer/text rows)\n    df = df[(df[\"state\"] == \"Alabama\") & (df[\"theftType\"].notna())]\n\n    # Parse reports like \"1,202\" -> 1202\n    reports = (\n        df[\"reports\"]\n        .astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.replace(\"#\", \"\", regex=False)\n        .str.strip()\n    )\n    df = df.assign(reportsNum=pd.to_numeric(reports, errors=\"coerce\"))\n\n    total = df[\"reportsNum\"].sum(min_count=1)\n    return pd.DataFrame([{\"totalIdentityTheftReportersAlabama2024\": int(total) if pd.notna(total) else None}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter stateIdentityTheftReports to rows where state == 'Alabama' and theftType is non-null; parse 'reports' strings by removing commas/# and converting to numeric; sum reportsNum across Alabama theft types to compute total identity theft reports in Alabama for 2024; output single-row DataFrame with totalIdentityTheftReportersAlabama2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "stateIdentityTheftReports": {
+        "x": 100,
+        "y": 40
+      },
+      "alabamaTotalReporters": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "stateIdentityTheftReports-->alabamaTotalReporters",
+        "source": {
+          "operatorID": "stateIdentityTheftReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "alabamaTotalReporters",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

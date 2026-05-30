@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-617-6-1779125322964",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv\"\n    return pd.read_csv(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Type.csv via pd.read_csv (dtype=str) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv to access totals for all report types.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv\"\n    # File contains non-UTF8 bytes (e.g., Windows-1252 en dash); use latin-1 to decode safely\n    return pd.read_csv(path, dtype=str, encoding=\"latin-1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Identity_Theft_Reports_by_Type.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv via pd.read_csv with dtype=str and encoding='latin-1' to handle non-UTF8 characters.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calcProportion",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportType, identityTheftByType):\n    import pandas as pd\n\n    # ---- Denominator: total # of reports (all report types) ----\n    rt = reportType.copy()\n    rt = rt.rename(columns={rt.columns[0]: 'report_type', rt.columns[1]: 'num_reports_raw'})\n\n    # Keep rows that look like actual report type entries with a numeric count\n    rt = rt[rt['report_type'].notna() & rt['num_reports_raw'].notna()]\n    rt['num_reports'] = (\n        rt['num_reports_raw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+)', expand=False)\n        .astype('float')\n    )\n\n    total_all_reports = rt['num_reports'].sum()\n\n    # ---- Numerator: identity theft reports with Theft Type=Bank Account & Theft Subtype=New Accounts ----\n    it = identityTheftByType.copy()\n    it = it.rename(columns={it.columns[0]: 'theft_type', it.columns[1]: 'theft_subtype', it.columns[2]: 'num_reports_raw'})\n    it = it[it['theft_type'].notna() & it['theft_subtype'].notna() & it['num_reports_raw'].notna()]\n\n    it['num_reports'] = (\n        it['num_reports_raw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+)', expand=False)\n        .astype('float')\n    )\n\n    mask = (it['theft_type'].str.strip().str.casefold() == 'bank account') & (\n        it['theft_subtype'].str.strip().str.casefold() == 'new accounts'\n    )\n    num = it.loc[mask, 'num_reports'].sum()\n\n    prop = num / total_all_reports if total_all_reports else float('nan')\n\n    return pd.DataFrame([\n        {\n            'numerator_reports_bank_account_new_accounts': num,\n            'denominator_total_all_reports': total_all_reports,\n            'proportion': prop,\n            'proportion_rounded_4dp': round(prop, 4) if pd.notna(prop) else None,\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute proportion of all reports that are identity theft reports with Theft Type='Bank Account' and Theft Subtype='New Accounts': denominator = sum of numeric '# of Reports' across all rows in 2024_CSN_Report_Type.csv; numerator = '# of Reports' in 2024_CSN_Identity_Theft_Reports_by_Type.csv filtered to theft_type='Bank Account' and theft_subtype='New Accounts'; parse counts by removing commas; output numerator, denominator, and proportion (raw and rounded to 4 dp).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportType": {
+        "x": 100,
+        "y": 40
+      },
+      "identityTheftByType": {
+        "x": 100,
+        "y": 220
+      },
+      "calcProportion": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportType-->calcProportion",
+        "source": {
+          "operatorID": "reportType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calcProportion",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identityTheftByType-->calcProportion",
+        "source": {
+          "operatorID": "identityTheftByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calcProportion",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

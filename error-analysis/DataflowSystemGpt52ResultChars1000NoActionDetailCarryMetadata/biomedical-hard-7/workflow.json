@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "xlsx",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    xl = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xl.sheet_names})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List sheet names in data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx to locate acetylproteomics significant genes",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "acetyl",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    # Load acetyl sheet\n    df = pd.read_excel(path, sheet_name='D-SE-acetyl')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load sheet 'D-SE-acetyl' from data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx (acetylproteomics splicing event associations).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "acetyl_genes",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(acetyl) -> pd.DataFrame:\n    import pandas as pd\n    # Sheet appears to be a single-column list of significant genes; column header may itself be a gene.\n    genes = []\n    # include column names that look like gene symbols\n    for c in acetyl.columns:\n        if pd.notna(c) and str(c).strip() != '':\n            genes.append(str(c).strip())\n    # include all cell values\n    for c in acetyl.columns:\n        genes.extend([str(x).strip() for x in acetyl[c].dropna().tolist() if str(x).strip() != ''])\n    genes = pd.Series(genes).drop_duplicates().sort_values().reset_index(drop=True)\n    return pd.DataFrame({'gene': genes, 'is_significant_acetylproteomics': True})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Extract unique gene symbols from acetylproteomics sheet by combining the header gene (if present) and all non-null cell values into a distinct gene list.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "acetyl_sig_count",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(acetyl_genes):\n    # Count distinct significant genes (each row is a unique gene)\n    return acetyl_genes[['gene']].drop_duplicates().assign(count=1).iloc[[0]][['count']].assign(count=len(acetyl_genes[['gene']].drop_duplicates()))\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Count the number of distinct significant genes listed in acetyl_genes (acetylproteomics).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "xlsx": {
+      "x": 100,
+      "y": 40
+    },
+    "acetyl": {
+      "x": 100,
+      "y": 220
+    },
+    "acetyl_genes": {
+      "x": 430,
+      "y": 220
+    },
+    "acetyl_sig_count": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "acetyl-->acetyl_genes",
+      "source": {
+        "operatorID": "acetyl",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "acetyl_genes",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "acetyl_genes-->acetyl_sig_count",
+      "source": {
+        "operatorID": "acetyl_genes",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "acetyl_sig_count",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

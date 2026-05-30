@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-478-6-1779120551191",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadInitialStates",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/astronomy/input/STORM-AI/warmup/v2/wu001_to_wu715-initial_states.csv\"\n    df = pd.read_csv(path)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wu001_to_wu715-initial_states.csv via pd.read_csv (comma delimiter, first row header, UTF-8) to obtain daily initial-state timestamps and related metadata",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadSwarmDensity2015",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = 'data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-*2015*.csv'\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f'No files matched pattern: {pattern}')\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df['__source_file'] = p.split('/')[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all Swarm Alpha atmospheric density CSVs matching pattern swarma-*2015*.csv (glob) from Sat_Density/; read each via pd.read_csv, add provenance column __source_file (basename), and concatenate into a single DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "avgDensity2015AtMidnightAlt450to500",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadInitialStates, loadSwarmDensity2015):\n    import pandas as pd\n    import numpy as np\n\n    # --- initial states: keep 2015, midnight timestamps, altitude window ---\n    ist = loadInitialStates.copy()\n    ist['Timestamp'] = pd.to_datetime(ist['Timestamp'], errors='coerce')\n    ist = ist.dropna(subset=['Timestamp'])\n\n    # Ensure exactly 00:00:00 (should already be, but enforce)\n    ist = ist[ist['Timestamp'].dt.time == pd.Timestamp('00:00:00').time()]\n    ist = ist[ist['Timestamp'].dt.year == 2015]\n    ist = ist[(ist['Altitude (km)'] >= 450) & (ist['Altitude (km)'] <= 500)]\n\n    # unique daily timestamps at midnight\n    midnightDays = ist[['Timestamp']].drop_duplicates()\n\n    # --- density: parse, keep 2015 only, clean invalid values ---\n    den = loadSwarmDensity2015.copy()\n    den['Timestamp'] = pd.to_datetime(den['Timestamp'], errors='coerce')\n    den = den.dropna(subset=['Timestamp'])\n\n    den = den[den['Timestamp'].dt.year == 2015]\n\n    col = 'Orbit Mean Density (kg/m^3)'\n    den[col] = pd.to_numeric(den[col], errors='coerce')\n    # Clean n/a (becomes NaN) and 9.99E32 sentinel (and any extremely large ~1e33 values)\n    den.loc[den[col].isin([9.99e32, 9.989999999999999e32]), col] = np.nan\n    den.loc[den[col] > 1e30, col] = np.nan\n\n    # Keep only 00:00 density measurements\n    den = den[den['Timestamp'].dt.time == pd.Timestamp('00:00:00').time()]\n\n    # Join on timestamp to keep only days present in initial state subset\n    joined = midnightDays.merge(den[['Timestamp', col]], on='Timestamp', how='inner')\n\n    avg = joined[col].mean(skipna=True)\n\n    return pd.DataFrame([\n        {\n            'n_initialstate_days_alt450_500': int(midnightDays.shape[0]),\n            'n_matched_density_midnights': int(joined.shape[0]),\n            'avg_density_kg_m3': avg,\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average Swarm Alpha Orbit Mean Density (kg/m^3) at 00:00 for 2015 days that appear in initial-states file and have altitude in [450, 500] km: filter initial states to Timestamp year=2015 and time==00:00:00 and Altitude (km) between 450 and 500; deduplicate timestamps; filter density table to year=2015 and time==00:00:00; coerce Orbit Mean Density to numeric and set invalid/sentinel values (n/a->NaN, 9.99E32 and any >1e30) to NaN; inner-join on Timestamp; compute mean density across matched midnights and return mean plus counts.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadInitialStates": {
+        "x": 100,
+        "y": 40
+      },
+      "loadSwarmDensity2015": {
+        "x": 100,
+        "y": 220
+      },
+      "avgDensity2015AtMidnightAlt450to500": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadInitialStates-->avgDensity2015AtMidnightAlt450to500",
+        "source": {
+          "operatorID": "loadInitialStates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgDensity2015AtMidnightAlt450to500",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadSwarmDensity2015-->avgDensity2015AtMidnightAlt450to500",
+        "source": {
+          "operatorID": "loadSwarmDensity2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgDensity2015AtMidnightAlt450to500",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

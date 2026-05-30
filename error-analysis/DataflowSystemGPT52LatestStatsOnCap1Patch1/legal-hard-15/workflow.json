@@ -1,0 +1,219 @@
+{
+  "headId": "step-agent-45-40-1779139672621",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadMsaIdentityTheft2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        # Files in this folder are expected to be tabular CSVs with a header row.\n        df = pd.read_csv(p)\n        df[\"_source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSVs matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv' via glob; read each with pd.read_csv (header inferred, comma delimiter), add provenance column '_source_file' (basename), and concatenate into one DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanMsaIdentityTheft2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadMsaIdentityTheft2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadMsaIdentityTheft2024.copy()\n\n    metro_col = 'Metropolitan Areas: Identity Theft Reports'\n    reports_col = 'Unnamed: 1'\n\n    out = df[[metro_col, reports_col, '_source_file']].rename(\n        columns={metro_col: 'metropolitan_area', reports_col: 'reports_raw'}\n    )\n\n    out['metropolitan_area'] = out['metropolitan_area'].astype('string').fillna('').str.strip()\n    rep = out['reports_raw'].astype('string').fillna('').str.strip()\n\n    # Drop headers/footers/blanks\n    is_blank = out['metropolitan_area'].eq('')\n    is_header = out['metropolitan_area'].str.fullmatch(r'(?i)metropolitan\\s+area', na=False)\n    is_source = out['metropolitan_area'].str.match(r'(?i)^source:', na=False)\n\n    out = out.loc[~(is_blank | is_header | is_source)].copy()\n\n    # Parse report counts\n    rep = rep.loc[out.index]\n    rep = rep.replace({'': pd.NA, 'nan': pd.NA, 'N/A': pd.NA, 'NA': pd.NA, '-': pd.NA})\n    rep = rep.str.replace(',', '', regex=False)\n    out['reports'] = pd.to_numeric(rep.str.extract(r'(\\d+)', expand=False), errors='coerce')\n\n    out = out.dropna(subset=['reports'])\n\n    return out[['metropolitan_area', 'reports', '_source_file']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean MSA identity theft 2024 rows from loadMsaIdentityTheft2024: rename columns to ['metropolitan_area','reports_raw','_source_file']; trim strings; drop blank rows and header/footer rows where metropolitan_area is empty, equals 'Metropolitan Area' (case-insensitive), or starts with 'Source:'; parse reports from reports_raw by stripping, removing commas, extracting digits, converting to numeric; drop rows with missing reports; output ['metropolitan_area','reports','_source_file'].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectCleanIssue",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadMsaIdentityTheft2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadMsaIdentityTheft2024.copy()\n    metro_col = 'Metropolitan Areas: Identity Theft Reports'\n    reports_col = 'Unnamed: 1'\n\n    out = df[[metro_col, reports_col, '_source_file']].rename(\n        columns={metro_col: 'metropolitan_area', reports_col: 'reports_raw'}\n    )\n\n    out['metro_str'] = out['metropolitan_area'].astype('string')\n    out['metro_norm'] = out['metro_str'].fillna('').str.strip()\n\n    rep = out['reports_raw'].astype('string')\n    out['rep_norm'] = rep.fillna('').str.strip()\n    out['rep_norm_nocomma'] = out['rep_norm'].str.replace(',', '', regex=False)\n    out['rep_num_extracted'] = out['rep_norm_nocomma'].str.extract(r'(\\d+)', expand=False)\n\n    looks_like_msa = out['metro_norm'].str.contains('Metropolitan Statistical Area', case=False, na=False)\n    sample = out.loc[looks_like_msa, ['_source_file','metropolitan_area','reports_raw','rep_norm','rep_num_extracted']].head(50)\n\n    bad = (\n        out['metro_norm'].eq('')\n        | out['metro_norm'].str.match(r'(?i)^source:')\n        | out['metro_norm'].eq('Metropolitan Area')\n    )\n    dropped_examples = out.loc[bad, ['_source_file','metropolitan_area','reports_raw']].head(20)\n\n    # Ensure we always return a non-empty schema even if samples are empty.\n    if sample.empty and dropped_examples.empty:\n        return pd.DataFrame(columns=['_section','_source_file','metropolitan_area','reports_raw','rep_norm','rep_num_extracted'])\n\n    return pd.concat([\n        sample.assign(_section='looks_like_msa').reset_index(drop=True),\n        dropped_examples.assign(_section='dropped_examples').reset_index(drop=True)\n    ], ignore_index=True)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: from loadMsaIdentityTheft2024, normalize metro/report strings and extract digits from report counts; return (a) up to 50 rows where metropolitan_area contains 'Metropolitan Statistical Area' and (b) up to 20 rows that match drop rules (blank/header/footer). If both subsets are empty, return an empty DataFrame with fixed debug columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "crossStateMsaReports2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanMsaIdentityTheft2024) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    df = cleanMsaIdentityTheft2024.copy()\n\n    # Metropolitan Statistical Areas only (exclude micropolitan)\n    msa = df[df['metropolitan_area'].str.contains(r'Metropolitan Statistical Area', case=False, na=False)].copy()\n\n    # Cross-state MSAs in this CSN table are denoted by state abbreviation pairs joined by a hyphen, e.g., PA-NJ\n    # (Some MSAs may contain multiple states like DC-VA-MD-WV; the hyphen pattern will still match.)\n    cross_state = msa[msa['metropolitan_area'].str.contains(r'\\b[A-Z]{2}(?:-[A-Z]{2})+\\b', regex=True, na=False)].copy()\n\n    total = pd.to_numeric(cross_state['reports'], errors='coerce').sum()\n\n    return pd.DataFrame({'total_identity_theft_reports_2024_cross_state_msa': [int(total)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From cleanMsaIdentityTheft2024, restrict to rows whose metropolitan_area contains 'Metropolitan Statistical Area' (exclude micropolitan); identify cross-state MSAs by presence of >=2 state abbreviations joined by hyphens (regex '\\\\b[A-Z]{2}(?:-[A-Z]{2})+\\\\b', e.g., 'PA-NJ' or 'DC-VA-MD'); sum 'reports' across these rows; return single integer total_identity_theft_reports_2024_cross_state_msa.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectCrossStateCandidates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanMsaIdentityTheft2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanMsaIdentityTheft2024.copy()\n\n    # Focus on Metropolitan Statistical Areas\n    msa = df[df['metropolitan_area'].str.contains(r'Metropolitan Statistical Area', case=False, na=False)].copy()\n\n    # Candidate cross-state patterns commonly used in CSN tables\n    patterns = [\n        r'\\b[A-Z]{2}\\s*/\\s*[A-Z]{2}\\b',           # TX/AR\n        r'\\b[A-Z]{2}-[A-Z]{2}\\b',                 # TX-AR\n        r'\\b[A-Z]{2}\\s*&\\s*[A-Z]{2}\\b',         # TX & AR\n        r'\\b[A-Z]{2}\\s+and\\s+[A-Z]{2}\\b',       # TX and AR\n    ]\n\n    cand = msa.copy()\n    mask = False\n    for pat in patterns:\n        mask = mask | cand['metropolitan_area'].str.contains(pat, regex=True, na=False)\n    cand = cand[mask].copy()\n\n    # If still empty, return most suspicious names containing multiple commas (often multiple states)\n    if cand.empty:\n        cand = msa[msa['metropolitan_area'].str.count(',') >= 2].copy()\n\n    # Return a sample plus counts\n    out = cand[['metropolitan_area', 'reports', '_source_file']].sort_values('metropolitan_area')\n    out = out.head(200)\n\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: from cleanMsaIdentityTheft2024, restrict to Metropolitan Statistical Areas; find candidate cross-state MSAs by searching metropolitan_area for state-abbrev separators (TX/AR, TX-AR, TX & AR, TX and AR). If none found, fall back to names with >=2 commas; return up to 200 candidate rows with metropolitan_area, reports, _source_file for pattern inspection.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadMsaIdentityTheft2024": {
+        "x": 100,
+        "y": 220
+      },
+      "cleanMsaIdentityTheft2024": {
+        "x": 400,
+        "y": 130
+      },
+      "inspectCleanIssue": {
+        "x": 400,
+        "y": 310
+      },
+      "crossStateMsaReports2024": {
+        "x": 700,
+        "y": 40
+      },
+      "inspectCrossStateCandidates": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadMsaIdentityTheft2024-->inspectCleanIssue",
+        "source": {
+          "operatorID": "loadMsaIdentityTheft2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectCleanIssue",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadMsaIdentityTheft2024-->cleanMsaIdentityTheft2024",
+        "source": {
+          "operatorID": "loadMsaIdentityTheft2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanMsaIdentityTheft2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanMsaIdentityTheft2024-->inspectCrossStateCandidates",
+        "source": {
+          "operatorID": "cleanMsaIdentityTheft2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectCrossStateCandidates",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanMsaIdentityTheft2024-->crossStateMsaReports2024",
+        "source": {
+          "operatorID": "cleanMsaIdentityTheft2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "crossStateMsaReports2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

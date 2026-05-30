@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-104-11-1779101186054",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # File appears to use Windows-1252 smart quotes (0x93/0x94), so use cp1252.\n    return pd.read_csv(path, dtype=str, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv via pd.read_csv with dtype=str and encoding='cp1252' (handles Windows-1252 smart-quote bytes like 0x93/0x94) to preserve category labels exactly",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "militaryConsumers",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv'\n    # Use cp1252 for consistency with CSN Data Book exports; keep raw strings.\n    return pd.read_csv(path, dtype=str, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Reports_by_Military_Consumers.csv via pd.read_csv with dtype=str and encoding='cp1252' to preserve labels and avoid Windows-1252 decode issues",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "imposterComparison",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories, militaryConsumers) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    def find_header_row(df: pd.DataFrame, first_col_name: str, marker: str) -> int:\n        # return first row index where first column equals marker\n        col0 = df.columns[0]\n        m = df[col0].astype(str).str.strip().eq(marker)\n        idxs = df.index[m].tolist()\n        if not idxs:\n            raise ValueError(f\"Could not find header marker '{marker}' in {first_col_name}\")\n        return idxs[0]\n\n    def normalize_cols(cols):\n        return [str(c).strip() for c in cols]\n\n    def to_float_pct(x) -> float:\n        s = str(x).strip()\n        s = s.replace('%', '')\n        return float(s)\n\n    # ---------------- General population (overall reports): 2024_CSN_Report_Categories.csv ----------------\n    rc = reportCategories.copy()\n    rc.columns = [f\"col{i}\" for i in range(rc.shape[1])]\n\n    hdr_idx = rc.index[rc['col0'].astype(str).str.strip().eq('Rank')].tolist()\n    if not hdr_idx:\n        raise ValueError(\"Could not locate embedded header row (Rank) in reportCategories\")\n    hdr_idx = hdr_idx[0]\n\n    header = normalize_cols(rc.loc[hdr_idx].tolist())\n    rc2 = rc.loc[hdr_idx + 1 :].copy()\n    rc2.columns = header\n\n    # keep plausible data rows (Rank numeric)\n    rc2['Rank'] = rc2['Rank'].astype(str).str.strip()\n    rc2 = rc2[rc2['Rank'].str.fullmatch(r\"\\d+\")].copy()\n\n    cat_col = 'Category' if 'Category' in rc2.columns else None\n    pct_col = 'Percentage' if 'Percentage' in rc2.columns else None\n    if cat_col is None or pct_col is None:\n        raise ValueError(f\"Expected columns Category & Percentage in general table, got {rc2.columns.tolist()}\")\n\n    rc2[cat_col] = rc2[cat_col].astype(str).str.strip()\n    gen_row = rc2[rc2[cat_col].eq('Imposter Scams')]\n    if gen_row.empty:\n        raise ValueError(\"Could not find 'Imposter Scams' row in general categories table\")\n    gen_pct = gen_row.iloc[0][pct_col]\n    gen_val = to_float_pct(gen_pct)\n\n    # ---------------- Military consumers: Top 10 Fraud Categories section ----------------\n    mc = militaryConsumers.copy()\n    mc.columns = [f\"col{i}\" for i in range(mc.shape[1])]\n\n    # locate the section label row\n    section_idxs = mc.index[mc['col0'].astype(str).str.contains(r\"^Top\\s*10\\s*Fraud\\s*Categories$\", case=False, regex=True)].tolist()\n    if not section_idxs:\n        raise ValueError(\"Could not find 'Top 10 Fraud Categories' section in militaryConsumers\")\n    section_idx = section_idxs[0]\n\n    # Within a few rows after section label, find embedded header with 'Rank'\n    window = mc.loc[section_idx + 1 : section_idx + 10].copy()\n    rank_rows = window.index[window['col0'].astype(str).str.strip().eq('Rank')].tolist()\n    if not rank_rows:\n        raise ValueError(\"Could not find embedded header row starting with 'Rank' after 'Top 10 Fraud Categories'\")\n    mc_hdr = rank_rows[0]\n\n    mc_header = normalize_cols(mc.loc[mc_hdr].tolist())\n    mc2 = mc.loc[mc_hdr + 1 :].copy()\n    mc2.columns = mc_header\n\n    # data rows: Rank numeric\n    mc2['Rank'] = mc2['Rank'].astype(str).str.strip()\n    mc2 = mc2[mc2['Rank'].str.fullmatch(r\"\\d+\")].copy()\n\n    # Identify category column\n    if 'Category' not in mc2.columns:\n        raise ValueError(f\"Could not find 'Category' column in military fraud table. Columns: {mc2.columns.tolist()}\")\n\n    # In this table, the percent of reports is in column 'Percentage' in the PDF-like layout,\n    # but in CSV it appears as the 4th column named '%' (often '%') or something like '% of Reports'.\n    # We will pick the column that contains a '%' character in its header and whose values look like '23%'.\n    pct_candidates = [c for c in mc2.columns if '%' in str(c)]\n    if not pct_candidates:\n        # fall back: any column (excluding Rank/Category/# of Reports/Total/Median) where values endwith %\n        excluded = {'Rank', 'Category', '# of Reports', 'Total $ Loss', 'Median $ Loss', '% Reporting $ Loss'}\n        other_cols = [c for c in mc2.columns if c not in excluded]\n        pct_candidates = other_cols\n\n    # choose candidate with most percent-like values\n    def pct_like_count(col):\n        vals = mc2[col].astype(str).str.strip()\n        return int(vals.str.contains(r\"%$\").sum())\n\n    if not pct_candidates:\n        raise ValueError(f\"Could not identify percent column in military fraud table. Columns: {mc2.columns.tolist()}\")\n\n    pct_col2 = sorted(pct_candidates, key=pct_like_count, reverse=True)[0]\n\n    mc2['Category'] = mc2['Category'].astype(str).str.strip()\n    mil_row = mc2[mc2['Category'].eq('Imposter Scams')]\n    if mil_row.empty:\n        raise ValueError(\"Could not find 'Imposter Scams' row in military fraud categories table\")\n\n    mil_pct = mil_row.iloc[0][pct_col2]\n    mil_val = to_float_pct(mil_pct)\n\n    return pd.DataFrame([\n        {\n            'generalImposterPct': gen_val,\n            'militaryImposterPct': mil_val,\n            'militaryHigher': bool(mil_val > gen_val),\n            'militaryPctColUsed': pct_col2,\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare Imposter Scams share of reports between general population and military consumers for 2024. General: in reportCategories, detect embedded header row where col0=='Rank', set that as header, keep numeric Rank rows, extract 'Imposter Scams' from Category and parse Percentage as float. Military: in militaryConsumers, locate 'Top 10 Fraud Categories' section then embedded header row starting with 'Rank', set header, keep numeric Rank rows, extract 'Imposter Scams' and identify the percent-of-reports column by choosing the header containing '%' (or best matching percent-like values), parse that percent string to float. Output generalImposterPct, militaryImposterPct, militaryHigher, and the military percent column used.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectMilitaryRaw",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(militaryConsumers) -> pd.DataFrame:\n    import pandas as pd\n    df = militaryConsumers.copy()\n    df.columns = [f'col{i}' for i in range(df.shape[1])]\n    df['col0'] = df['col0'].astype(str)\n\n    # expose rows that likely contain 'imposter' anywhere\n    mask = df.apply(lambda r: r.astype(str).str.contains('imposter', case=False, na=False).any(), axis=1)\n    hits = df[mask].copy()\n\n    # also show all distinct values in first column (trimmed), to see exact labels\n    firstcol = (\n        df['col0']\n        .replace({'nan': pd.NA})\n        .dropna()\n        .astype(str)\n        .str.strip()\n        .drop_duplicates()\n        .sort_values()\n        .reset_index(drop=True)\n    )\n    distinct = pd.DataFrame({'col0Distinct': firstcol})\n\n    # return both views stacked with a separator row\n    sep = pd.DataFrame([{'col0': '---DISTINCT_COL0---'}])\n    # align columns\n    sep = sep.reindex(columns=df.columns)\n    distinct2 = distinct.rename(columns={'col0Distinct': 'col0'}).reindex(columns=df.columns)\n\n    out = pd.concat([hits, sep, distinct2], ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: from militaryConsumers, rename columns to col0..col5; return (a) any rows containing 'imposter' in any column (case-insensitive) plus (b) a distinct sorted list of trimmed col0 values appended after a separator to reveal the exact Imposter label used",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "militaryConsumers": {
+        "x": 100,
+        "y": 295
+      },
+      "imposterComparison": {
+        "x": 400,
+        "y": 115
+      },
+      "inspectMilitaryRaw": {
+        "x": 400,
+        "y": 370
+      }
+    },
+    "links": [
+      {
+        "linkID": "militaryConsumers-->inspectMilitaryRaw",
+        "source": {
+          "operatorID": "militaryConsumers",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectMilitaryRaw",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "reportCategories-->imposterComparison",
+        "source": {
+          "operatorID": "reportCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "imposterComparison",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "militaryConsumers-->imposterComparison",
+        "source": {
+          "operatorID": "militaryConsumers",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "imposterComparison",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

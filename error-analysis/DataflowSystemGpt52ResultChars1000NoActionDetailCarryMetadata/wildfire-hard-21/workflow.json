@@ -1,0 +1,133 @@
+{
+  "operators": [
+    {
+      "operatorID": "var_desc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    # Try a tolerant encoding since file appears to contain Windows-1252 smart quotes\n    return pd.read_csv(\n        'data/wildfire/input/noaa_wildfires_variabledescrip.csv',\n        encoding='cp1252'\n    )\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NOAA wildfires variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv using cp1252 encoding to avoid UnicodeDecodeError",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "wildfires",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv', low_memory=False)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NOAA wildfires incident dataset from data/wildfire/input/noaa_wildfires.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "zhvi",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/ZHVI.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load Zillow Home Value Index (ZHVI) data from data/wildfire/input/ZHVI.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "zhvi_2005_2010",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef process(zhvi: pd.DataFrame) -> pd.DataFrame:\n    df = zhvi.copy()\n    df = df.rename(columns={'Unnamed: 0': 'date'})\n    df['year'] = pd.to_datetime(df['date']).dt.year\n    df = df[df['year'].isin([2005, 2010])]\n\n    # average within year (monthly observations)\n    value_cols = [c for c in df.columns if c not in ['date', 'year']]\n    yearly = df.groupby('year')[value_cols].mean(numeric_only=True)\n\n    # ensure both years present\n    if 2005 not in yearly.index or 2010 not in yearly.index:\n        raise ValueError('ZHVI does not contain both 2005 and 2010')\n\n    lost = (yearly.loc[2005] - yearly.loc[2010]).rename('value_lost').to_frame()\n    lost['state'] = lost.index\n    lost = lost.reset_index(drop=True)\n\n    # keep only positive losses\n    lost = lost[lost['value_lost'] > 0]\n    return lost.sort_values('value_lost', ascending=False).head(3)[['state','value_lost']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "From ZHVI monthly time series: compute mean ZHVI for years 2005 and 2010 (averaging monthly values), calculate value_lost = mean_2005 - mean_2010 per state, keep positive losses, return top 3 states by value_lost.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "var_desc": {
+      "x": 100,
+      "y": 40
+    },
+    "wildfires": {
+      "x": 100,
+      "y": 220
+    },
+    "zhvi": {
+      "x": 100,
+      "y": 400
+    },
+    "zhvi_2005_2010": {
+      "x": 430,
+      "y": 400
+    }
+  },
+  "links": [
+    {
+      "linkID": "zhvi-->zhvi_2005_2010",
+      "source": {
+        "operatorID": "zhvi",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "zhvi_2005_2010",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

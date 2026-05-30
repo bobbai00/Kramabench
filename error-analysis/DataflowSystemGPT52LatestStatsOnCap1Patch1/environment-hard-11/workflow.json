@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-77-6-1779139989903",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "pleasureBayLoad",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv'\n    # File has multi-row header/metadata; actual column names are on row 2 (0-based).\n    return pd.read_csv(path, header=2)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load pleasure_bay_and_castle_island_beach_datasheet.csv via pd.read_csv with header=2 (skip first two metadata/header rows so real column names and data align)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "pleasureBayFailAvgRain",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pleasureBayLoad) -> pd.DataFrame:\n    import pandas as pd\n\n    df = pleasureBayLoad.copy()\n\n    # Determine which Enterococcus column corresponds to Pleasure Bay Beach.\n    # Convention in this datasheet: the first Enterococcus column (no suffix) is Pleasure Bay;\n    # the suffix .1 / .2 columns are other sites/dedup columns.\n    ent_col = 'Enterococcus'\n\n    # Ensure numeric\n    df[ent_col] = pd.to_numeric(df[ent_col], errors='coerce')\n    df['1-Day Rain'] = pd.to_numeric(df['1-Day Rain'], errors='coerce')\n\n    # Failed swimming standard: Enterococcus > 104 counts per 100 mL\n    failed = df[df[ent_col] > 104]\n\n    avg_rain = failed['1-Day Rain'].mean()\n\n    return pd.DataFrame([{\n        'failedSampleCount': int(failed.shape[0]),\n        'avg1DayRainBeforeSampling': float(avg_rain) if pd.notna(avg_rain) else None\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter Pleasure Bay Beach samples to those failing swimming standard (Enterococcus > 104 counts/100mL using column 'Enterococcus'); compute mean of '1-Day Rain' for failed rows; output failedSampleCount and avg1DayRainBeforeSampling",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "pleasureBayLoad": {
+        "x": 100,
+        "y": 40
+      },
+      "pleasureBayFailAvgRain": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "pleasureBayLoad-->pleasureBayFailAvgRain",
+        "source": {
+          "operatorID": "pleasureBayLoad",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "pleasureBayFailAvgRain",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

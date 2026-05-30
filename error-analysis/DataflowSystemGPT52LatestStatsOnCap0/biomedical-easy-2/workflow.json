@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-525-5-1779123469043",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    # Load all sheets as strings to avoid type issues; keep sheet name for tracing\n    xls = pd.ExcelFile(path)\n    frames = []\n    for sh in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sh, dtype=str)\n        df[\"_sheet\"] = sh\n        frames.append(df)\n    return pd.concat(frames, ignore_index=True, sort=False)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx \u2014 read ALL sheets via pd.read_excel(dtype=str) and concatenate into one table with an added '_sheet' column indicating source sheet name",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "avgAgeSerous",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1):\n    import pandas as pd\n\n    df = mmc1.copy()\n\n    # Define serous tumors using Histologic_type field (case-insensitive contains)\n    hist_col = 'Histologic_type'\n    age_col = 'Age'\n\n    serous_mask = (\n        df[hist_col]\n        .astype(str)\n        .str.strip()\n        .str.lower()\n        .str.contains('serous', na=False)\n    )\n\n    # Parse age to numeric\n    ages = pd.to_numeric(df.loc[serous_mask, age_col], errors='coerce')\n\n    avg_age = ages.mean()\n\n    return pd.DataFrame([{\n        'n_serous_rows': int(serous_mask.sum()),\n        'n_age_nonnull': int(ages.notna().sum()),\n        'avg_age': avg_age\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average patient age for serous tumor samples: filter mmc1 rows where Histologic_type contains 'serous' (case-insensitive); convert Age to numeric (errors->NaN); compute mean Age over serous subset; output diagnostics (n_serous_rows, n_age_nonnull) and avg_age",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1": {
+        "x": 100,
+        "y": 40
+      },
+      "avgAgeSerous": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1-->avgAgeSerous",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgAgeSerous",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

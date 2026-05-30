@@ -1,0 +1,261 @@
+{
+  "headId": "step-agent-461-6-1779120264262",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadRadiocarbon",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/radiocarbon_database_regional.xlsx'\n    # Read first sheet by default; keep everything as string first to avoid dtype issues\n    df = pd.read_excel(path, dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load radiocarbon_database_regional.xlsx via pd.read_excel (first sheet, dtype=str); strip whitespace from column names for consistent downstream filtering",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadClimate",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n    df = pd.read_excel(path, dtype=str)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx via pd.read_excel (first sheet, dtype=str); strip whitespace from column names to support year/aluminum selection",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectClimateRaw",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadClimate) -> pd.DataFrame:\n    import pandas as pd\n    df = loadClimate.copy()\n    # show first 40 rows to locate real header\n    return df.head(40)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect climateMeasurements.xlsx loaded table (first sheet) by returning first 40 rows of current loadClimate output to identify where the real header/column names (including Year and Aluminum) are located",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "malteseNorthSampleYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadRadiocarbon) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadRadiocarbon.copy()\n    # Filter to Maltese region and Neolithic culture\n    df = df[(df['Region'].astype(str).str.strip().str.lower() == 'malta') &\n            (df['Culture'].astype(str).str.strip().str.lower() == 'neolithic')].copy()\n\n    # Latitude numeric\n    df['LatitudeNum'] = pd.to_numeric(df['Latitude'], errors='coerce')\n    # date numeric (radiocarbon age BP)\n    df['DateNum'] = pd.to_numeric(df['date'], errors='coerce')\n\n    # Keep rows with required fields\n    df = df[df['LatitudeNum'].notna() & df['DateNum'].notna()].copy()\n\n    # Find most northern latitude; break ties by later year (interpreting later year as smaller BP)\n    maxLat = df['LatitudeNum'].max()\n    cand = df[df['LatitudeNum'] == maxLat].copy()\n    # Later year in BP sense: smaller BP is later (closer to present)\n    chosen = cand.loc[cand['DateNum'].idxmin()].copy()\n\n    out = pd.DataFrame([{\n        'targetYearBP': float(chosen['DateNum']),\n        'latitude': float(chosen['LatitudeNum']),\n        'site': chosen.get('Site', None),\n        'labCode': chosen.get('Lab code', None)\n    }])\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From radiocarbon_database_regional.xlsx: filter to Region='Malta' and Culture='Neolithic'; parse Latitude and date (BP) as numeric; select row with maximum Latitude (most northern), breaking latitude ties by choosing later year (smaller BP); output selected targetYearBP plus context columns",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "closestYearMaxAluminum",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(malteseNorthSampleYear, loadClimate) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    target = float(malteseNorthSampleYear['targetYearBP'].iloc[0])\n\n    df = loadClimate.copy()\n\n    # Attempt to locate plausible year and aluminum columns from raw climate load.\n    # Heuristics: numeric-like columns with moderate distinct counts might be year; aluminum likely a measurement column.\n    # We'll first convert all columns to numeric where possible.\n    num = df.apply(lambda s: pd.to_numeric(s, errors='coerce'))\n\n    # Candidate year columns: those with many non-nulls and values in a plausible range (0..3e6)\n    cand_year_cols = []\n    for c in num.columns:\n        s = num[c]\n        nn = s.notna().sum()\n        if nn < 1000:\n            continue\n        vmin, vmax = s.min(), s.max()\n        if pd.isna(vmin) or pd.isna(vmax):\n            continue\n        if vmin >= 0 and vmax <= 3_500_000:\n            cand_year_cols.append((c, nn))\n\n    # pick the column with the highest non-null count as year proxy\n    if not cand_year_cols:\n        return pd.DataFrame([{'error':'No candidate year column found'}])\n    year_col = sorted(cand_year_cols, key=lambda x: (-x[1], str(x[0])))[0][0]\n\n    # Candidate aluminum columns: numeric columns with many non-nulls, excluding the chosen year_col\n    cand_al_cols = []\n    for c in num.columns:\n        if c == year_col:\n            continue\n        s = num[c]\n        nn = s.notna().sum()\n        if nn < 1000:\n            continue\n        cand_al_cols.append((c, nn, float(s.quantile(0.5))))\n\n    if not cand_al_cols:\n        return pd.DataFrame([{'error':'No candidate aluminum column found', 'year_col':str(year_col)}])\n\n    # choose the column with the largest median as a proxy (aluminum concentrations tend to be >0)\n    al_col = sorted(cand_al_cols, key=lambda x: (-x[1], -x[2], str(x[0])))[0][0]\n\n    work = pd.DataFrame({'year': num[year_col], 'aluminum': num[al_col]})\n    work = work.dropna(subset=['year', 'aluminum']).copy()\n\n    # Closest year(s) to target\n    work['absDiff'] = (work['year'] - target).abs()\n    minDiff = work['absDiff'].min()\n    closest = work[work['absDiff'] == minDiff]\n    maxAl = closest['aluminum'].max()\n\n    return pd.DataFrame([{\n        'targetYearBP': target,\n        'climateYearCol': str(year_col),\n        'aluminumCol': str(al_col),\n        'minAbsDiff': float(minDiff),\n        'maxAluminumClosest': float(maxAl)\n    }])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Using targetYearBP from Maltese most-northern Neolithic sample, heuristically infer climate dataset year column (numeric with many non-nulls in 0..3.5M) and aluminum column (numeric with many non-nulls excluding year); compute closest climate year(s) to target (min absolute difference) and return maximum aluminum across those closest years along with chosen column names and minAbsDiff for validation",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalValue",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(closestYearMaxAluminum) -> pd.DataFrame:\n    import pandas as pd\n    val = float(closestYearMaxAluminum.loc[0, 'maxAluminumClosest'])\n    return pd.DataFrame([{'value': round(val, 4)}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Round the computed max aluminum value (maxAluminumClosest) from closestYearMaxAluminum to 4 decimal places and output as single-column, single-row DataFrame",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadRadiocarbon": {
+        "x": 100,
+        "y": 370
+      },
+      "loadClimate": {
+        "x": 400,
+        "y": 115
+      },
+      "inspectClimateRaw": {
+        "x": 700,
+        "y": 40
+      },
+      "malteseNorthSampleYear": {
+        "x": 400,
+        "y": 370
+      },
+      "closestYearMaxAluminum": {
+        "x": 700,
+        "y": 295
+      },
+      "finalValue": {
+        "x": 1000,
+        "y": 295
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadClimate-->inspectClimateRaw",
+        "source": {
+          "operatorID": "loadClimate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectClimateRaw",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadRadiocarbon-->malteseNorthSampleYear",
+        "source": {
+          "operatorID": "loadRadiocarbon",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "malteseNorthSampleYear",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malteseNorthSampleYear-->closestYearMaxAluminum",
+        "source": {
+          "operatorID": "malteseNorthSampleYear",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "closestYearMaxAluminum",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadClimate-->closestYearMaxAluminum",
+        "source": {
+          "operatorID": "loadClimate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "closestYearMaxAluminum",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "closestYearMaxAluminum-->finalValue",
+        "source": {
+          "operatorID": "closestYearMaxAluminum",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalValue",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

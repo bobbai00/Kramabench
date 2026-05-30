@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-417-9-1779114959236",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "climateMeasurements",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n\n    # Read as strings first to avoid Texera type mismatch during schema inference.\n    df = pd.read_excel(path, header=3, dtype=str)\n\n    # Drop fully-empty columns that often appear at the end of wide Excel sheets.\n    df = df.dropna(axis=1, how='all')\n\n    # Remove any rows that are still part of the metadata (e.g., blank/notes rows).\n    # Keep rows that have a value for the first identifier column.\n    first_col = df.columns[0]\n    df = df[df[first_col].notna()]\n\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx via pd.read_excel with header=3 (row containing 'Site', 'Hole', 'Core', 'Section', ... is header), dtype=str to prevent mixed-type schema inference errors; drop all-null columns; filter out metadata/blank rows by requiring first identifier column (Site) to be non-null",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectClimateRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n    # Inspect first 40 rows without header inference to locate real header rows.\n    df = pd.read_excel(path, header=None, dtype=str, nrows=40)\n    df.columns = [f'c{i}' for i in range(df.shape[1])]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect climateMeasurements.xlsx first 40 rows with header=None and dtype=str; return columns c0..cN to reveal where the true header row(s) and data begin",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calciumAtMinDust",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climateMeasurements) -> pd.DataFrame:\n    import pandas as pd\n\n    df = climateMeasurements.copy()\n\n    # Drop repeated header row that was read as data\n    df = df[df.iloc[:, 0] != 'Site'].copy()\n\n    # The loader produced 27 columns total. Based on the loaded header row:\n    # - Ca is at position 12 (0-based)\n    # - Dust proxy is at position 24 (0-based) (\"ODP 967 Dust proxy\")\n    # - Wet-dry index is at position 26 (0-based) (\"ODP 967 wet-dry index\")\n    colmap = {\n        df.columns[12]: 'Ca_ppm',\n        df.columns[24]: 'dustProxy',\n        df.columns[26]: 'wetDryIndex',\n    }\n    df = df.rename(columns=colmap)\n\n    for c in ['Ca_ppm', 'dustProxy', 'wetDryIndex']:\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    df = df.dropna(subset=['dustProxy', 'wetDryIndex', 'Ca_ppm']).copy()\n\n    # Smallest dust proxy; tie-break by minimum wet-dry index\n    df_sorted = df.sort_values(['dustProxy', 'wetDryIndex'], ascending=[True, True], kind='mergesort')\n    ca_val = float(df_sorted.iloc[0]['Ca_ppm'])\n\n    return pd.DataFrame([{'calcium_ppm': ca_val}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From climateMeasurements: drop repeated header row (first column == 'Site'); rename columns by corrected positions for 27-col sheet: Ca_ppm at index 12, dustProxy at index 24 ('ODP 967 Dust proxy'), wetDryIndex at index 26 ('ODP 967 wet-dry index'); coerce to numeric, drop rows with NaNs in these fields; sort by dustProxy ASC then wetDryIndex ASC (tie-breaker) and output the selected calcium_ppm as a single-row DataFrame",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "climateMeasurements": {
+        "x": 100,
+        "y": 40
+      },
+      "inspectClimateRaw": {
+        "x": 100,
+        "y": 220
+      },
+      "calciumAtMinDust": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "climateMeasurements-->calciumAtMinDust",
+        "source": {
+          "operatorID": "climateMeasurements",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calciumAtMinDust",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-44-8-1779139428426",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportsByType",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv\"\n\n    # This CSN table is commonly stored with a title row and/or nonstandard headers.\n    raw = pd.read_csv(path, header=None)\n\n    # Find the header row containing the word 'Year'\n    header_idx = None\n    for i in range(min(len(raw), 50)):\n        row = raw.iloc[i].astype(str).str.strip()\n        if any(v.lower() == \"year\" for v in row.values):\n            header_idx = i\n            break\n    if header_idx is None:\n        # Fallback: assume first row is header\n        df = pd.read_csv(path)\n    else:\n        df = pd.read_csv(path, header=header_idx)\n\n    # Standardize column names\n    df.columns = [str(c).strip() for c in df.columns]\n    df = df.dropna(how=\"all\")\n\n    # Detect year column\n    year_col = \"Year\" if \"Year\" in df.columns else df.columns[0]\n\n    # Keep only rows with 4-digit years\n    year = df[year_col].astype(str).str.extract(r\"(\\d{4})\")[0]\n    df = df[year.notna()].copy()\n    df[year_col] = year.astype(int)\n\n    # Map required columns by normalized names\n    def norm(s: str) -> str:\n        return \" \".join(str(s).strip().lower().split())\n\n    col_map = {norm(c): c for c in df.columns}\n\n    def find_col(target: str):\n        t = norm(target)\n        if t in col_map:\n            return col_map[t]\n        # fuzzy contains\n        for k, v in col_map.items():\n            if t in k:\n                return v\n        return None\n\n    fraud_col = find_col(\"Fraud\")\n    idt_col = find_col(\"Identity Theft\")\n    other_col = find_col(\"Other\")\n\n    # If still missing, the columns might be stored as first data row (subheader). Try promoting first row.\n    if any(x is None for x in [fraud_col, idt_col, other_col]):\n        # promote first row values as column names, append existing names for duplicates\n        new_cols = df.iloc[0].astype(str).str.strip().tolist()\n        df2 = df.iloc[1:].copy()\n        df2.columns = new_cols\n        df2.columns = [str(c).strip() for c in df2.columns]\n        df = df2\n        year_col = \"Year\" if \"Year\" in df.columns else df.columns[0]\n        year = df[year_col].astype(str).str.extract(r\"(\\d{4})\")[0]\n        df = df[year.notna()].copy()\n        df[year_col] = year.astype(int)\n        col_map = {norm(c): c for c in df.columns}\n        fraud_col = find_col(\"Fraud\")\n        idt_col = find_col(\"Identity Theft\")\n        other_col = find_col(\"Other\")\n\n    for required, actual in [(\"Fraud\", fraud_col), (\"Identity Theft\", idt_col), (\"Other\", other_col)]:\n        if actual is None:\n            raise KeyError(f\"Missing expected column '{required}'. Available columns: {list(df.columns)}\")\n\n    # Parse numeric columns (remove commas)\n    for c in [fraud_col, idt_col, other_col]:\n        df[c] = pd.to_numeric(df[c].astype(str).str.replace(\",\", \"\", regex=False), errors=\"coerce\")\n\n    out = df[[year_col, fraud_col, idt_col, other_col]].rename(\n        columns={year_col: \"Year\", fraud_col: \"Fraud\", idt_col: \"Identity Theft\", other_col: \"Other\"}\n    )\n    return out.sort_values(\"Year\").reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Number_of_Reports_by_Type.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv; robustly detect the header row by scanning first 50 rows for a cell exactly 'Year' (read_csv header=None then re-read with header=header_idx); trim column-name whitespace; drop fully-empty rows; keep rows with 4-digit Year; locate 'Fraud', 'Identity Theft', 'Other' columns via normalized-name exact/contains matching with fallback to promoting first data row to header; parse these columns as numeric after removing thousands separators; output columns [Year, Fraud, Identity Theft, Other] sorted by Year.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "otherMoreThanHalfCheck",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportsByType):\n    import pandas as pd\n\n    df = reportsByType.copy()\n\n    # Drop rows with missing numeric values (e.g., trailing footer/blank rows)\n    df = df.dropna(subset=['Fraud', 'Identity Theft', 'Other'])\n\n    # Ensure we are within 2001-2024 inclusive (already, but enforce)\n    df = df[(df['Year'] >= 2001) & (df['Year'] <= 2024)]\n\n    # If there are duplicate Year rows, sum them (shouldn't happen, but observed trailing 2024 NaNs)\n    df = df.groupby('Year', as_index=False)[['Fraud', 'Identity Theft', 'Other']].sum()\n\n    df['Total'] = df['Fraud'] + df['Identity Theft'] + df['Other']\n    df['OtherShare'] = df['Other'] / df['Total']\n\n    any_year = bool((df['OtherShare'] > 0.5).any())\n    return pd.DataFrame([{'answer': 'Yes' if any_year else 'No'}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From reportsByType: drop rows with NaN in [Fraud, Identity Theft, Other]; enforce Year between 2001 and 2024 inclusive; groupby Year and sum [Fraud, Identity Theft, Other] to handle any duplicates; compute Total=Fraud+Identity Theft+Other and OtherShare=Other/Total; output single-row DataFrame with answer='Yes' if any year has OtherShare>0.5 else 'No'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportsByType": {
+        "x": 100,
+        "y": 40
+      },
+      "otherMoreThanHalfCheck": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportsByType-->otherMoreThanHalfCheck",
+        "source": {
+          "operatorID": "reportsByType",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "otherMoreThanHalfCheck",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

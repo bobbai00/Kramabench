@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_fraud_military",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(3), df.tail(3)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample the 2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv to inspect columns and data layout.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fraud_military",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv'\n    # The file has a title row and uses the second row as headers\n    df = pd.read_csv(path, header=1)\n    # Drop fully empty columns/rows\n    df = df.dropna(axis=1, how='all')\n    df = df.dropna(how='all')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv using header row 2 (header=1), drop fully empty rows/columns.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fraud_military_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fraud_military) -> pd.DataFrame:\n    import pandas as pd\n    df = fraud_military.copy()\n\n    # First row contains headers; set them\n    df.columns = df.iloc[0].astype(str).str.strip()\n    df = df.iloc[1:].copy()\n\n    # Keep only rows with a Military Status value\n    df = df[df['Military Status'].notna()].copy()\n\n    # Remove footnotes / non-status rows\n    bad_prefixes = (\n        'Note:',\n        'Of the ',\n        'Source:',\n    )\n    df = df[~df['Military Status'].astype(str).str.strip().str.startswith(bad_prefixes)].copy()\n\n    # Parse Median Fraud Loss as numeric (dollars)\n    df['Median Fraud Loss'] = (\n        df['Median Fraud Loss']\n        .astype(str)\n        .str.replace(r'[^0-9\\.-]', '', regex=True)\n        .replace('', pd.NA)\n        .astype('Float64')\n    )\n\n    # Standardize status text\n    df['Military Status'] = df['Military Status'].astype(str).str.strip()\n\n    return df[['Military Status', 'Median Fraud Loss']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean fraud_military table: promote first row to headers, drop footnotes, and parse 'Median Fraud Loss' into numeric dollars; output Military Status and Median Fraud Loss.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "branch_max_median_loss",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fraud_military_clean) -> pd.DataFrame:\n    import pandas as pd\n    df = fraud_military_clean.copy()\n    # Keep only branch rows\n    branches = ['U.S. Army','U.S. Air Force','U.S. Marine Corps','U.S. Navy','U.S. Space Force','U.S. Coast Guard']\n    df = df[df['Military Status'].isin(branches)].copy()\n    # Ensure numeric\n    df['Median Fraud Loss'] = pd.to_numeric(df['Median Fraud Loss'], errors='coerce')\n    max_val = df['Median Fraud Loss'].max()\n    out = df[df['Median Fraud Loss'] == max_val].sort_values('Military Status')\n    return out[['Military Status','Median Fraud Loss']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter cleaned table to U.S. military branches and select branch(es) with the maximum Median Fraud Loss in 2024.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_fraud_military": {
+      "x": 100,
+      "y": 40
+    },
+    "fraud_military": {
+      "x": 100,
+      "y": 220
+    },
+    "fraud_military_clean": {
+      "x": 430,
+      "y": 220
+    },
+    "branch_max_median_loss": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "fraud_military-->fraud_military_clean",
+      "source": {
+        "operatorID": "fraud_military",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fraud_military_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fraud_military_clean-->branch_max_median_loss",
+      "source": {
+        "operatorID": "fraud_military_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "branch_max_median_loss",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

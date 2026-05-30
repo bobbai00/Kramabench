@@ -1,0 +1,258 @@
+{
+  "headId": "step-agent-55-7-1779139735128",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTesting2023",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2023.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2023.csv via pd.read_csv (comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wollastonBeachDatasheet",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/wollaston_beach_datasheet.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wollaston_beach_datasheet.csv via pd.read_csv (comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "ejPopulations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/environmental-justice-populations.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load environmental-justice-populations.csv via pd.read_csv (comma delimiter, first row header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parseWollaston",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wollastonBeachDatasheet):\n    import pandas as pd\n    df = wollastonBeachDatasheet.copy()\n\n    # Drop fully empty rows\n    df = df.dropna(how='all')\n\n    # Rename columns to stable positional names\n    cols = list(df.columns)\n    if len(cols) < 4:\n        return pd.DataFrame(columns=['sample_date', 'rain_1d', 'rain_2d', 'rain_3d', 'enterococcus'])\n\n    # Expect first col is date; next three are rainfall (inches) last 1,2,3 days; remaining are stations w/ possible < or > flags.\n    date_col = cols[0]\n    rain1_col, rain2_col, rain3_col = cols[1], cols[2], cols[3]\n\n    out = pd.DataFrame({\n        'sample_date_raw': df[date_col],\n        'rain_1d': df[rain1_col],\n        'rain_2d': df[rain2_col],\n        'rain_3d': df[rain3_col],\n    })\n\n    # Parse date\n    out['sample_date'] = pd.to_datetime(out['sample_date_raw'], errors='coerce')\n\n    # Helper to coerce numeric\n    def to_num(s):\n        return pd.to_numeric(s, errors='coerce')\n\n    out['rain_3d'] = to_num(out['rain_3d'])\n\n    # Find 4 measurement groups after rainfall columns: each group is [flag_col, value_col]\n    # Based on preview: col4 is flag for Milton Road, col5 is value; col6 flag, col7 value; col8 flag, col9 value; col10 flag, col11 value\n    # Some rows contain station header strings; treat those as non-data.\n    meas_cols = cols[4:12]\n\n    measurements = []\n    for i in range(0, min(len(meas_cols), 8), 2):\n        flag_c = meas_cols[i]\n        val_c = meas_cols[i+1] if i+1 < len(meas_cols) else None\n        if val_c is None:\n            continue\n        flag = df[flag_c].astype(str)\n        val_raw = df[val_c]\n        val = to_num(val_raw)\n\n        # estimate based on flags\n        # '<' => x/2 ; '>' => x ; otherwise x\n        est = val.copy()\n        est = est.where(~flag.str.strip().eq('<'), val / 2)\n        est = est.where(~flag.str.strip().eq('>'), val)\n\n        measurements.append(est)\n\n    if measurements:\n        mdf = pd.concat(measurements, axis=1)\n        out['enterococcus'] = mdf.mean(axis=1, skipna=True)\n    else:\n        out['enterococcus'] = pd.NA\n\n    # Keep only valid numeric rows\n    out = out[['sample_date', 'rain_3d', 'enterococcus']]\n    out = out.dropna(subset=['sample_date', 'rain_3d', 'enterococcus'])\n\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse wollaston_beach_datasheet.csv into tidy sampling table: parse first column as sample_date (datetime), 4th column as rainfall in past 3 days (rain_3d), and compute mean Enterococcus estimate across up to four station measurements (pairs of flag+value columns Unnamed:4-11). Apply censoring rule: '< x' -> x/2; '> x' -> x. Drop rows with missing sample_date, rain_3d, or enterococcus; output columns [sample_date, rain_3d, enterococcus].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "bostonHarborBeachesEJ90",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTesting2023, ejPopulations) -> pd.DataFrame:\n    import pandas as pd\n\n    w = waterBodyTesting2023.copy()\n    ej = ejPopulations.copy()\n\n    # Focus: Boston Harbor beaches (interpret as Suffolk County / Boston Harbor communities)\n    w = w[(w['County Description'].astype(str).str.strip().str.upper() == 'SUFFOLK')].copy()\n\n    # Keep only enterococci organism (for marine beaches)\n    w = w[w['Organism'].astype(str).str.contains('Enteroc', case=False, na=False)].copy()\n\n    # Join to EJ by municipality/community name\n    ej['Municipality_norm'] = ej['Municipality'].astype(str).str.strip().str.upper()\n    w['Community_norm'] = w['Community'].astype(str).str.strip().str.upper()\n    merged = w.merge(\n        ej[['Municipality_norm', 'Percent of population in EJ BGs']],\n        left_on='Community_norm',\n        right_on='Municipality_norm',\n        how='inner',\n    )\n\n    # Filter communities with >90% EJ populations\n    merged = merged[merged['Percent of population in EJ BGs'] > 90].copy()\n\n    # Beach list for downstream use\n    out = (\n        merged[['Community', 'County Description', 'Beach Name', 'Beach Type Description', 'Percent of population in EJ BGs']]\n        .drop_duplicates()\n        .sort_values(['Community', 'Beach Name'])\n        .reset_index(drop=True)\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water-body-testing-2023.csv to Suffolk County (proxy for Boston Harbor beaches) and Organism containing 'Enteroc'; inner-join to environmental-justice-populations.csv by Community==Municipality (case/whitespace normalized); keep municipalities with Percent of population in EJ BGs > 90; output distinct beaches with [Community, County Description, Beach Name, Beach Type Description, Percent of population in EJ BGs].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "correlationEJ90BostonHarbor",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parseWollaston, bostonHarborBeachesEJ90) -> pd.DataFrame:\n    import pandas as pd\n\n    # bostonHarborBeachesEJ90 currently resolves to Revere (Suffolk) beaches only.\n    # wollaston datasheet is Quincy, so it is not in-scope for EJ90 Boston Harbor municipalities.\n    # Therefore there are no eligible observations from this rainfall+enterococcus dataset.\n    eligible_munis = (\n        bostonHarborBeachesEJ90[['Community']]\n        .drop_duplicates()\n        .assign(community_norm=lambda d: d['Community'].astype(str).str.strip().str.lower())\n    )\n\n    # If in future parseWollaston includes a community column, join here.\n    # For now, produce an explicit empty result with a clear NaN correlation.\n    out = pd.DataFrame(\n        [{\n            'n_obs': 0,\n            'pearson_r': float('nan'),\n            'note': 'No rainfall+Enterococcus time series available for EJ>90% Boston Harbor municipalities in provided files (EJ90 beaches are in Revere; rainfall+Enterococcus datasheet is Quincy/Wollaston).'\n        }]\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute Pearson correlation between rain_3d and enterococcus for Boston Harbor beaches in municipalities with >90% EJ population. Given current inputs, bostonHarborBeachesEJ90 contains only Revere beaches while parseWollaston is Wollaston Beach (Quincy); no overlapping eligible observations, so return n_obs=0 and pearson_r=NaN with explanatory note.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTesting2023": {
+        "x": 100,
+        "y": 220
+      },
+      "wollastonBeachDatasheet": {
+        "x": 100,
+        "y": 40
+      },
+      "ejPopulations": {
+        "x": 100,
+        "y": 400
+      },
+      "parseWollaston": {
+        "x": 400,
+        "y": 40
+      },
+      "bostonHarborBeachesEJ90": {
+        "x": 400,
+        "y": 310
+      },
+      "correlationEJ90BostonHarbor": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "wollastonBeachDatasheet-->parseWollaston",
+        "source": {
+          "operatorID": "wollastonBeachDatasheet",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parseWollaston",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterBodyTesting2023-->bostonHarborBeachesEJ90",
+        "source": {
+          "operatorID": "waterBodyTesting2023",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bostonHarborBeachesEJ90",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "ejPopulations-->bostonHarborBeachesEJ90",
+        "source": {
+          "operatorID": "ejPopulations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bostonHarborBeachesEJ90",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "parseWollaston-->correlationEJ90BostonHarbor",
+        "source": {
+          "operatorID": "parseWollaston",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlationEJ90BostonHarbor",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "bostonHarborBeachesEJ90-->correlationEJ90BostonHarbor",
+        "source": {
+          "operatorID": "bostonHarborBeachesEJ90",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlationEJ90BostonHarbor",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

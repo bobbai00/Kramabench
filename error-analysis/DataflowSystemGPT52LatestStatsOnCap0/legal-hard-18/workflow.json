@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-613-5-1779125249333",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv\"\n    # First two rows are title and blank; last rows are source notes\n    df = pd.read_csv(path, skiprows=1, dtype=str)\n    # Keep only proper data rows where Year is 4 digits\n    df = df.rename(columns={df.columns[0]: \"year\", df.columns[1]: \"reportCount\"})\n    df = df[df[\"year\"].str.match(r\"^\\d{4}$\", na=False)].copy()\n    df[\"year\"] = df[\"year\"].astype(int)\n    df[\"reportCount\"] = (\n        df[\"reportCount\"].str.replace(\",\", \"\", regex=False).astype(float).astype(int)\n    )\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv via pd.read_csv with skiprows=1; rename columns to [year, reportCount]; filter rows where year matches 4 digits; parse year as int and reportCount by removing commas and casting to int.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftByAge",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv\"\n    df = pd.read_csv(path, skiprows=1, dtype=str)\n    df = df.rename(columns={df.columns[0]: \"ageRange\", df.columns[1]: \"reports\"})\n    # Keep only rows that look like age ranges (exclude notes/source)\n    df = df[df[\"ageRange\"].notna() & df[\"reports\"].notna()].copy()\n    df = df[df[\"ageRange\"].str.contains(r\"Under|\\d\", regex=True, na=False)].copy()\n    df[\"reports\"] = df[\"reports\"].str.replace(\",\", \"\", regex=False).astype(int)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Identity_Theft_Reports_by_Age.csv via pd.read_csv with skiprows=1; rename columns to [ageRange, reports]; keep rows with non-null ageRange and reports that represent age bins; parse reports by removing commas and casting to int.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "estimate2007Age40Plus",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCount, identityTheftByAge) -> pd.DataFrame:\n    import pandas as pd\n\n    # 2024 age distribution for 40+\n    age40plus = identityTheftByAge[identityTheftByAge[\"ageRange\"].isin([\"40 - 49\", \"50 - 59\", \"60 - 69\", \"70 - 79\", \"80 and Over\"])].copy()\n    ageKnownTotal = identityTheftByAge[\"reports\"].sum()\n    share40plusAmongKnown = age40plus[\"reports\"].sum() / ageKnownTotal\n\n    # Use 2007 total reports (all categories) and assume same share\n    total2007 = int(reportCount.loc[reportCount[\"year\"] == 2007, \"reportCount\"].iloc[0])\n    est2007 = total2007 * share40plusAmongKnown\n\n    rounded = int(round(est2007 / 1000.0) * 1000)\n\n    return pd.DataFrame([\n        {\n            \"totalReports2007\": total2007,\n            \"share40plus2024\": share40plusAmongKnown,\n            \"estimatedReports2007Age40plus\": est2007,\n            \"roundedNearestThousand\": rounded,\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute 2024 share of identity theft reports for ages 40+ (sum of bins 40-49, 50-59, 60-69, 70-79, 80 and Over divided by total across all age bins); multiply this share by the 2007 total reports from 2024_CSN_Report_Count.csv; round estimated 2007 40+ reports to nearest thousand and output diagnostics plus rounded value.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCount": {
+        "x": 100,
+        "y": 40
+      },
+      "identityTheftByAge": {
+        "x": 100,
+        "y": 220
+      },
+      "estimate2007Age40Plus": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCount-->estimate2007Age40Plus",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "estimate2007Age40Plus",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identityTheftByAge-->estimate2007Age40Plus",
+        "source": {
+          "operatorID": "identityTheftByAge",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "estimate2007Age40Plus",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

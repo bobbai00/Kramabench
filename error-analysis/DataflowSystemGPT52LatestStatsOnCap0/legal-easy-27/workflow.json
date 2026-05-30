@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-103-6-1779101107103",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv via pd.read_csv (comma delimiter, first row as header, UTF-8) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanTopTenCategories",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = topTenCategories.copy()\n\n    # The file appears to have a title row, then a true header row at index 1.\n    # Re-construct with the real header.\n    header = df.iloc[1].tolist()\n    data = df.iloc[2:].copy()\n    data.columns = header\n\n    # Drop blank/title/source rows\n    data = data.dropna(how='all')\n\n    # Standardize column names\n    data = data.rename(columns={\n        'State': 'state',\n        'Category': 'category',\n        '# of Reports': 'numReports',\n        'Percentage': 'percentage'\n    })\n\n    # Keep only expected columns if present\n    keep = [c for c in ['state', 'category', 'numReports', 'percentage'] if c in data.columns]\n    data = data[keep]\n\n    # Clean strings\n    for c in ['state', 'category']:\n        if c in data.columns:\n            data[c] = data[c].astype(str).str.strip()\n            data.loc[data[c].isin(['nan', 'None', '']), c] = pd.NA\n\n    data = data.dropna(subset=['state', 'category'])\n\n    return data.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean/reshape 2024 state top-10 report categories table by treating row index 1 as the true header (State, Category, # of Reports, Percentage), dropping title/blank/source rows, renaming columns to [state, category, numReports, percentage], trimming whitespace, and removing rows missing state or category.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "countPrizeStates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanTopTenCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanTopTenCategories.copy()\n\n    target = \"Prizes, Sweepstakes and Lotteries\"\n    mask = df[\"category\"].astype(str).str.strip().eq(target)\n\n    states = (\n        df.loc[mask, \"state\"]\n        .astype(str)\n        .str.strip()\n        .replace({\"\": pd.NA})\n        .dropna()\n        .drop_duplicates()\n        .sort_values()\n    )\n\n    return pd.DataFrame({\"stateCount\": [int(states.shape[0])]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count distinct states whose category exactly equals 'Prizes, Sweepstakes and Lotteries' in the cleaned 2024 state top-10 report categories table; output single-row DataFrame with integer column stateCount",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanTopTenCategories": {
+        "x": 400,
+        "y": 40
+      },
+      "countPrizeStates": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories-->cleanTopTenCategories",
+        "source": {
+          "operatorID": "topTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanTopTenCategories",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanTopTenCategories-->countPrizeStates",
+        "source": {
+          "operatorID": "cleanTopTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "countPrizeStates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

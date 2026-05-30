@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-645-5-1779125656289",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "variableDescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # Try common Windows-1252/Latin-1 encodings used in NOAA documentation exports\n    try:\n        return pd.read_csv(path, encoding='cp1252')\n    except UnicodeDecodeError:\n        return pd.read_csv(path, encoding='latin1')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv with explicit encoding fallback (cp1252, then latin1) to avoid UTF-8 UnicodeDecodeError; provides column definitions/metadata for the NOAA wildfire dataset",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv (comma delimiter, first row header, UTF-8) containing NOAA wildfire incidents with weather, suppression, duration, and impact variables",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "suppressionWeatherModel",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import statsmodels.api as sm\n\n    df = wildfires.copy()\n\n    # Define outcomes\n    df['logDuration'] = np.log(df['duration'].clip(lower=1))\n    df['buildingsThreatened'] = (\n        df['prim_threatened_aggregate'].fillna(0)\n        + df['comm_threatened_aggregate'].fillna(0)\n        + df['outb_threatened_aggregate'].fillna(0)\n    )\n    df['logBuildingsThreatened'] = np.log1p(df['buildingsThreatened'].clip(lower=0))\n\n    # Define aggressive suppression indicator (dominant strategy = Full Suppression)\n    df['aggressive'] = (df['dominant_strategy_50_s'] == 'Full Suppression').astype(int)\n\n    # Controls: weather + location/time proxies\n    controls = ['avrh_mean', 'wind_med', 'erc_med', 'rain_sum', 'latitude', 'longitude', 'start_day_of_year', 'start_year']\n\n    # Drop rows with missing controls/outcomes\n    model_df = df[['aggressive', 'logDuration', 'logBuildingsThreatened'] + controls + ['region']].dropna()\n\n    # Add region fixed effects\n    X = pd.get_dummies(model_df[['aggressive'] + controls + ['region']], columns=['region'], drop_first=True)\n    X = sm.add_constant(X, has_constant='add')\n\n    def fit_ols(y):\n        m = sm.OLS(model_df[y].astype(float), X.astype(float)).fit(cov_type='HC3')\n        coef = m.params['aggressive']\n        se = m.bse['aggressive']\n        p = m.pvalues['aggressive']\n        return coef, se, p, int(m.nobs)\n\n    coef_dur, se_dur, p_dur, n_dur = fit_ols('logDuration')\n    coef_bld, se_bld, p_bld, n_bld = fit_ols('logBuildingsThreatened')\n\n    # Convert log-point effect to percent change approximation\n    pct_dur = (np.exp(coef_dur) - 1) * 100\n    pct_bld = (np.exp(coef_bld) - 1) * 100\n\n    return pd.DataFrame([\n        {\n            'n': n_dur,\n            'aggressive_definition': \"dominant_strategy_50_s == 'Full Suppression'\",\n            'duration_effect_logpoints': coef_dur,\n            'duration_effect_pct': pct_dur,\n            'duration_pvalue': p_dur,\n            'buildings_effect_logpoints': coef_bld,\n            'buildings_effect_pct': pct_bld,\n            'buildings_pvalue': p_bld,\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Estimate weather-controlled association of aggressive suppression with (1) log(duration) and (2) log1p(total buildings threatened). Aggressive suppression indicator: dominant_strategy_50_s == 'Full Suppression'. Controls: avrh_mean, wind_med, erc_med, rain_sum, latitude, longitude, start_day_of_year, start_year, plus region fixed effects; fit OLS with HC3 robust SEs; report aggressive coefficient and implied percent change for each outcome.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "variableDescrip": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "suppressionWeatherModel": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfires-->suppressionWeatherModel",
+        "source": {
+          "operatorID": "wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "suppressionWeatherModel",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

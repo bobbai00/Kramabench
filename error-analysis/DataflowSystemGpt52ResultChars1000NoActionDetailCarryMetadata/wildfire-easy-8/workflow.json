@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_fire",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(3), df.tail(3)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 3 rows of data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv to inspect columns (cause and acres) and data quality",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fire",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full wildfire dataset from data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "gt100_counts",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fire) -> pd.DataFrame:\n    import pandas as pd\n    df = fire.copy()\n    # Focus on fires impacting >100 acres. Dataset has indicator gt_100 (1=yes)\n    df = df[df['gt_100'] == 1]\n\n    # Normalize cause to Lightning vs Human.\n    # Observed cause codes include 'L' (Lightning) and others like 'H' (Human), 'U' (Unknown).\n    cause = df['cause'].astype('string').str.strip().str.upper()\n    mapped = pd.Series(pd.NA, index=df.index, dtype='string')\n    mapped[cause.eq('L')] = 'Lightning'\n    mapped[cause.eq('H')] = 'Human'\n\n    # Keep only Lightning/Human for comparison\n    df2 = pd.DataFrame({'cause_group': mapped}).dropna()\n    out = df2.value_counts().reset_index(name='fires_gt100')\n    return out.sort_values('fires_gt100', ascending=False).reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter to gt_100==1 (fires >100 acres), map cause codes to Lightning vs Human (L/H), count fires per group",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_fire": {
+      "x": 100,
+      "y": 40
+    },
+    "fire": {
+      "x": 100,
+      "y": 220
+    },
+    "gt100_counts": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "fire-->gt100_counts",
+      "source": {
+        "operatorID": "fire",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "gt100_counts",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

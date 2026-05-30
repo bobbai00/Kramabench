@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-37-8-1779139351417",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "categories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # The file has a title row; the real header row starts on the next line.\n    # Read without header inference, then promote the first data row to header.\n    raw = pd.read_csv(path, encoding=\"cp1252\", header=None)\n    raw = raw.dropna(how=\"all\")\n    raw.columns = [f\"c{i}\" for i in range(raw.shape[1])]\n\n    # Find the header row that contains the expected labels\n    header_idx = raw.index[raw[\"c0\"].astype(str).str.strip().eq(\"Rank\")]\n    if len(header_idx) == 0:\n        raise ValueError(\"Could not find header row with 'Rank' in first column\")\n    h = header_idx[0]\n\n    header = raw.loc[h].astype(str).str.strip().tolist()\n    df = raw.loc[h + 1 :].copy()\n    df.columns = header\n\n    # Drop footer rows and any blank rows\n    df = df.dropna(how=\"all\")\n    df = df[~df[\"Rank\"].astype(str).str.contains(\"Source:\", na=False)]\n\n    return df.reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv (cp1252) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv by reading with header=None, locating the row where first column equals 'Rank' to use as the true header, then returning subsequent rows with columns [Rank, Category, # of Reports, Percentage] and dropping blank/footer 'Source:' rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "categoryReportRatio2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(categories2024):\n    import pandas as pd\n\n    df = categories2024.copy()\n\n    # Keep rows with numeric report counts; parse thousands separators\n    df[\"reports\"] = (\n        df[\"# of Reports\"].astype(str).str.replace(\",\", \"\", regex=False)\n    )\n    df[\"reports\"] = pd.to_numeric(df[\"reports\"], errors=\"coerce\")\n    df = df.dropna(subset=[\"reports\"])\n\n    max_reports = df[\"reports\"].max()\n    min_reports = df[\"reports\"].min()\n\n    ratio = float(max_reports / min_reports) if min_reports != 0 else float(\"nan\")\n\n    return pd.DataFrame(\n        [{\"ratio\": ratio, \"max_reports\": max_reports, \"min_reports\": min_reports}]\n    )\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute 2024 category report ratio: from categories2024, coerce '# of Reports' by removing thousands separators and converting to numeric; drop non-numeric/footer rows; compute max(reports) and min(reports) across categories; return single-row DataFrame with ratio=max/min plus max_reports and min_reports for verification",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "categories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "categoryReportRatio2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "categories2024-->categoryReportRatio2024",
+        "source": {
+          "operatorID": "categories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "categoryReportRatio2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

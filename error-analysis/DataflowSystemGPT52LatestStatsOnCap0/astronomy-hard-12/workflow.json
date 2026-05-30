@@ -1,0 +1,204 @@
+{
+  "headId": "step-agent-290-26-1779106479500",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadSp3",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n    import numpy as np\n\n    # Match all September 2019 Swarm POD SP3 directories/files (the filenames encode the start/end times)\n    pattern = 'data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*T??????_201909*T??????_0201/*.sp3'\n    files = sorted(glob.glob(pattern))\n\n    # Fallback: slightly broader (some systems may omit the second timestamp or vary)\n    if not files:\n        pattern2 = 'data/astronomy/input/swarm/POD/**/SW_OPER_SP3ACOM_2__201909*T??????_201909*T??????_0201/*.sp3'\n        files = sorted(glob.glob(pattern2, recursive=True))\n        pattern = pattern2\n\n    if not files:\n        raise FileNotFoundError(f'No SP3 files matched September 2019 patterns. Tried: {pattern}')\n\n    records = []\n\n    def parse_epoch(line: str):\n        # Example: *  2019 09 02 00 00 00.00000000\n        parts = line.strip().split()\n        y, m, d, hh, mm = map(int, parts[1:6])\n        ss = float(parts[6])\n        # pandas handles fractional seconds via Timedelta\n        base = pd.Timestamp(year=y, month=m, day=d, hour=hh, minute=mm, second=int(ss))\n        frac = ss - int(ss)\n        return base + pd.to_timedelta(frac, unit='s')\n\n    # SP3 position line example:\n    # P<sv>  X(km)        Y(km)        Z(km)        clock\n    # We want Swarm-A. Some SP3s use satellite id like 'L01' or 'A'. We'll parse all and filter later.\n\n    for fp in files:\n        epoch = None\n        with open(fp, 'r', encoding='utf-8', errors='ignore') as f:\n            for line in f:\n                if not line:\n                    continue\n                if line.startswith('*'):\n                    epoch = parse_epoch(line)\n                elif line.startswith('P') and epoch is not None:\n                    sv = line[1:4].strip()  # usually 3-char id\n                    # columns are fixed width, but whitespace split works reliably here\n                    toks = line.strip().split()\n                    if len(toks) >= 5:\n                        try:\n                            x = float(toks[1]); y = float(toks[2]); z = float(toks[3])\n                        except Exception:\n                            continue\n                        records.append({\n                            'time': epoch,\n                            'sv': sv,\n                            'x_km': x,\n                            'y_km': y,\n                            'z_km': z,\n                            'file': fp.split('/')[-1]\n                        })\n\n    df = pd.DataFrame.from_records(records)\n    if df.empty:\n        raise ValueError('Parsed 0 SP3 position records. The SP3 parsing assumptions may be wrong; inspect raw file.')\n\n    # Keep Swarm-A only if identifiable; common IDs include L01, SWA, A\n    # If none match, keep all (for downstream inspection).\n    candidates = ['L01', 'A', 'SWA']\n    mask = df['sv'].isin(candidates)\n    if mask.any():\n        df = df[mask].copy()\n\n    df = df.sort_values('time').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Swarm POD SP3 orbit files for September 2019 by globbing data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*T??????_201909*T??????_0201/*.sp3 (fallback recursive pattern); parse epochs from '*' lines and position records from 'P' lines to extract satellite id (sv) and ECEF X/Y/Z in km; if possible filter to Swarm-A IDs among {L01, A, SWA}, otherwise keep all; output time-ordered DataFrame [time, sv, x_km, y_km, z_km, file].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadMockField",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    path = 'data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    z = np.load(path, allow_pickle=True)\n\n    lat_grid = np.asarray(z['lat_grid'], dtype=float)\n    lon_grid = np.asarray(z['lon_grid'], dtype=float)\n    alt_grid = np.asarray(z['alt_grid'], dtype=float)\n\n    # Find any 3D field variable that could represent geopotential.\n    field_key = None\n    field = None\n    for k in z.files:\n        if k in {'lat_grid', 'lon_grid', 'alt_grid'}:\n            continue\n        arr = np.asarray(z[k])\n        if arr.ndim == 3:\n            field_key = k\n            field = arr.astype(float)\n            break\n\n    # Return in a simple scalar-column form (no list/object columns) to avoid runtime type issues.\n    return pd.DataFrame([{ \n        'all_keys': ','.join(z.files),\n        'n_lat': int(lat_grid.size),\n        'n_lon': int(lon_grid.size),\n        'n_alt': int(alt_grid.size),\n        'lat_min': float(lat_grid.min()),\n        'lat_max': float(lat_grid.max()),\n        'lon_min': float(lon_grid.min()),\n        'lon_max': float(lon_grid.max()),\n        'alt_min_km': float(alt_grid.min()),\n        'alt_max_km': float(alt_grid.max()),\n        'field_key': field_key,\n        'field_available': bool(field_key is not None),\n        # Store repr of arrays; downstream will reload NPZ for actual interpolation.\n        'note': 'Coordinate grids loaded. Downstream should reload NPZ to access arrays for interpolation.'\n    }])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load mock_tiegcm_grid_sept2019.npz via np.load(allow_pickle=True); read lat_grid (deg), lon_grid (deg), alt_grid (km); detect any 3D field variable (ndim==3) as potential geopotential field (field_key); return scalar metadata columns (grid sizes/min/max, all_keys, field_key, field_available) to avoid object/list columns that can error in runtime.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectSp3Dirs",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os, glob\n    import pandas as pd\n\n    base = 'data/astronomy/input/swarm/POD'\n    rows = []\n    if os.path.exists(base):\n        rows.append({'path': base, 'type': 'exists'})\n        # list two levels deep\n        for p in sorted(glob.glob(base + '/**', recursive=True))[:5000]:\n            if os.path.isdir(p):\n                continue\n            if p.lower().endswith('.sp3') or 'SP3' in p or 'sp3' in p:\n                rows.append({'path': p, 'type': 'file'})\n    else:\n        rows.append({'path': base, 'type': 'missing'})\n\n    # also glob broader in case folder differs\n    for pat in [\n        'data/astronomy/input/swarm/**/*.sp3',\n        'data/astronomy/input/**/*.sp3',\n        'data/astronomy/input/swarm/POD/**/*.SP3',\n    ]:\n        matches = sorted(glob.glob(pat, recursive=True))\n        rows.append({'path': pat, 'type': f'pattern_matches={len(matches)}'})\n        for m in matches[:20]:\n            rows.append({'path': m, 'type': 'match_sample'})\n\n    return pd.DataFrame(rows)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect filesystem for Swarm POD SP3 orbit files: check existence of base directory data/astronomy/input/swarm/POD; list any *.sp3 files found (sample); and report match counts for broader recursive glob patterns to locate correct SP3 paths.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectMockNpz",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    path = 'data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    dat = np.load(path, allow_pickle=True)\n    rows = []\n    for k in dat.files:\n        arr = dat[k]\n        # summarize without dumping full arrays\n        rows.append({\n            'key': k,\n            'dtype': str(arr.dtype),\n            'shape': str(arr.shape),\n            'min': float(np.nanmin(arr)) if arr.size and np.issubdtype(arr.dtype, np.number) else None,\n            'max': float(np.nanmax(arr)) if arr.size and np.issubdtype(arr.dtype, np.number) else None,\n        })\n    return pd.DataFrame(rows).sort_values('key').reset_index(drop=True)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect contents of mock_tiegcm_grid_sept2019.npz: list all keys with array dtype, shape, and numeric min/max (when applicable) to identify the geopotential field variable name and units.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectSp3Header",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n\n    pat = 'data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909??T??????_201909??T??????_0201/*.sp3'\n    files = sorted(glob.glob(pat))\n    if not files:\n        files = sorted(glob.glob('data/astronomy/input/swarm/POD/**/*.sp3', recursive=True))\n\n    sample = files[0]\n    lines = []\n    with open(sample, 'r', errors='ignore') as f:\n        for i in range(80):\n            line = f.readline()\n            if not line:\n                break\n            lines.append({'i': i, 'line': line.rstrip('\\n')})\n    df = pd.DataFrame(lines)\n    df['file'] = sample.split('/')[-1]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first ~80 lines of a sample Swarm POD SP3 file (September 2019 glob); return DataFrame of raw header/text lines to identify satellite vehicle IDs and record structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "computeMeanGeopotentialEnergy",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadSp3, loadMockField) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    from scipy.interpolate import RegularGridInterpolator\n\n    # Constants\n    R_km = 6371.0\n    g = 9.80665\n\n    # --- Filter time range (inclusive) ---\n    df = loadSp3.copy()\n    df['time'] = pd.to_datetime(df['time'], utc=True, errors='coerce')\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-29T23:59:59Z')\n    df = df[(df['time'] >= start) & (df['time'] <= end)].copy()\n\n    # If multiple SVs exist, prefer common Swarm-A identifiers\n    sv_pref = ['L01', 'SWA', 'A', 'SWARMA', 'SWARM-A']\n    if 'sv' in df.columns:\n        svs = df['sv'].dropna().unique().tolist()\n        chosen_sv = None\n        for s in sv_pref:\n            if s in svs:\n                chosen_sv = s\n                break\n        if chosen_sv is None and len(svs) > 0:\n            chosen_sv = svs[0]\n        if chosen_sv is not None:\n            df = df[df['sv'] == chosen_sv].copy()\n    else:\n        chosen_sv = None\n\n    # --- ECEF (km) -> spherical lat/lon/alt ---\n    x = df['x_km'].to_numpy(dtype=float)\n    y = df['y_km'].to_numpy(dtype=float)\n    z = df['z_km'].to_numpy(dtype=float)\n    r_km = np.sqrt(x*x + y*y + z*z)\n\n    lat_rad = np.arcsin(np.clip(z / r_km, -1, 1))\n    lon_rad = np.arctan2(y, x)\n    lat_deg = np.degrees(lat_rad)\n    lon_deg = (np.degrees(lon_rad) + 360.0) % 360.0\n    alt_km = r_km - R_km\n\n    # --- Load mock field arrays directly from NPZ (loadMockField contains only metadata) ---\n    npz_path = 'data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    with np.load(npz_path, allow_pickle=True) as npz:\n        lat_grid = np.asarray(npz['lat_grid'], dtype=float)\n        lon_grid = np.asarray(npz['lon_grid'], dtype=float)\n        alt_grid = np.asarray(npz['alt_grid'], dtype=float)\n        # pick a 3D numeric field if present\n        field_key = None\n        field = None\n        for k in npz.files:\n            if k in ('lat_grid', 'lon_grid', 'alt_grid'):\n                continue\n            arr = npz[k]\n            if hasattr(arr, 'ndim') and arr.ndim == 3 and np.issubdtype(arr.dtype, np.number):\n                field_key = k\n                field = np.asarray(arr, dtype=float)\n                break\n\n    field_available = field is not None\n\n    # --- Interpolate geopotential energy per unit mass (J/kg) ---\n    if field_available:\n        # Ensure grids are increasing\n        def ensure_increasing(grid, axis, arr):\n            if grid[0] > grid[-1]:\n                grid = grid[::-1]\n                arr = np.flip(arr, axis=axis)\n            return grid, arr\n\n        lat_grid, field = ensure_increasing(lat_grid, 0, field)\n        lon_grid, field = ensure_increasing(lon_grid, 1, field)\n        alt_grid, field = ensure_increasing(alt_grid, 2, field)\n\n        # Clip points to bounds\n        lat_q = np.clip(lat_deg, float(lat_grid.min()), float(lat_grid.max()))\n        lon_q = np.clip(lon_deg, float(lon_grid.min()), float(lon_grid.max()))\n        alt_q = np.clip(alt_km, float(alt_grid.min()), float(alt_grid.max()))\n\n        interp = RegularGridInterpolator(\n            (lat_grid, lon_grid, alt_grid),\n            field,\n            bounds_error=False,\n            fill_value=np.nan,\n        )\n        pts = np.column_stack([lat_q, lon_q, alt_q])\n        V = interp(pts)\n\n        # If field appears dimensionless or too small, interpret as geopotential height (m)\n        # and convert to potential energy via g*H.\n        med_abs = np.nanmedian(np.abs(V))\n        if np.isfinite(med_abs) and med_abs < 1e4:  # heuristically: likely in meters\n            V = g * V\n    else:\n        # Fallback: simple gravitational potential energy difference ~ g * altitude\n        V = g * (alt_km * 1000.0)\n        field_key = None\n\n    mean_V = float(np.nanmean(V))\n\n    return pd.DataFrame([{\n        'sv': chosen_sv,\n        'n_points': int(df.shape[0]),\n        'field_available': bool(field_available),\n        'field_key': field_key,\n        'mean_geopotential_energy_J_per_kg': mean_V,\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Estimate mean geopotential energy per unit mass for Swarm-A over 2019-09-02..2019-09-29 (inclusive): filter SP3 points by time; (if multiple) select SV preferring Swarm-A identifiers; convert ECEF (x_km,y_km,z_km) to spherical lat/lon/alt using Earth radius 6371.0 km; reload mock_tiegcm_grid_sept2019.npz to access lat_grid/lon_grid/alt_grid and first numeric 3D field; interpolate field at each (lat,lon,alt_km) via RegularGridInterpolator with clipping; if no field present, fall back to V=g*alt_m; return mean V (J/kg) across all timepoints plus metadata (n_points, field_key, field_available).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadSp3": {
+        "x": 100,
+        "y": 40
+      },
+      "loadMockField": {
+        "x": 100,
+        "y": 220
+      },
+      "inspectSp3Dirs": {
+        "x": 100,
+        "y": 400
+      },
+      "inspectMockNpz": {
+        "x": 100,
+        "y": 580
+      },
+      "inspectSp3Header": {
+        "x": 100,
+        "y": 760
+      },
+      "computeMeanGeopotentialEnergy": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadSp3-->computeMeanGeopotentialEnergy",
+        "source": {
+          "operatorID": "loadSp3",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "computeMeanGeopotentialEnergy",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadMockField-->computeMeanGeopotentialEnergy",
+        "source": {
+          "operatorID": "loadMockField",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "computeMeanGeopotentialEnergy",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

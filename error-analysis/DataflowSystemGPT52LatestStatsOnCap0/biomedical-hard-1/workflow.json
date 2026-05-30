@@ -1,0 +1,278 @@
+{
+  "headId": "step-agent-339-5-1779107449978",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    # Load all sheets; keep as long-form for inspection\n    xls = pd.ExcelFile(path)\n    frames = []\n    for sheet in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sheet, dtype=str)\n        df['__sheet__'] = sheet\n        frames.append(df)\n    out = pd.concat(frames, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx: read all sheets with pd.read_excel(dtype=str), add '__sheet__' column indicating sheet name, and concatenate into one DataFrame for inspection of available tables/columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc2",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc2.xlsx'\n    xls = pd.ExcelFile(path)\n    frames = []\n    for sheet in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sheet, dtype=str)\n        df['__sheet__'] = sheet\n        frames.append(df)\n    out = pd.concat(frames, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc2.xlsx: read all sheets with pd.read_excel(dtype=str), add '__sheet__' column indicating sheet name, and concatenate into one DataFrame for inspection of available tables/columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "tumorSamples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1):\n    import pandas as pd\n\n    df = mmc1.copy()\n\n    # Keep only in-study, tumor samples\n    # Case_excluded: Yes/No. Proteomics_Tumor_Normal: Tumor/Normal\n    out = df[(df['Case_excluded'].str.strip().str.lower() == 'no') &\n             (df['Proteomics_Tumor_Normal'].str.strip().str.lower() == 'tumor')].copy()\n\n    # Map participant IDs like 'C3L-00006' to sample ids like 'S001'\n    out['sample_id'] = out['idx'].astype(str)\n\n    return out[['sample_id', 'Proteomics_Participant_ID', 'Proteomics_Aliquot_ID', 'Proteomics_Tumor_Normal', 'Case_excluded']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc1 (UCEC_CPTAC3_meta_table_V2.1), filter to in-study tumor samples where Case_excluded == 'No' and Proteomics_Tumor_Normal == 'Tumor'; keep key identifiers and create 'sample_id' from 'idx' (e.g., 'S001')",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "plk1Global",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc2):\n    import pandas as pd\n\n    df = mmc2.copy()\n    gp = df[df['__sheet__'] == 'A-global-proteomics'].copy()\n\n    # The 'idx' column holds protein identifiers (gene symbol etc.)\n    # Select PLK1 row(s)\n    plk1 = gp[gp['idx'].astype(str).str.strip().str.upper().eq('PLK1')].copy()\n\n    # Keep sample columns only (S###)\n    sample_cols = [c for c in plk1.columns if isinstance(c, str) and c.startswith('S')]\n    plk1 = plk1[['idx'] + sample_cols]\n\n    # If multiple rows match, take the first (should be unique)\n    if len(plk1) == 0:\n        return pd.DataFrame({'error': ['PLK1 not found in A-global-proteomics idx']})\n\n    plk1_row = plk1.iloc[0:1].melt(id_vars=['idx'], var_name='sample_id', value_name='plk1')\n    plk1_row['plk1'] = pd.to_numeric(plk1_row['plk1'], errors='coerce')\n\n    return plk1_row.drop(columns=['idx'])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc2 sheet 'A-global-proteomics', locate protein row where idx == 'PLK1' (case-insensitive), reshape wide S### columns to long [sample_id, plk1] and coerce plk1 to numeric",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "chek2S163Phospho",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc2):\n    import pandas as pd\n    import re\n\n    df = mmc2.copy()\n    pp = df[df['__sheet__'] == 'B-phospho-proteomics'].copy()\n\n    # Try to find CHEK2 S163 site in the idx string. Common patterns include:\n    # 'CHEK2-S163', 'CHEK2_S163', 'CHEK2 S163', 'CHEK2 S163...' etc.\n    idx_upper = pp['idx'].astype(str).str.upper()\n\n    mask = idx_upper.str.contains(r'\\bCHEK2\\b') & idx_upper.str.contains(r'S\\s*163\\b')\n    subset = pp[mask].copy()\n\n    sample_cols = [c for c in subset.columns if isinstance(c, str) and c.startswith('S')]\n    subset = subset[['idx'] + sample_cols]\n\n    if len(subset) == 0:\n        return pd.DataFrame({'error': ['CHEK2 S163 not found in B-phospho-proteomics idx']})\n\n    # If multiple matches (e.g., different peptide forms), take the first.\n    long = subset.iloc[0:1].melt(id_vars=['idx'], var_name='sample_id', value_name='chek2S163')\n    long['chek2S163'] = pd.to_numeric(long['chek2S163'], errors='coerce')\n\n    return long.drop(columns=['idx'])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc2 sheet 'B-phospho-proteomics', filter idx strings containing gene 'CHEK2' and phosphosite S163 (regex on idx); reshape wide S### columns to long [sample_id, chek2S163] and coerce to numeric (take first match if multiple)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "spearmanCorr",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(tumorSamples, plk1Global, chek2S163Phospho):\n    import pandas as pd\n    from scipy.stats import spearmanr\n\n    # Inner-join ensures: tumor, in-study, and have both measures (after dropping NAs)\n    df = tumorSamples.merge(plk1Global, on='sample_id', how='inner').merge(chek2S163Phospho, on='sample_id', how='inner')\n\n    df = df.dropna(subset=['plk1', 'chek2S163']).copy()\n\n    if len(df) < 2:\n        return pd.DataFrame({'n': [len(df)], 'spearman_r': [float('nan')]})\n\n    r, p = spearmanr(df['plk1'], df['chek2S163'])\n    return pd.DataFrame({'n': [len(df)], 'spearman_r': [float(r)], 'p_value': [float(p)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inner join tumorSamples (in-study tumor) with PLK1 global proteomics and CHEK2-S163 phosphoproteomics on sample_id; drop rows with missing plk1 or chek2S163; compute Spearman correlation (scipy.stats.spearmanr) and return n, spearman_r, p_value",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc2": {
+        "x": 100,
+        "y": 310
+      },
+      "tumorSamples": {
+        "x": 400,
+        "y": 40
+      },
+      "plk1Global": {
+        "x": 400,
+        "y": 220
+      },
+      "chek2S163Phospho": {
+        "x": 400,
+        "y": 400
+      },
+      "spearmanCorr": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1-->tumorSamples",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "tumorSamples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc2-->plk1Global",
+        "source": {
+          "operatorID": "mmc2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "plk1Global",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc2-->chek2S163Phospho",
+        "source": {
+          "operatorID": "mmc2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "chek2S163Phospho",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "tumorSamples-->spearmanCorr",
+        "source": {
+          "operatorID": "tumorSamples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "spearmanCorr",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "plk1Global-->spearmanCorr",
+        "source": {
+          "operatorID": "plk1Global",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "spearmanCorr",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "chek2S163Phospho-->spearmanCorr",
+        "source": {
+          "operatorID": "chek2S163Phospho",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "spearmanCorr",
+          "portID": "input-2"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

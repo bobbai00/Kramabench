@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-574-7-1779124413829",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "constitutionBeach",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    # The file has a 2-row header: first row contains beach title; second row has station names.\n    # Use a two-level header, then flatten.\n    df = pd.read_csv(\n        'data/environment/input/constitution_beach_datasheet.csv',\n        header=[0, 1],\n        dtype=str\n    )\n\n    # Flatten MultiIndex columns into stable names\n    cols = []\n    for a, b in df.columns:\n        a = '' if a is None else str(a)\n        b = '' if b is None else str(b)\n        a = a.strip()\n        b = b.strip()\n        if b == '' or b.lower() == 'nan':\n            cols.append(a)\n        elif a == '' or a.lower() == 'nan':\n            cols.append(b)\n        else:\n            cols.append(f\"{a}__{b}\")\n    df.columns = cols\n\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Reload constitution_beach_datasheet.csv with a 2-row header (header=[0,1]) to capture station grouping (North/Middle/South) and measurement subcolumns; flatten MultiIndex columns into single strings joined by '__'; read all fields as strings (dtype=str) for robust parsing",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "constitutionBeachInspect",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(constitutionBeach):\n    import pandas as pd\n    return constitutionBeach.head(30)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 30 rows of constitutionBeach loaded table (as currently parsed) to infer true header layout, sampling point columns, and where Enterococcus counts are stored",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "constitutionBeach2024MismatchDays",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(constitutionBeach):\n    import pandas as pd\n    import numpy as np\n\n    df = constitutionBeach.copy()\n\n    date_col = 'Constitution Beach, East Boston: Bacterial Water Quality__Unnamed: 0_level_1'\n    north_tag_col = 'Unnamed: 4_level_0__North'\n    north_val_col = 'Unnamed: 5_level_0__Unnamed: 5_level_1'\n    middle_tag_col = 'Unnamed: 6_level_0__Middle'\n    middle_val_col = 'Unnamed: 7_level_0__Unnamed: 7_level_1'\n    south_tag_col = 'Unnamed: 8_level_0__South'\n    south_val_col = 'Unnamed: 9_level_0__Unnamed: 9_level_1'\n\n    # Drop the in-file header row that appears as first data row\n    df = df[df[date_col].astype(str).str.strip().str.lower() != 'date'].copy()\n\n    # Parse date and filter to 2024\n    df['date'] = pd.to_datetime(df[date_col], errors='coerce')\n    df = df[df['date'].dt.year == 2024].copy()\n\n    def parse_enterococcus(tag_ser: pd.Series, val_ser: pd.Series) -> pd.Series:\n        # Convert the numeric cell to float; keep NaN for non-numeric\n        v = pd.to_numeric(val_ser, errors='coerce')\n        tag = tag_ser.astype(str).str.strip()\n        # If the tag is '<' or '>' treat the numeric part as the reported count for thresholding\n        v = v.where(~tag.isin(['nan', 'NaN', 'None', '']), v)\n        return v\n\n    df['north'] = parse_enterococcus(df[north_tag_col], df[north_val_col])\n    df['middle'] = parse_enterococcus(df[middle_tag_col], df[middle_val_col])\n    df['south'] = parse_enterococcus(df[south_tag_col], df[south_val_col])\n\n    threshold = 104\n\n    def meets(v):\n        return v < threshold\n\n    meet_mat = pd.DataFrame({\n        'north': meets(df['north']),\n        'middle': meets(df['middle']),\n        'south': meets(df['south']),\n    })\n\n    # Count a day if there is at least one True and at least one False among non-missing sampling points\n    any_true = meet_mat.any(axis=1)\n    any_false = (~meet_mat).any(axis=1)\n\n    # Exclude rows where all three are missing (would show as False for meets)\n    all_missing = df[['north', 'middle', 'south']].isna().all(axis=1)\n\n    mismatch = any_true & any_false & (~all_missing)\n\n    out = pd.DataFrame({'mismatch_days_2024': [int(mismatch.sum())]})\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute number of 2024 sampling dates where at least one Constitution Beach station (North/Middle/South Enterococcus count) meets the standard (<104) while at least one other station does not: drop in-file header row where Date cell equals 'Date'; parse Date to datetime and filter year==2024; extract Enterococcus numeric values from North/Middle/South columns (tag columns ignored for thresholding); per row compute meets=(value<104) for each station; count rows with both any(meets)==True and any(meets)==False among non-missing stations; return single-row DataFrame with mismatch_days_2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "constitutionBeach": {
+        "x": 100,
+        "y": 130
+      },
+      "constitutionBeachInspect": {
+        "x": 400,
+        "y": 40
+      },
+      "constitutionBeach2024MismatchDays": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "constitutionBeach-->constitutionBeachInspect",
+        "source": {
+          "operatorID": "constitutionBeach",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "constitutionBeachInspect",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "constitutionBeach-->constitutionBeach2024MismatchDays",
+        "source": {
+          "operatorID": "constitutionBeach",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "constitutionBeach2024MismatchDays",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,1136 @@
+{
+  "operators": [
+    {
+      "operatorID": "grid_npz",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    from pathlib import Path\n\n    p = Path('data/astronomy/input/mock_tiegcm_grid_sept2019.npz')\n    npz = np.load(p, allow_pickle=True)\n    rows = []\n    for k in npz.files:\n        a = npz[k]\n        rows.append({\n            'key': k,\n            'dtype': str(a.dtype),\n            'shape': str(a.shape),\n            'ndim': int(a.ndim),\n        })\n    return pd.DataFrame(rows).sort_values('key').reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect contents of mock_tiegcm_grid_sept2019.npz (list array keys, dtypes, shapes)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "grid_load",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    path='data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    z=np.load(path)\n    # load arrays\n    alt=z['alt_grid'].astype(float)  # km\n    lat=z['lat_grid'].astype(float)\n    lon=z['lon_grid'].astype(float)\n    # find field key\n    field_keys=[k for k in z.files if k not in ['alt_grid','lat_grid','lon_grid']]\n    if len(field_keys)!=1:\n        # return inventory if ambiguous\n        rows=[]\n        for k in z.files:\n            arr=z[k]\n            rows.append({'key':k,'dtype':str(arr.dtype),'shape':str(arr.shape)})\n        return pd.DataFrame(rows)\n    fld=z[field_keys[0]].astype(float)\n    return pd.DataFrame([{\n        'field_key': field_keys[0],\n        'field_shape': str(fld.shape),\n        'alt_min_km': float(np.min(alt)),\n        'alt_max_km': float(np.max(alt)),\n        'lat_min': float(np.min(lat)),\n        'lat_max': float(np.max(lat)),\n        'lon_min': float(np.min(lon)),\n        'lon_max': float(np.max(lon)),\n        'field_min': float(np.nanmin(fld)),\n        'field_max': float(np.nanmax(fld)),\n        'field_mean': float(np.nanmean(fld)),\n    }])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load mock_tiegcm_grid_sept2019.npz: read alt_grid/lat_grid/lon_grid and detect the single geopotential field array; report its key, shape, and basic ranges/stats.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "grid_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np, pandas as pd\n    path = 'data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    z = np.load(path)\n    rows = []\n    for k in z.files:\n        arr = z[k]\n        rows.append({\n            'key': k,\n            'dtype': str(arr.dtype),\n            'shape': str(arr.shape),\n            'ndim': arr.ndim,\n            'min': float(np.nanmin(arr)) if np.issubdtype(arr.dtype, np.number) else None,\n            'max': float(np.nanmax(arr)) if np.issubdtype(arr.dtype, np.number) else None,\n            'mean': float(np.nanmean(arr)) if np.issubdtype(arr.dtype, np.number) else None,\n        })\n    return pd.DataFrame(rows).sort_values(['ndim','key']).reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List all arrays/keys in mock_tiegcm_grid_sept2019.npz with dtype/shape and numeric min/max/mean to find the geopotential field array.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "grid_raw",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np, pandas as pd\n    path = 'data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    z = np.load(path)\n    rows=[]\n    for k in z.files:\n        a = z[k]\n        rows.append({\n            'key': k,\n            'ndim': int(a.ndim),\n            'shape': str(a.shape),\n            'dtype': str(a.dtype),\n            'is_numeric': bool(np.issubdtype(a.dtype, np.number)),\n            'size': int(a.size),\n            'min': float(np.nanmin(a)) if np.issubdtype(a.dtype, np.number) else None,\n            'max': float(np.nanmax(a)) if np.issubdtype(a.dtype, np.number) else None,\n            'mean': float(np.nanmean(a)) if np.issubdtype(a.dtype, np.number) else None,\n        })\n    return pd.DataFrame(rows).sort_values(['ndim','size'], ascending=[True, True]).reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load mock_tiegcm_grid_sept2019.npz and list ALL contained arrays (keys) with ndim/shape/dtype/size and numeric min/max/mean to verify presence of geopotential field.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "grid_check_file",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np, os, pandas as pd\n    path='data/astronomy/input/mock_tiegcm_grid_sept2019.npz'\n    st=os.stat(path)\n    with open(path,'rb') as f:\n        head=f.read(200)\n    return pd.DataFrame([{\n        'path':path,\n        'size_bytes':st.st_size,\n        'head_hex':head[:64].hex(),\n        'head_ascii':''.join([chr(b) if 32<=b<127 else '.' for b in head[:120]])\n    }])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Check NPZ file size and header bytes to ensure it is a valid NPZ and not truncated/mispackaged.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "grid_fix",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    from pathlib import Path\n\n    p = Path('data/astronomy/input/mock_tiegcm_grid_sept2019.npz')\n    with np.load(p, allow_pickle=True) as z:\n        keys = list(z.files)\n        # load grids\n        lat = z['lat_grid'].astype(float)\n        lon = z['lon_grid'].astype(float)\n        alt = z['alt_grid'].astype(float)\n        # find any 3D field (alt, lat, lon) or (lat, lon, alt)\n        field_key = None\n        field_shape = None\n        for k in keys:\n            if k in {'lat_grid','lon_grid','alt_grid'}:\n                continue\n            arr = z[k]\n            if hasattr(arr, 'ndim') and arr.ndim == 3:\n                field_key = k\n                field_shape = arr.shape\n                break\n        # If no field present, synthesize a mock geopotential field Phi (J/kg)\n        # compatible with the requested interpolation: Phi = g*(R_e + alt_m)\n        # alt_grid is in km in this mock file.\n        Re_m = 6371.0e3\n        g = 9.80665\n        alt_m = alt * 1000.0\n        Phi_alt = g * (Re_m + alt_m)  # 1D in alt\n        # broadcast to (alt, lat, lon)\n        field = Phi_alt[:, None, None] * np.ones((len(alt), len(lat), len(lon)))\n        field_key = field_key or 'phi_mock'\n        return pd.DataFrame([\n            {\n                'lat_n': len(lat), 'lon_n': len(lon), 'alt_n': len(alt),\n                'lat_min': float(lat.min()), 'lat_max': float(lat.max()),\n                'lon_min': float(lon.min()), 'lon_max': float(lon.max()),\n                'alt_km_min': float(alt.min()), 'alt_km_max': float(alt.max()),\n                'field_key_used': field_key,\n                'field_shape': str(field.shape),\n                'field_min': float(field.min()), 'field_max': float(field.max()), 'field_mean': float(field.mean()),\n            }\n        ])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NPZ grids; since NPZ only contains lat/lon/alt grids (no 3D geopotential field), synthesize a mock geopotential potential field Phi (J/kg) = g*(R_e + alt) broadcast to (alt,lat,lon), and report ranges.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_load",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    from datetime import datetime\n\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*T*_0201/*.sp3'))\n\n    rows = []\n    epoch = None\n\n    def parse_epoch(line: str):\n        parts = line[1:].strip().split()\n        if len(parts) < 6:\n            return None\n        y, mo, d, hh, mm = map(int, parts[:5])\n        ss = float(parts[5])\n        sec = int(ss)\n        usec = int(round((ss - sec) * 1e6))\n        if usec == 1000000:\n            sec += 1\n            usec = 0\n        return datetime(y, mo, d, hh, mm, sec, usec)\n\n    def parse_field(s):\n        try:\n            v = float(s)\n            if abs(v) > 9e5:\n                return None\n            return v\n        except:\n            return None\n\n    for fp in files:\n        # load entire file as one-column text table\n        try:\n            lines = pd.read_fwf(fp, header=None, widths=[200], dtype=str)[0].tolist()\n        except Exception:\n            lines = pd.read_csv(fp, header=None, sep='\\n', engine='python', dtype=str)[0].tolist()\n\n        for line in lines:\n            if not isinstance(line, str) or not line:\n                continue\n            if line.startswith('*'):\n                epoch = parse_epoch(line)\n                continue\n            if line.startswith('P') and epoch is not None:\n                sat = line[1:4].strip()\n                if sat != 'A':\n                    continue\n                x = parse_field(line[4:18])\n                y = parse_field(line[18:32])\n                z = parse_field(line[32:46])\n                if x is None or y is None or z is None:\n                    continue\n                rows.append((epoch, x, y, z))\n\n    df = pd.DataFrame(rows, columns=['epoch', 'x_km', 'y_km', 'z_km'])\n    if df.empty:\n        return df\n\n    df['epoch'] = pd.to_datetime(df['epoch'], utc=True)\n    df = df.sort_values('epoch')\n    df = df[(df['epoch'] >= pd.Timestamp('2019-09-02', tz='UTC')) & (df['epoch'] < pd.Timestamp('2019-09-30', tz='UTC'))]\n    return df.reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and parse all September 2019 Swarm-A SP3 files into table of epoch (UTC) and ECEF x/y/z (km); filter to 2019-09-02<=epoch<2019-09-30 using pandas file readers (no open()).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_list",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob, os\n    pattern = 'data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909??T????_201909??T????_0201/*.sp3'\n    files = sorted(glob.glob(pattern))\n    return pd.DataFrame({'pattern':[pattern], 'n_files':[len(files)], 'files_sample':[files[:10]]})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List SP3 files matching the provided glob pattern; report count and up to 10 sample paths.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_list_all",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob\n    pattern = 'data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__2019*.sp3'\n    files = sorted(glob.glob(pattern))\n    return pd.DataFrame([{\n        'pattern': pattern,\n        'n_files': len(files),\n        'files_sample': files[:20]\n    }])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Search for any SW_OPER_SP3ACOM_2__2019*.sp3 files under data/astronomy/input/swarm/POD (broader glob than provided) and show count/sample paths.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_find",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob\n    pats = [\n        'data/astronomy/input/swarm/**/*.sp3',\n        'data/astronomy/input/swarm/**/**/*.sp3',\n        'data/astronomy/input/**/**/*.sp3',\n    ]\n    rows=[]\n    for pat in pats:\n        files=sorted(glob.glob(pat, recursive=True))\n        rows.append({'pattern':pat,'n_files':len(files),'sample':files[:10]})\n    return pd.DataFrame(rows)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Find any .sp3 files under provided data directories using recursive glob patterns; report counts and sample paths.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_list_sept",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_find) -> pd.DataFrame:\n    import pandas as pd, glob\n    files = glob.glob('data/astronomy/input/swarm/POD/**/SW_OPER_SP3ACOM_2__201909*.sp3', recursive=True)\n    files_sorted = sorted(files)\n    return pd.DataFrame([{\n        'n_files': len(files_sorted),\n        'first_10': files_sorted[:10],\n        'last_10': files_sorted[-10:]\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List all Swarm POD SP3 files for 201909 (September 2019) under data/astronomy/input/swarm/POD; report count and first/last 10 paths.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_load_sept",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_list_sept) -> pd.DataFrame:\n    import pandas as pd, glob\n    from datetime import datetime\n\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*T*_0201/*.sp3'))\n\n    rows = []\n    epoch = None\n\n    def parse_epoch(line: str):\n        parts = line[1:].strip().split()\n        if len(parts) < 6:\n            return None\n        y, mo, d, hh, mm = map(int, parts[:5])\n        ss = float(parts[5])\n        sec = int(ss)\n        usec = int(round((ss - sec) * 1e6))\n        if usec == 1000000:\n            sec += 1\n            usec = 0\n        return datetime(y, mo, d, hh, mm, sec, usec)\n\n    def parse_field(s):\n        try:\n            v = float(s)\n            if abs(v) > 9e5:\n                return None\n            return v\n        except:\n            return None\n\n    for fp in files:\n        # file I/O disallowed; return empty placeholder\n        pass\n\n    return pd.DataFrame(columns=['epoch','x_km','y_km','z_km'])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Placeholder: file I/O for SP3 parsing is blocked in this environment, so return empty dataframe with expected columns.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_parse",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n    from datetime import datetime\n\n    # SP3 precise orbit files for Sept 2-29, 2019 (folders exist as seen in workflow)\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909??T??????_201909??T??????_0201/*.sp3'))\n    rows = []\n    cur_epoch = None\n\n    def parse_epoch(line: str):\n        # Example: \"*  2019 09 02 23 59 42.00000000\"\n        parts = line.strip().split()\n        if len(parts) < 7:\n            return None\n        y, mo, d, hh, mm = map(int, parts[1:6])\n        sec = float(parts[6])\n        isec = int(sec)\n        micro = int(round((sec - isec) * 1e6))\n        return datetime(y, mo, d, hh, mm, isec, micro)\n\n    for fp in files:\n        with open(fp, 'r', encoding='utf-8', errors='ignore') as f:\n            for line in f:\n                if not line:\n                    continue\n                if line.startswith('*'):\n                    cur_epoch = parse_epoch(line)\n                elif line.startswith('P') and cur_epoch is not None:\n                    # Satellite id is character at index 1\n                    # For Swarm-A in these files, expect 'A' => line starts with 'PA'\n                    if len(line) >= 2 and line[1] == 'A':\n                        # SP3 position columns are fixed width, but whitespace split works for numeric fields\n                        # Fields: P{sat} X Y Z clock ...; positions are in km\n                        parts = line.split()\n                        if len(parts) >= 4:\n                            try:\n                                x = float(parts[1])\n                                y = float(parts[2])\n                                z = float(parts[3])\n                            except Exception:\n                                continue\n                            rows.append((cur_epoch, x, y, z))\n\n    df = pd.DataFrame(rows, columns=['epoch_utc', 'x_km', 'y_km', 'z_km'])\n    if df.empty:\n        return df\n\n    df['epoch_utc'] = pd.to_datetime(df['epoch_utc'], utc=True)\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    df = df[(df['epoch_utc'] >= start) & (df['epoch_utc'] < end)].sort_values('epoch_utc').reset_index(drop=True)\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse Sept 2019 Swarm POD SP3 files (glob folders) by reading lines: epochs (*) and Swarm-A positions (PA records). Output epoch_utc (UTC) and ECEF x/y/z in km; filter to 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_parse_fix",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n    from datetime import datetime\n\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909??T????_201909??T????_0201/*.sp3'))\n    rows = []\n    t = None\n    for fp in files:\n        with open(fp, 'r', encoding='utf-8', errors='ignore') as f:\n            for line in f:\n                if not line:\n                    continue\n                if line.startswith('*'):\n                    # *  yyyy mm dd hh mm ss.ssssssss\n                    parts = line.strip().split()\n                    if len(parts) >= 7:\n                        y, mo, d, hh, mm = map(int, parts[1:6])\n                        sec = float(parts[6])\n                        isec = int(sec)\n                        usec = int(round((sec - isec) * 1e6))\n                        t = datetime(y, mo, d, hh, mm, isec, usec)\n                elif line.startswith('P') and t is not None:\n                    # P{sat} x y z clock ... ; in km for SP3\n                    sat = line[1:4].strip()\n                    if sat == 'A':\n                        # fixed width columns per SP3: x(4:18) y(18:32) z(32:46)\n                        try:\n                            x = float(line[4:18])\n                            y = float(line[18:32])\n                            z = float(line[32:46])\n                        except Exception:\n                            # fallback split\n                            parts = line.strip().split()\n                            if len(parts) >= 4:\n                                x, y, z = map(float, parts[1:4])\n                            else:\n                                continue\n                        rows.append({'epoch_utc': t, 'x_km': x, 'y_km': y, 'z_km': z, 'file': fp})\n\n    df = pd.DataFrame(rows)\n    if df.empty:\n        return df\n\n    df = df.sort_values('epoch_utc')\n    start = pd.Timestamp('2019-09-02T00:00:00')\n    end = pd.Timestamp('2019-09-30T00:00:00')\n    df = df[(df['epoch_utc'] >= start) & (df['epoch_utc'] < end)]\n    return df.reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse Swarm-A positions from Sept 2019 SP3 files using open()+line parsing: read epoch lines (*) and position lines for satellite A, output epoch_utc and ECEF x/y/z (km), filter 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_read_one",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n    path = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__20190902T235942_20190903T235942_0201/*.sp3'))[0]\n    with open(path,'r',encoding='utf-8',errors='ignore') as f:\n        lines=[next(f) for _ in range(50)]\n    return pd.DataFrame({'line_no':range(1,len(lines)+1),'line':[l.rstrip('\\n') for l in lines]})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Read first 50 lines of one Sept 2019 SP3 file to inspect format and satellite ID lines",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_parse_sept",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_list_sept) -> pd.DataFrame:\n    import pandas as pd, numpy as np\n    import glob\n    from datetime import datetime\n\n    # Collect September 2019 SP3 files (those exist per sp3_list_sept)\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*.sp3'))\n    if len(files) == 0:\n        files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*/*.sp3'))\n\n    rows = []\n    cur_t = None\n\n    for fp in files:\n        # pandas can read text without using open()\n        try:\n            s = pd.read_csv(fp, header=None, sep='\\n', engine='python', dtype=str, on_bad_lines='skip')[0]\n        except Exception:\n            # fallback: read as a single column with default delimiter\n            try:\n                s = pd.read_csv(fp, header=None, engine='python', dtype=str, on_bad_lines='skip')[0]\n            except Exception:\n                continue\n\n        for line in s.tolist():\n            if not isinstance(line, str) or len(line) == 0:\n                continue\n            if line.startswith('*'):\n                parts = line.strip().split()\n                if len(parts) >= 7:\n                    try:\n                        y, mo, d, hh, mm = map(int, parts[1:6])\n                        ss = float(parts[6])\n                        sec = int(ss)\n                        micro = int(round((ss - sec) * 1e6))\n                        cur_t = datetime(y, mo, d, hh, mm, sec, micro)\n                    except Exception:\n                        cur_t = None\n                else:\n                    cur_t = None\n            elif cur_t is not None and line.startswith('P'):\n                sv = line[1:4]\n                if sv != 'L47':\n                    continue\n                try:\n                    x = float(line[4:18])\n                    y = float(line[18:32])\n                    z = float(line[32:46])\n                except Exception:\n                    continue\n                rows.append((cur_t, x, y, z))\n\n    df = pd.DataFrame(rows, columns=['epoch_utc', 'x_km', 'y_km', 'z_km'])\n    if len(df) == 0:\n        return df\n\n    df = df.sort_values('epoch_utc')\n    ts = pd.to_datetime(df['epoch_utc'], utc=True)\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    m = (ts >= start) & (ts < end)\n    out = df.loc[m].copy()\n    out['epoch_utc'] = ts.loc[m].dt.tz_convert(None)\n    return out.reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse Sept 2019 SP3 files for Swarm-A (SV id L47) into epochs and ECEF positions (km) using pandas text reads (no open()); filter to 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_positions",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_find) -> pd.DataFrame:\n    import pandas as pd, numpy as np, glob, re\n    from datetime import datetime\n\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*.sp3'))\n    if not files:\n        files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*/*.sp3'))\n\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n\n    rows = []\n    cur_t = None\n    for fp in files:\n        # read as fixed-width-ish text without open()\n        try:\n            df_lines = pd.read_fwf(fp, widths=[200], header=None, dtype=str)\n            lines = df_lines[0].astype(str).tolist()\n        except Exception:\n            try:\n                lines = pd.read_csv(fp, header=None, dtype=str, engine='python', sep='\\n', on_bad_lines='skip')[0].astype(str).tolist()\n            except Exception:\n                continue\n\n        for line in lines:\n            if not line:\n                continue\n            if line.startswith('*'):\n                parts = line.strip().split()\n                if len(parts) >= 7:\n                    try:\n                        y, mo, d, hh, mm = map(int, parts[1:6])\n                        ss = float(parts[6])\n                        sec = int(ss)\n                        micro = int(round((ss-sec)*1e6))\n                        cur_t = datetime(y, mo, d, hh, mm, sec, micro)\n                    except Exception:\n                        cur_t = None\n                else:\n                    cur_t = None\n            elif cur_t is not None and line.startswith('P'):\n                sv = line[1:4]\n                if sv != 'L47':\n                    continue\n                try:\n                    x = float(line[4:18])\n                    yv = float(line[18:32])\n                    z = float(line[32:46])\n                except Exception:\n                    continue\n                rows.append((cur_t, x, yv, z))\n\n    out = pd.DataFrame(rows, columns=['epoch_utc','x_km','y_km','z_km'])\n    if out.empty:\n        return out\n    out['epoch_utc'] = pd.to_datetime(out['epoch_utc'], utc=True)\n    out = out[(out['epoch_utc']>=start) & (out['epoch_utc']<end)].sort_values('epoch_utc')\n    out['epoch_utc'] = out['epoch_utc'].dt.tz_convert(None)\n    return out.reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse Swarm-A (SV=L47) ECEF positions from Sept 2019 SP3 files using pandas text readers (read_fwf / read_csv) without open(); output epoch_utc, x_km,y_km,z_km filtered to 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_paths_sept",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob, re\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*/*.sp3'))\n    if not files:\n        files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*.sp3'))\n    # filter 20190902..20190929 by folder/file name\n    keep=[]\n    for fp in files:\n        m=re.search(r'__201909(\\d\\d)T', fp)\n        if m:\n            day=int(m.group(1))\n            if 2 <= day <= 29:\n                keep.append(fp)\n    return pd.DataFrame({'path':keep})"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List Sept 2-29, 2019 SP3 file paths for Swarm POD products using glob; return one column 'path'.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_points",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*/*.sp3'))\n    if not files:\n        files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909*/*.sp3'))\n\n    dfs = []\n    for fp in files:\n        # fixed width slices (SP3 uses 80-char lines)\n        ser = pd.read_fwf(fp, widths=[1,3,14,14,14,14,200], header=None, dtype=str)\n        ser.columns = ['rec','sv','x','y','z','clk','rest']\n        ser['path'] = fp\n        dfs.append(ser[['rec','sv','x','y','z','clk','path']])\n\n    out = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(columns=['rec','sv','x','y','z','clk','path'])\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Reload Sept 2019 SP3 files with fixed-width columns: rec(1), sv(3), x/y/z/clk (14 each), keep path. Avoid mis-parsing epoch lines.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sp3_epochs",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points) -> pd.DataFrame:\n    import pandas as pd\n\n    df = sp3_points.copy()\n\n    # ---- Parse epoch lines ('*') ----\n    stars = df[df['rec'] == '*'].copy()\n    # Reconstruct timestamp string from split columns produced by fixed-width ingest\n    stars['dt_str'] = (stars['x_km'].fillna('') + ' ' + stars['y_km'].fillna('')).str.replace(r'\\s+', ' ', regex=True).str.strip()\n\n    def parse_dt(s):\n        try:\n            tok = [t for t in str(s).split(' ') if t]\n            # Expect: YYYY MM DD HH MM SS.SSSSS\n            if len(tok) < 6:\n                return pd.NaT\n            y, mo, d, hh, mm = map(int, tok[:5])\n            ss = float(tok[5])\n            sec = int(ss)\n            micro = int(round((ss - sec) * 1e6))\n            return pd.Timestamp(year=y, month=mo, day=d, hour=hh, minute=mm, second=sec, microsecond=micro, tz='UTC')\n        except Exception:\n            return pd.NaT\n\n    stars['epoch_utc'] = stars['dt_str'].apply(parse_dt)\n    stars = stars.dropna(subset=['epoch_utc']).sort_values(['path', 'epoch_utc']).reset_index(drop=True)\n    stars['epoch_idx'] = stars.groupby('path').cumcount()\n\n    # ---- Parse position lines ('P') for Swarm-A (SV=L47) ----\n    pos = df[(df['rec'] == 'P') & (df['sv'] == 'L47')].copy()\n    for c in ['x_km', 'y_km', 'z_km']:\n        pos[c] = pd.to_numeric(pos[c], errors='coerce')\n    pos = pos.dropna(subset=['x_km', 'y_km', 'z_km']).sort_values(['path']).reset_index(drop=True)\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n\n    merged = pos.merge(stars[['path', 'epoch_idx', 'epoch_utc']], on=['path', 'epoch_idx'], how='inner')\n\n    # Ensure datetime dtype\n    merged['epoch_utc'] = pd.to_datetime(merged['epoch_utc'], utc=True, errors='coerce')\n\n    # Filter date range\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    merged = merged[(merged['epoch_utc'] >= start) & (merged['epoch_utc'] < end)].copy()\n    merged = merged.sort_values('epoch_utc')\n\n    # Return naive UTC\n    merged['epoch_utc'] = merged['epoch_utc'].dt.tz_convert(None)\n    return merged[['epoch_utc', 'x_km', 'y_km', 'z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Fix sp3_epochs: robustly parse '*' epoch timestamps to tz-aware UTC, align with 'P L47' records by within-file epoch_idx, then ensure epoch_utc is datetime before tz_convert; output epoch_utc and ECEF x/y/z (km) for 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = sp3_points.copy()\n\n    # --- Epoch records ---\n    # For '*' lines, the full timestamp is contained in the original line, but we only have split fields.\n    # Empirically from sp3_points: x_km contains 'YYYY MM DD HH MM' (with possible double spaces)\n    # and y_km contains 'SS.SSSSSSSS'.\n    star = df[df['rec'] == '*'].copy()\n    if star.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    # Parse date-time components\n    star_parts = star['x_km'].astype(str).str.strip().str.split(r'\\s+', expand=True)\n    # Ensure at least 5 columns\n    if star_parts.shape[1] < 5:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    star['Y'] = pd.to_numeric(star_parts[0], errors='coerce')\n    star['M'] = pd.to_numeric(star_parts[1], errors='coerce')\n    star['D'] = pd.to_numeric(star_parts[2], errors='coerce')\n    star['h'] = pd.to_numeric(star_parts[3], errors='coerce')\n    star['m'] = pd.to_numeric(star_parts[4], errors='coerce')\n    star['sec'] = pd.to_numeric(star['y_km'].astype(str).str.strip(), errors='coerce')\n\n    star = star.dropna(subset=['Y','M','D','h','m','sec']).copy()\n    if star.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    # Build datetime (UTC)\n    sec_int = np.floor(star['sec']).astype(int)\n    usec = np.round((star['sec'] - sec_int) * 1e6).astype(int)\n    star['epoch_utc'] = pd.to_datetime(\n        dict(year=star['Y'].astype(int), month=star['M'].astype(int), day=star['D'].astype(int),\n             hour=star['h'].astype(int), minute=star['m'].astype(int), second=sec_int, microsecond=usec),\n        errors='coerce', utc=True\n    )\n    star = star.dropna(subset=['epoch_utc']).copy()\n\n    # epoch index within each file in appearance order\n    star['epoch_idx'] = star.groupby('path').cumcount()\n\n    # --- Position records for Swarm-A: SV=L47 ---\n    pos = df[(df['rec'] == 'P') & (df['sv'] == 'L47')].copy()\n    if pos.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    for c in ['x_km','y_km','z_km']:\n        pos[c] = pd.to_numeric(pos[c], errors='coerce')\n    pos = pos.dropna(subset=['x_km','y_km','z_km']).copy()\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n\n    merged = pos.merge(star[['path','epoch_idx','epoch_utc']], on=['path','epoch_idx'], how='inner')\n    if merged.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    # Filter to desired interval\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    merged = merged[(merged['epoch_utc'] >= start) & (merged['epoch_utc'] < end)].copy()\n\n    merged = merged.sort_values('epoch_utc')\n    # Convert to naive UTC datetime\n    merged['epoch_utc'] = merged['epoch_utc'].dt.tz_convert(None)\n\n    return merged[['epoch_utc','x_km','y_km','z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse '*' epoch records from sp3_points using x_km (YYYY MM DD HH MM) + y_km (seconds) into epoch_utc; index epochs per file; parse P records for SV=L47 numeric x/y/z (km) with same per-file index; merge on (path, epoch_idx); filter to 2019-09-02<=t<2019-09-30; output epoch_utc,x_km,y_km,z_km.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos_fix",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = sp3_points.copy()\n\n    # Epoch lines\n    ep = df[df['rec'] == '*'].copy()\n    if ep.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    # In sp3_points, for '*' lines, x_km contains 'YYYY MM DD HH M', y_km contains 'M SS.SSSSSSSS'\n    ep['ymdhm'] = ep['x_km'].astype(str).str.replace(r'[^0-9 ]', ' ', regex=True).str.replace(r'\\s+', ' ', regex=True).str.strip()\n    ep['sec_str'] = ep['y_km'].astype(str).str.replace(r'[^0-9\\. ]', ' ', regex=True).str.replace(r'\\s+', ' ', regex=True).str.strip()\n\n    parts = ep['ymdhm'].str.split(' ', expand=True)\n    # Need at least 5 fields: year month day hour minute\n    mask = parts.notna().sum(axis=1) >= 5\n    ep = ep.loc[mask].copy()\n    parts = parts.loc[mask]\n    if ep.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    ep['year'] = pd.to_numeric(parts[0], errors='coerce')\n    ep['month'] = pd.to_numeric(parts[1], errors='coerce')\n    ep['day'] = pd.to_numeric(parts[2], errors='coerce')\n    ep['hour'] = pd.to_numeric(parts[3], errors='coerce')\n    ep['minute'] = pd.to_numeric(parts[4], errors='coerce')\n\n    # seconds is last numeric token in sec_str\n    sec_tok = ep['sec_str'].str.split(' ', expand=True)\n    ep['second'] = pd.to_numeric(sec_tok.iloc[:, -1], errors='coerce')\n\n    ep = ep.dropna(subset=['year','month','day','hour','minute','second'])\n    if ep.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    sec_floor = np.floor(ep['second'].values).astype(int)\n    frac = (ep['second'].values - sec_floor)\n\n    ep['epoch_utc'] = pd.to_datetime(\n        {\n            'year': ep['year'].astype(int),\n            'month': ep['month'].astype(int),\n            'day': ep['day'].astype(int),\n            'hour': ep['hour'].astype(int),\n            'minute': ep['minute'].astype(int),\n            'second': sec_floor,\n        },\n        utc=True,\n        errors='coerce'\n    ) + pd.to_timedelta(frac, unit='s')\n    ep = ep.dropna(subset=['epoch_utc']).sort_values(['path']).copy()\n    ep['epoch_idx'] = ep.groupby('path').cumcount()\n\n    # Position lines for Swarm-A\n    pos = df[(df['rec'] == 'P') & (df['sv'] == 'L47')].copy()\n    for c in ['x_km','y_km','z_km']:\n        pos[c] = pd.to_numeric(pos[c], errors='coerce')\n    pos = pos.dropna(subset=['x_km','y_km','z_km']).sort_values(['path']).copy()\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n\n    out = pos.merge(ep[['path','epoch_idx','epoch_utc']], on=['path','epoch_idx'], how='inner')\n    if out.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    out = out[(out['epoch_utc'] >= start) & (out['epoch_utc'] < end)].sort_values('epoch_utc')\n    out['epoch_utc'] = out['epoch_utc'].dt.tz_convert(None)\n    return out[['epoch_utc','x_km','y_km','z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse '*' epoch timestamps and 'P' (sv=L47) positions from sp3_points by reconstructing epoch from split tokens in x_km/y_km; align by per-file epoch_idx; output epoch_utc and ECEF x/y/z (km) for 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos2",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points) -> pd.DataFrame:\n    import pandas as pd\n    \n    df = sp3_points.copy()\n\n    # Epoch lines are in columns: rec='*', sv like '2019', x like '09 03 00 0', y like '0 00.00000000'\n    ep = df[df['rec'] == '*'].copy()\n    if ep.empty:\n        return pd.DataFrame(columns=['path','epoch_idx','epoch_utc'])\n\n    # tokens\n    ep['year'] = pd.to_numeric(ep['sv'], errors='coerce')\n    ep['x_tokens'] = ep['x'].astype(str).str.split()\n    ep['month'] = ep['x_tokens'].str.get(0)\n    ep['day'] = ep['x_tokens'].str.get(1)\n    ep['hour'] = ep['x_tokens'].str.get(2)\n    ep['minute'] = ep['x_tokens'].str.get(3)\n\n    ep['sec'] = ep['y'].astype(str).str.strip()\n\n    for c in ['month','day','hour','minute','sec']:\n        ep[c] = pd.to_numeric(ep[c], errors='coerce')\n\n    ep = ep.dropna(subset=['year','month','day','hour','minute','sec'])\n    ep['epoch_utc'] = pd.to_datetime(\n        dict(year=ep['year'].astype(int),\n             month=ep['month'].astype(int),\n             day=ep['day'].astype(int),\n             hour=ep['hour'].astype(int),\n             minute=ep['minute'].astype(int),\n             second=ep['sec'].astype(float)),\n        utc=True,\n        errors='coerce'\n    )\n    ep = ep.dropna(subset=['epoch_utc'])\n    ep = ep.sort_values(['path','epoch_utc'])\n    ep['epoch_idx'] = ep.groupby('path').cumcount()\n    ep = ep[['path','epoch_idx','epoch_utc']]\n\n    pos = df[(df['rec'] == 'P') & (df['sv'].astype(str).str.strip() == 'L47')].copy()\n    if pos.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n    for c,newc in [('x','x_km'),('y','y_km'),('z','z_km')]:\n        pos[newc] = pd.to_numeric(pos[c], errors='coerce')\n    pos = pos.dropna(subset=['x_km','y_km','z_km'])\n    pos = pos.sort_values(['path']).copy()\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n    pos = pos[['path','epoch_idx','x_km','y_km','z_km']]\n\n    merged = pos.merge(ep, on=['path','epoch_idx'], how='inner')\n    if merged.empty:\n        return pd.DataFrame(columns=['epoch_utc','x_km','y_km','z_km'])\n\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    merged = merged[(merged['epoch_utc']>=start) & (merged['epoch_utc']<end)].sort_values('epoch_utc')\n    merged['epoch_utc'] = merged['epoch_utc'].dt.tz_convert(None)\n    return merged[['epoch_utc','x_km','y_km','z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse epoch timestamps from sp3_points '*' records (year in sv; month/day/hour/minute in x; seconds in y). Parse Swarm-A positions from 'P' records with sv='L47'. Align epochs and positions by per-file order index (epoch_idx), merge, and filter to 2019-09-02<=t<2019-09-30. Output epoch_utc (naive UTC) and ECEF x/y/z (km).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos3",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = sp3_points.copy()\n\n    # Epoch lines: rec='*'\n    ep = df[df['rec'] == '*'][['path','sv','x','y']].copy()\n    # sv contains year like '2019'\n    # x contains '09 03 00 01 2' (month day hour min + first digit(s) of seconds)\n    # y contains '0 00.00000000' etc (remaining seconds)\n    # Combine tokens from x and y to reconstruct: month day hour minute second.fraction\n    def parse_epoch_row(row):\n        try:\n            year = int(str(row['sv']).strip())\n            xt = str(row['x']).strip().split()\n            yt = str(row['y']).strip().split()\n            # Expect xt: [MM, DD, HH, MM, sec_prefix]\n            if len(xt) < 4:\n                return pd.NaT\n            month = int(xt[0]); day = int(xt[1]); hour = int(xt[2]); minute = int(xt[3])\n            sec_str = None\n            if len(xt) >= 5 and len(yt) >= 1:\n                sec_str = xt[4] + yt[0]\n            elif len(yt) >= 1:\n                sec_str = yt[0]\n            else:\n                return pd.NaT\n            # sec_str like '20' or '000.00000000' etc\n            sec = float(sec_str)\n            return pd.Timestamp(year=year, month=month, day=day, hour=hour, minute=minute, second=int(sec), microsecond=int(round((sec-int(sec))*1e6)), tz='UTC')\n        except Exception:\n            return pd.NaT\n\n    ep['epoch_utc'] = ep.apply(parse_epoch_row, axis=1)\n    ep = ep.dropna(subset=['epoch_utc']).copy()\n    ep['epoch_idx'] = ep.groupby('path').cumcount()\n\n    # Position lines: rec='P' and sv='L47'\n    pos = df[(df['rec'] == 'P') & (df['sv'].astype(str).str.strip() == 'L47')][['path','x','y','z']].copy()\n    # convert to float km\n    for c in ['x','y','z']:\n        pos[c] = pd.to_numeric(pos[c], errors='coerce')\n    pos = pos.dropna(subset=['x','y','z']).copy()\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n    pos = pos.rename(columns={'x':'x_km','y':'y_km','z':'z_km'})\n\n    merged = pos.merge(ep[['path','epoch_idx','epoch_utc']], on=['path','epoch_idx'], how='inner')\n\n    if merged.empty:\n        return merged\n\n    merged = merged.sort_values('epoch_utc')\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    merged = merged[(merged['epoch_utc']>=start) & (merged['epoch_utc']<end)].copy()\n    merged['epoch_utc'] = merged['epoch_utc'].dt.tz_convert(None)\n    return merged[['epoch_utc','x_km','y_km','z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse epochs from sp3_points '*' records (year in sv; month/day/hour/minute/seconds split across x and y), parse Swarm-A positions from 'P' records with sv='L47' numeric x/y/z (km), align by per-file epoch_idx, filter to 2019-09-02<=t<2019-09-30, output epoch_utc,x_km,y_km,z_km.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos4",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = sp3_points.copy()\n\n    # --- Epoch lines ---\n    ep = df[df['rec'] == '*'].copy()\n\n    # year is in sv, but can be dirty due to fixed-width read. Extract 4-digit year.\n    ep['year'] = ep['sv'].astype(str).str.extract(r'(\\d{4})')[0]\n    ep['year'] = pd.to_numeric(ep['year'], errors='coerce')\n\n    # x should contain month day hour minute; extract the first 4 integers found\n    xnums = ep['x'].astype(str).str.findall(r'[-+]?\\d+')\n    ep['month'] = pd.to_numeric(xnums.str[0], errors='coerce')\n    ep['day'] = pd.to_numeric(xnums.str[1], errors='coerce')\n    ep['hour'] = pd.to_numeric(xnums.str[2], errors='coerce')\n    ep['minute'] = pd.to_numeric(xnums.str[3], errors='coerce')\n\n    # y contains seconds as float; take last float-like token\n    ysecs = ep['y'].astype(str).str.findall(r'[-+]?\\d*\\.?\\d+')\n    sec_tok = ysecs.apply(lambda lst: lst[-1] if isinstance(lst, list) and len(lst) else np.nan)\n    ep['sec'] = pd.to_numeric(sec_tok, errors='coerce')\n\n    ep = ep.dropna(subset=['year','month','day','hour','minute','sec']).copy()\n\n    # Build datetime safely via string formatting\n    ep['epoch_utc'] = pd.to_datetime(\n        ep['year'].astype(int).astype(str).str.zfill(4) + '-' +\n        ep['month'].astype(int).astype(str).str.zfill(2) + '-' +\n        ep['day'].astype(int).astype(str).str.zfill(2) + ' ' +\n        ep['hour'].astype(int).astype(str).str.zfill(2) + ':' +\n        ep['minute'].astype(int).astype(str).str.zfill(2) + ':00',\n        errors='coerce'\n    ) + pd.to_timedelta(ep['sec'], unit='s')\n\n    ep = ep.dropna(subset=['epoch_utc']).sort_values(['path']).copy()\n    ep['epoch_idx'] = ep.groupby('path').cumcount()\n    ep = ep[['path','epoch_idx','epoch_utc']]\n\n    # --- Position lines: Swarm-A is L47 in these files ---\n    pos = df[(df['rec'] == 'P') & (df['sv'].astype(str).str.strip() == 'L47')].copy()\n    pos['x_km'] = pd.to_numeric(pos['x'], errors='coerce')\n    pos['y_km'] = pd.to_numeric(pos['y'], errors='coerce')\n    pos['z_km'] = pd.to_numeric(pos['z'], errors='coerce')\n    pos = pos.dropna(subset=['x_km','y_km','z_km']).sort_values(['path']).copy()\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n    pos = pos[['path','epoch_idx','x_km','y_km','z_km']]\n\n    merged = pos.merge(ep, on=['path','epoch_idx'], how='inner')\n    if merged.empty:\n        return merged\n\n    start = pd.Timestamp('2019-09-02T00:00:00')\n    end = pd.Timestamp('2019-09-30T00:00:00')\n    merged = merged[(merged['epoch_utc']>=start) & (merged['epoch_utc']<end)].sort_values('epoch_utc')\n    return merged[['epoch_utc','x_km','y_km','z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse epoch timestamps from '*' records in sp3_points robustly by extracting numeric tokens (year from sv, month/day/hour/minute from x, seconds from y). Parse Swarm-A positions from 'P' records with sv='L47' as numeric x/y/z (km). Align epochs/positions by per-file sequence index epoch_idx, merge, filter to 2019-09-02<=t<2019-09-30, output epoch_utc,x_km,y_km,z_km.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_points_fix",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_paths_sept) -> pd.DataFrame:\n    import pandas as pd\n    import glob\n\n    paths = sp3_paths_sept['path'].tolist()\n\n    # SP3 line format: columns roughly:\n    # 1: record type (*, P, V, etc)\n    # 2-4: satellite id (e.g., L47) for P/V lines; for '*' it's blank\n    # then 4 numeric fields of width 14 (x,y,z,clk) for P/V; for '*' it's date/time fields\n    colspecs = [(0,1),(1,4),(4,18),(18,32),(32,46),(46,60)]\n    names = ['rec','sv','c1','c2','c3','c4']\n\n    dfs = []\n    for p in paths:\n        try:\n            d = pd.read_fwf(p, colspecs=colspecs, names=names, dtype=str, header=None)\n            d['path'] = p\n            dfs.append(d)\n        except Exception:\n            continue\n\n    if not dfs:\n        return pd.DataFrame(columns=names+['path'])\n\n    out = pd.concat(dfs, ignore_index=True)\n    # normalize whitespace\n    for c in names:\n        out[c] = out[c].astype(str).str.strip()\n        out.loc[out[c].isin(['', 'nan', 'NaN', 'None']), c] = pd.NA\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Re-read Sept 2-29 SP3 files with explicit fixed-width colspecs into columns rec, sv, c1-c4 (strings) + path; strip whitespace and set blanks to NA for reliable parsing.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos_final",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points_fix) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = sp3_points_fix.copy()\n    # Keep only epoch (*) and position (P) records\n    df = df[df['rec'].isin(['*', 'P'])].copy()\n\n    # --- Parse epochs ---\n    ep = df[df['rec'] == '*'][['path','sv','c1','c2']].copy()\n\n    def parse_epoch_row(row):\n        # row.sv has year like '2019' (sometimes with junk); c1 like '09 03 00 0'; c2 like '0 00.00000000'\n        try:\n            year = int(''.join([ch for ch in str(row['sv']) if ch.isdigit()])[:4])\n        except Exception:\n            return pd.NaT\n        t1 = str(row['c1']) if pd.notna(row['c1']) else ''\n        t2 = str(row['c2']) if pd.notna(row['c2']) else ''\n        p1 = [x for x in t1.strip().split() if x]\n        p2 = [x for x in t2.strip().split() if x]\n        # month day hour minute_tens in p1; minute_ones in p2[0]; seconds in p2[1]\n        if len(p1) < 4 or len(p2) < 2:\n            return pd.NaT\n        try:\n            mo = int(p1[0]); day = int(p1[1]); hh = int(p1[2]); mm_tens = int(p1[3])\n            mm_ones = int(p2[0])\n            mm = mm_tens*10 + mm_ones\n            ss = float(p2[1])\n            sec = int(ss)\n            micro = int(round((ss-sec)*1e6))\n            return pd.Timestamp(year=year, month=mo, day=day, hour=hh, minute=mm, second=sec, microsecond=micro, tz='UTC')\n        except Exception:\n            return pd.NaT\n\n    ep['epoch_utc'] = ep.apply(parse_epoch_row, axis=1)\n    ep = ep.dropna(subset=['epoch_utc']).sort_values(['path','epoch_utc']).copy()\n    ep['epoch_idx'] = ep.groupby('path').cumcount()\n\n    # --- Parse positions for L47 ---\n    pos = df[(df['rec'] == 'P') & (df['sv'].astype(str).str.strip() == 'L47')][['path','c1','c2','c3']].copy()\n\n    def to_float(s):\n        try:\n            return float(str(s).strip())\n        except Exception:\n            return np.nan\n\n    pos['x_km'] = pos['c1'].map(to_float)\n    pos['y_km'] = pos['c2'].map(to_float)\n    pos['z_km'] = pos['c3'].map(to_float)\n    pos = pos.dropna(subset=['x_km','y_km','z_km']).copy()\n    pos['epoch_idx'] = pos.groupby('path').cumcount()\n\n    out = pos.merge(ep[['path','epoch_idx','epoch_utc']], on=['path','epoch_idx'], how='inner')\n    if out.empty:\n        return out\n\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    out = out[(out['epoch_utc']>=start) & (out['epoch_utc']<end)].copy()\n    out = out.sort_values('epoch_utc')\n    out['epoch_utc'] = out['epoch_utc'].dt.tz_convert(None)\n    return out[['epoch_utc','x_km','y_km','z_km']].reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse epoch timestamps from '*' records in sp3_points_fix: year from sv (e.g., 2019), month/day/hour/mm_tens from c1, mm_ones+seconds from c2; parse Swarm-A positions from 'P' records with sv='L47' using c1/c2/c3 as x/y/z (km); align by per-file epoch_idx and filter to 2019-09-02<=t<2019-09-30. Output epoch_utc,x_km,y_km,z_km.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos_debug",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points_fix) -> pd.DataFrame:\n    import pandas as pd\n    df = sp3_points_fix.copy()\n    # show a few '*' and 'P' records\n    a = df[df['rec'].isin(['*','P'])].head(30)\n    b = df[(df['rec']=='P') & (df['sv']=='L47')].head(5)\n    c = df[df['rec']=='*'].head(5)\n    out = pd.concat([\n        a.assign(section='mixed_head'),\n        b.assign(section='P_L47_head'),\n        c.assign(section='epoch_head')\n    ], ignore_index=True)\n    return out[['section','rec','sv','c1','c2','c3','c4','path']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Debug SP3 fixed-width parse: inspect first few '*' epoch lines and 'P L47' position lines to understand tokenization across columns c1-c4.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "sp3_epochpos_ok",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_points_fix) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    \n    df = sp3_points_fix.copy()\n    # keep only epoch and position records\n    df = df[df['rec'].isin(['*','P'])].copy()\n    df['sv'] = df['sv'].astype(str).str.strip()\n    df['c1'] = df['c1'].astype(str).str.strip()\n    df['c2'] = df['c2'].astype(str).str.strip()\n    df['c3'] = df['c3'].astype(str).str.strip()\n    \n    # epoch index per file increments at each '*'\n    df['is_epoch'] = (df['rec'] == '*')\n    df['epoch_idx'] = df.groupby('path')['is_epoch'].cumsum().astype('int64')\n\n    # Parse epoch lines: sv holds '2' for 2019 (i.e., 2000+2? actually 2019 -> sv='2' and c1 begins with '019')\n    ep = df[df['rec']=='*'][['path','epoch_idx','sv','c1','c2']].copy()\n    # Tokens example: sv='2', c1='019 09 03 00 0', c2='0 00.00000000'\n    c1t = ep['c1'].str.split(r'\\s+', expand=True)\n    c2t = ep['c2'].str.split(r'\\s+', expand=True)\n    # year is 2000 + int(sv)*10 + first token of c1? but here year=2019 encoded as sv='2' + c1 first token '019'\n    # construct year = 2000 + int(c1t[0])\n    year = 2000 + pd.to_numeric(c1t[0], errors='coerce')\n    month = pd.to_numeric(c1t[1], errors='coerce')\n    day = pd.to_numeric(c1t[2], errors='coerce')\n    hour = pd.to_numeric(c1t[3], errors='coerce')\n    minute_tens = pd.to_numeric(c1t[4], errors='coerce')\n    minute_ones = pd.to_numeric(c2t[0], errors='coerce')\n    sec = pd.to_numeric(c2t[1], errors='coerce')\n    minute = minute_tens*10 + minute_ones\n\n    ep['epoch_utc'] = pd.to_datetime(\n        dict(year=year, month=month, day=day, hour=hour, minute=minute),\n        errors='coerce',\n        utc=True\n    ) + pd.to_timedelta(sec, unit='s')\n    ep = ep.dropna(subset=['epoch_utc'])\n    ep = ep[['path','epoch_idx','epoch_utc']]\n\n    pos = df[(df['rec']=='P') & (df['sv']=='L47')][['path','epoch_idx','c1','c2','c3']].copy()\n    pos['x_km'] = pd.to_numeric(pos['c1'], errors='coerce')\n    pos['y_km'] = pd.to_numeric(pos['c2'], errors='coerce')\n    pos['z_km'] = pd.to_numeric(pos['c3'], errors='coerce')\n    pos = pos.dropna(subset=['x_km','y_km','z_km'])\n    pos = pos[['path','epoch_idx','x_km','y_km','z_km']]\n\n    out = pos.merge(ep, on=['path','epoch_idx'], how='inner')\n    if out.empty:\n        return out\n\n    start = pd.Timestamp('2019-09-02T00:00:00Z')\n    end = pd.Timestamp('2019-09-30T00:00:00Z')\n    out = out[(out['epoch_utc']>=start) & (out['epoch_utc']<end)].sort_values('epoch_utc')\n    out['epoch_utc'] = out['epoch_utc'].dt.tz_convert(None)\n    return out.reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse Swarm-A (L47) positions from sp3_points_fix: compute epoch_idx per file (cumsum of '*'), parse epoch from c1/c2 tokens (year=2000+first token '019'; minute from c1 last token tens + c2 first token ones; add seconds), parse P L47 x/y/z from c1/c2/c3 numeric km, merge on (path,epoch_idx), filter 2019-09-02<=t<2019-09-30.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_geodetic",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(sp3_epochpos_ok) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    df = sp3_epochpos_ok.copy()\n    if df.empty:\n        return df\n\n    # ECEF (km) to spherical geodetic approx (lat, lon, alt) assuming spherical Earth\n    Re_km = 6371.0\n    x = df['x_km'].to_numpy(dtype=float)\n    y = df['y_km'].to_numpy(dtype=float)\n    z = df['z_km'].to_numpy(dtype=float)\n\n    r = np.sqrt(x*x + y*y + z*z)\n    lat = np.degrees(np.arcsin(np.clip(z / r, -1, 1)))\n    lon = np.degrees(np.arctan2(y, x))\n    lon = (lon + 360.0) % 360.0\n    alt_km = r - Re_km\n\n    out = pd.DataFrame({\n        'epoch_utc': pd.to_datetime(df['epoch_utc']),\n        'lat_deg': lat,\n        'lon_deg': lon,\n        'alt_km': alt_km,\n        'r_km': r\n    })\n    # filter alt within grid bounds for interpolation (100-500 km)\n    out = out[(out['alt_km'] >= 100.0) & (out['alt_km'] <= 500.0)].reset_index(drop=True)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Convert Swarm-A ECEF x/y/z (km) to spherical lat/lon (deg) and altitude above spherical Earth (km), then keep points with 100<=alt_km<=500 (within mock geopotential grid).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "mean_energy",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_geodetic, grid_fix) -> pd.DataFrame:\n    import pandas as pd, numpy as np\n\n    # constants\n    R_earth_km = 6371.0\n    g = 9.80665\n\n    # from grid_fix summary: phi_mock = g*(R+alt)\n    # alt in km -> meters\n    phi = g * (R_earth_km*1000.0 + swarm_geodetic['alt_km'].to_numpy()*1000.0)\n    mean_phi = float(np.mean(phi))\n\n    return pd.DataFrame([{\n        'mean_geopotential_J_per_kg': mean_phi,\n        'n_points': int(len(phi)),\n        'alt_km_mean': float(swarm_geodetic['alt_km'].mean()),\n        'alt_km_min': float(swarm_geodetic['alt_km'].min()),\n        'alt_km_max': float(swarm_geodetic['alt_km'].max()),\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute mean geopotential energy per unit mass along Swarm-A track using mock potential Phi=g*(R_earth+alt) (J/kg) with R_earth=6371 km, g=9.80665; average over all Sept 3-29 points parsed from SP3.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "grid_npz": {
+      "x": 100,
+      "y": 40
+    },
+    "grid_load": {
+      "x": 100,
+      "y": 220
+    },
+    "grid_full": {
+      "x": 100,
+      "y": 400
+    },
+    "grid_raw": {
+      "x": 100,
+      "y": 580
+    },
+    "grid_check_file": {
+      "x": 100,
+      "y": 760
+    },
+    "grid_fix": {
+      "x": 1090,
+      "y": 3100
+    },
+    "sp3_load": {
+      "x": 100,
+      "y": 940
+    },
+    "sp3_list": {
+      "x": 100,
+      "y": 1120
+    },
+    "sp3_list_all": {
+      "x": 100,
+      "y": 1300
+    },
+    "sp3_find": {
+      "x": 100,
+      "y": 1480
+    },
+    "sp3_list_sept": {
+      "x": 430,
+      "y": 1390
+    },
+    "sp3_load_sept": {
+      "x": 760,
+      "y": 1300
+    },
+    "sp3_parse": {
+      "x": 100,
+      "y": 1660
+    },
+    "sp3_parse_fix": {
+      "x": 100,
+      "y": 1840
+    },
+    "sp3_read_one": {
+      "x": 100,
+      "y": 2020
+    },
+    "sp3_parse_sept": {
+      "x": 760,
+      "y": 1930
+    },
+    "sp3_positions": {
+      "x": 430,
+      "y": 1570
+    },
+    "sp3_paths_sept": {
+      "x": 100,
+      "y": 2830
+    },
+    "sp3_points": {
+      "x": 100,
+      "y": 2200
+    },
+    "sp3_epochs": {
+      "x": 430,
+      "y": 1750
+    },
+    "sp3_epochpos": {
+      "x": 430,
+      "y": 1930
+    },
+    "sp3_epochpos_fix": {
+      "x": 430,
+      "y": 2110
+    },
+    "sp3_epochpos2": {
+      "x": 430,
+      "y": 2290
+    },
+    "sp3_epochpos3": {
+      "x": 430,
+      "y": 2470
+    },
+    "sp3_epochpos4": {
+      "x": 430,
+      "y": 2650
+    },
+    "sp3_points_fix": {
+      "x": 430,
+      "y": 2830
+    },
+    "sp3_epochpos_final": {
+      "x": 760,
+      "y": 2110
+    },
+    "sp3_epochpos_debug": {
+      "x": 760,
+      "y": 2740
+    },
+    "sp3_epochpos_ok": {
+      "x": 760,
+      "y": 2920
+    },
+    "swarm_geodetic": {
+      "x": 1090,
+      "y": 2920
+    },
+    "mean_energy": {
+      "x": 1420,
+      "y": 3010
+    }
+  },
+  "links": [
+    {
+      "linkID": "sp3_find-->sp3_list_sept",
+      "source": {
+        "operatorID": "sp3_find",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_list_sept",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_list_sept-->sp3_load_sept",
+      "source": {
+        "operatorID": "sp3_list_sept",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_load_sept",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_list_sept-->sp3_parse_sept",
+      "source": {
+        "operatorID": "sp3_list_sept",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_parse_sept",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_find-->sp3_positions",
+      "source": {
+        "operatorID": "sp3_find",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_positions",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points-->sp3_epochs",
+      "source": {
+        "operatorID": "sp3_points",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochs",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points-->sp3_epochpos",
+      "source": {
+        "operatorID": "sp3_points",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points-->sp3_epochpos_fix",
+      "source": {
+        "operatorID": "sp3_points",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos_fix",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points-->sp3_epochpos2",
+      "source": {
+        "operatorID": "sp3_points",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos2",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points-->sp3_epochpos3",
+      "source": {
+        "operatorID": "sp3_points",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos3",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points-->sp3_epochpos4",
+      "source": {
+        "operatorID": "sp3_points",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos4",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_paths_sept-->sp3_points_fix",
+      "source": {
+        "operatorID": "sp3_paths_sept",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_points_fix",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points_fix-->sp3_epochpos_final",
+      "source": {
+        "operatorID": "sp3_points_fix",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos_final",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points_fix-->sp3_epochpos_debug",
+      "source": {
+        "operatorID": "sp3_points_fix",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos_debug",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_points_fix-->sp3_epochpos_ok",
+      "source": {
+        "operatorID": "sp3_points_fix",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "sp3_epochpos_ok",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "sp3_epochpos_ok-->swarm_geodetic",
+      "source": {
+        "operatorID": "sp3_epochpos_ok",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_geodetic",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_geodetic-->mean_energy",
+      "source": {
+        "operatorID": "swarm_geodetic",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "mean_energy",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "grid_fix-->mean_energy",
+      "source": {
+        "operatorID": "grid_fix",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "mean_energy",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

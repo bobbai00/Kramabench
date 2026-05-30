@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-95-7-1779140216620",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadFraudMsaFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSVs matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' via glob; read each with pd.read_csv (default header/delimiter), append '__source_file' (basename), and concatenate into one DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadIdTheftMsaFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSVs matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv' via glob; read each with pd.read_csv (default header/delimiter), append '__source_file' (basename), and concatenate into one DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanFraudMsa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadFraudMsaFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadFraudMsaFiles.copy()\n    # Standardize column names\n    metro_col = [c for c in df.columns if \"Metropolitan\" in c][0]\n    reports_col = \"Unnamed: 1\"  # holds '# of Reports'\n\n    out = df[[metro_col, reports_col, \"__source_file\"]].rename(\n        columns={metro_col: \"metroArea\", reports_col: \"fraudReports\"}\n    )\n\n    # Drop header/footer/blank rows\n    out[\"metroArea\"] = out[\"metroArea\"].astype(\"string\")\n    out[\"fraudReports\"] = out[\"fraudReports\"].astype(\"string\")\n\n    out = out[\n        out[\"metroArea\"].notna()\n        & ~out[\"metroArea\"].str.contains(\"^Metropolitan Area$\", case=False, na=False)\n        & ~out[\"metroArea\"].str.contains(\"^Source:\", case=False, na=False)\n    ].copy()\n\n    # Parse numeric counts with thousands separators\n    out[\"fraudReports\"] = (\n        out[\"fraudReports\"].str.replace(\",\", \"\", regex=False)\n    )\n    out[\"fraudReports\"] = pd.to_numeric(out[\"fraudReports\"], errors=\"coerce\")\n\n    out = out.dropna(subset=[\"fraudReports\"]).reset_index(drop=True)\n    out[\"state\"] = out[\"__source_file\"].str.replace(\".csv\", \"\", regex=False)\n\n    return out[[\"state\", \"metroArea\", \"fraudReports\"]]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean fraud MSA tables from loadFraudMsaFiles: select metro column (contains 'Metropolitan') and 'Unnamed: 1' as report counts; rename to [metroArea, fraudReports]; drop blank rows and non-data rows where metroArea is 'Metropolitan Area' header or starts with 'Source:'; parse fraudReports as numeric (remove commas, to_numeric); derive state from __source_file basename; output columns [state, metroArea, fraudReports]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cleanIdTheftMsa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadIdTheftMsaFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadIdTheftMsaFiles.copy()\n    metro_col = [c for c in df.columns if \"Metropolitan\" in c][0]\n    reports_col = \"Unnamed: 1\"  # holds '# of Reports'\n\n    out = df[[metro_col, reports_col, \"__source_file\"]].rename(\n        columns={metro_col: \"metroArea\", reports_col: \"idTheftReports\"}\n    )\n\n    out[\"metroArea\"] = out[\"metroArea\"].astype(\"string\")\n    out[\"idTheftReports\"] = out[\"idTheftReports\"].astype(\"string\")\n\n    out = out[\n        out[\"metroArea\"].notna()\n        & ~out[\"metroArea\"].str.contains(\"^Metropolitan Area$\", case=False, na=False)\n        & ~out[\"metroArea\"].str.contains(\"^Source:\", case=False, na=False)\n    ].copy()\n\n    out[\"idTheftReports\"] = out[\"idTheftReports\"].str.replace(\",\", \"\", regex=False\n    )\n    out[\"idTheftReports\"] = pd.to_numeric(out[\"idTheftReports\"], errors=\"coerce\")\n\n    out = out.dropna(subset=[\"idTheftReports\"]).reset_index(drop=True)\n    out[\"state\"] = out[\"__source_file\"].str.replace(\".csv\", \"\", regex=False)\n\n    return out[[\"state\", \"metroArea\", \"idTheftReports\"]]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft MSA tables from loadIdTheftMsaFiles: select metro column (contains 'Metropolitan') and 'Unnamed: 1' as report counts; rename to [metroArea, idTheftReports]; drop blank rows and non-data rows where metroArea is 'Metropolitan Area' header or starts with 'Source:'; parse idTheftReports as numeric (remove commas, to_numeric); derive state from __source_file basename; output columns [state, metroArea, idTheftReports]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "idTheftExceedsFraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanFraudMsa, cleanIdTheftMsa) -> pd.DataFrame:\n    import pandas as pd\n\n    merged = cleanIdTheftMsa.merge(\n        cleanFraudMsa,\n        on=[\"state\", \"metroArea\"],\n        how=\"inner\",\n        validate=\"one_to_one\",\n    )\n\n    exceeded = merged[merged[\"idTheftReports\"] > merged[\"fraudReports\"]].copy()\n    exists = len(exceeded) > 0\n\n    return pd.DataFrame([{\"existsMetroAreaIdTheftExceedsFraud\": exists}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inner join cleanIdTheftMsa and cleanFraudMsa on keys [state, metroArea] (validate one_to_one); check whether any row has idTheftReports > fraudReports; return single-row boolean column existsMetroAreaIdTheftExceedsFraud",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadFraudMsaFiles": {
+        "x": 100,
+        "y": 40
+      },
+      "loadIdTheftMsaFiles": {
+        "x": 100,
+        "y": 220
+      },
+      "cleanFraudMsa": {
+        "x": 400,
+        "y": 40
+      },
+      "cleanIdTheftMsa": {
+        "x": 400,
+        "y": 220
+      },
+      "idTheftExceedsFraud": {
+        "x": 700,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadFraudMsaFiles-->cleanFraudMsa",
+        "source": {
+          "operatorID": "loadFraudMsaFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanFraudMsa",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadIdTheftMsaFiles-->cleanIdTheftMsa",
+        "source": {
+          "operatorID": "loadIdTheftMsaFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdTheftMsa",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanFraudMsa-->idTheftExceedsFraud",
+        "source": {
+          "operatorID": "cleanFraudMsa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "idTheftExceedsFraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdTheftMsa-->idTheftExceedsFraud",
+        "source": {
+          "operatorID": "cleanIdTheftMsa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "idTheftExceedsFraud",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

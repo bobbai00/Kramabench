@@ -1,0 +1,448 @@
+{
+  "headId": "step-agent-277-52-1779106017877",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "omni2Spec",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2.txt'\n    import os\n    if not os.path.exists(path):\n        # fallback: sometimes packaged as omni2.text per task note\n        alt = 'data/astronomy/input/omni2_low_res/omni2.text'\n        path = alt\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        txt = f.read()\n    return pd.DataFrame([{'path': path, 'content': txt}])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load OMNI2 data format specification from omni2.txt; if missing, fall back to omni2.text in same folder; return single-row DataFrame with columns [path, content].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "omni22024Raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2024.dat'\n    # Fixed-width / whitespace-delimited OMNI2 low-res format; read as strings first to avoid parsing issues.\n    df = pd.read_csv(path, sep=r\"\\s+\", header=None, dtype=str, engine='python')\n    df.insert(0, 'source_file', path)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load OMNI2 low-resolution data file omni2_2024.dat as whitespace-delimited with no header (header=None), reading all fields as strings (dtype=str) to preserve fixed-width columns; add source_file column with filename.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmBFilesList",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    pattern = 'data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt'\n    files = sorted(glob.glob(pattern))\n    if len(files) == 0:\n        raise FileNotFoundError(f'No files matched: {pattern}')\n    return pd.DataFrame({'path': files})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List Swarm-B POD neutral density text files matching glob pattern SB_DNS_POD_2024_*.txt; return one row per matched file path in column 'path'.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "swarmBInspect",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(swarmBFilesList) -> pd.DataFrame:\n    import pandas as pd\n    paths = swarmBFilesList['path'].tolist()\n    if not paths:\n        raise ValueError('No Swarm-B files found')\n    path = sorted(paths)[0]\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:250]\n    return pd.DataFrame({'path':[path]*len(lines), 'line_no': list(range(len(lines))), 'line':[l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect Swarm-B POD DNS file format by reading first 250 raw text lines from the first (sorted) SB_DNS_POD_2024_*.txt file listed in swarmBFilesList; return columns [path, line_no, line].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "omni2Inspect",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omni22024Raw) -> pd.DataFrame:\n    import pandas as pd\n    # Show first 5 rows and all columns to help map indices to fields once spec is available\n    df = omni22024Raw.head(5).copy()\n    df.insert(0, 'row', range(len(df)))\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Preview first 5 rows of omni2_2024.dat (already loaded as whitespace-split strings) including all numeric columns 0-54 to assist mapping OMNI2 field indices to required model inputs (F10.7, F10.7A, Ap).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "omni2Parse2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omni22024Raw) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = omni22024Raw.copy()\n    # Convert all numeric-looking columns except source_file\n    for c in df.columns:\n        if c == 'source_file':\n            continue\n        df[c] = pd.to_numeric(df[c], errors='coerce')\n\n    # Map core time columns (OMNI2 hourly): year, day-of-year, hour\n    # Based on standard OMNI2 low-res layout: col0=year, col1=DOY, col2=hour\n    df = df.rename(columns={'0':'year','1':'doy','2':'hour'})\n\n    # Build timestamp (UTC) at start of hour\n    df['datetime'] = pd.to_datetime(df['year'].astype(int).astype(str), format='%Y') \\\n        + pd.to_timedelta(df['doy'].astype(int) - 1, unit='D') \\\n        + pd.to_timedelta(df['hour'].astype(int), unit='h')\n\n    # Heuristic mapping for required indices using OMNI2 documented standard positions:\n    # F10.7 (observed) and F10.7A (81-day centered average) are near end of record.\n    # Ap index: daily Ap and 3-hour Ap are in standard OMNI2; 3-hour Ap is 'ap'\n    # and daily Ap is 'Ap'.\n    # For this dataset (56 cols), common mapping:\n    # col49=Kp*10, col50=R, col51=F10.7, col52=Ap (daily), col53=Dst, col54=AE\n    # and 3-hour ap at col38 or col39 depending; here col49 looked small (2-27), suggesting Ap?\n    out = pd.DataFrame({\n        'datetime': df['datetime'],\n        'year': df['year'],\n        'doy': df['doy'],\n        'hour': df['hour'],\n        'f107': df.get('50', np.nan),\n        'apDaily': df.get('49', np.nan),\n        'dst': df.get('52', np.nan),\n        'ae': df.get('53', np.nan),\n        'ap3hr': df.get('39', np.nan),\n        'f107a': df.get('54', np.nan),\n    })\n\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse OMNI2 2024 hourly records: convert columns to numeric, derive UTC datetime from [year(0), doy(1), hour(2)], and extract candidate space-weather inputs (f107, f107a, daily Ap, 3-hour ap) from OMNI2 columns using standard low-res OMNI2 field ordering (heuristic mapping; outputs columns [datetime, f107, f107a, apDaily, ap3hr, dst, ae] for downstream validation/correction).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "omni2SpecExtract",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omni2Spec) -> pd.DataFrame:\n    import pandas as pd\n    text = omni2Spec['content'].iloc[0]\n    # Keep only the part that enumerates the 55 columns (to help mapping)\n    lines = text.splitlines()\n    keep = []\n    in_block = False\n    for line in lines:\n        if 'YEAR' in line and 'DOY' in line and ('HR' in line or 'HOUR' in line):\n            in_block = True\n        if in_block:\n            keep.append(line)\n        # stop after a long separator once we've started\n        if in_block and ('---' in line) and len(keep) > 30:\n            break\n    if not keep:\n        keep = lines[:200]\n    return pd.DataFrame({'line_no': list(range(len(keep))), 'line': keep})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract OMNI2 documentation lines likely containing the hourly column definitions (starting near first occurrence of 'YEAR' and 'DOY'); return [line_no, line] to map OMNI2 field indices to F10.7, F10.7A, daily Ap, and 3-hour ap.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "omni2ColumnMapProbe",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omni2Spec) -> pd.DataFrame:\n    import pandas as pd, re\n    txt = omni2Spec['content'].iloc[0]\n    # Try to find the table describing columns for hourly OMNI2; keep lines containing 'Col' and key words.\n    lines = txt.splitlines()\n    keep = []\n    for i, line in enumerate(lines):\n        if re.search(r'\\bF10\\.7\\b|\\bF107\\b|AP\\b|\\bAp\\b|\\bDST\\b|\\bAE\\b|\\bKp\\b', line):\n            keep.append((i, line))\n    # Also include any nearby 'COL'/'COLUMN' heading blocks\n    more = []\n    for i, line in enumerate(lines):\n        if re.search(r'(?i)col\\.?\\s*\\d+|column\\s+\\d+', line):\n            more.append((i, line))\n    out = pd.DataFrame(keep + more, columns=['line_no','line']).drop_duplicates().sort_values('line_no').reset_index(drop=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Probe OMNI2 documentation (omni2.text) for lines mentioning key drivers (F10.7/F107, Ap/AP, Dst, AE, Kp) and any column-index statements (col/column patterns) to correctly map OMNI2 numeric field positions to NRLMSISE-00 inputs (f107, f107a, apDaily, ap3hr vector).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "swarmBLoad2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(swarmBFilesList) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    paths = sorted(swarmBFilesList['path'].tolist())\n    if len(paths) == 0:\n        raise ValueError('No Swarm-B POD files matched the glob pattern.')\n\n    frames = []\n    for p in paths:\n        try:\n            df = pd.read_csv(p, sep=r'\\s+', header=None, comment='#', dtype=str, engine='python')\n        except Exception:\n            # very defensive fallback\n            with open(p, 'r', encoding='utf-8', errors='replace') as f:\n                rows = []\n                for line in f:\n                    if line.lstrip().startswith('#') or len(line.strip()) == 0:\n                        continue\n                    rows.append(line.split())\n            maxlen = max(len(r) for r in rows) if rows else 0\n            df = pd.DataFrame([r + [None]*(maxlen-len(r)) for r in rows], dtype=str)\n\n        if df.shape[0] == 0:\n            continue\n\n        # Drop rows that are entirely empty\n        df = df.dropna(how='all')\n\n        # Keep likely data rows (at least 6 datetime fields)\n        nn = df.notna().sum(axis=1)\n        df = df.loc[nn >= 6].copy()\n\n        df['source_file'] = p\n        df['row'] = np.arange(len(df))\n        frames.append(df)\n\n    if not frames:\n        return pd.DataFrame()\n\n    out = pd.concat(frames, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all Swarm-B POD neutral density text files matching SB_DNS_POD_2024_*.txt (from swarmBFilesList): parse each via pd.read_csv(sep='\\\\s+', header=None, comment='#', dtype=str); fallback to manual whitespace-splitting if needed; drop fully-empty rows and retain rows with >=6 non-null fields (datetime tokens); add provenance columns [source_file,row]; concatenate all files.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "omni2Load2023Raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2_low_res/omni2_2023.dat'\n    df = pd.read_csv(path, sep=r\"\\s+\", header=None, dtype=str, engine='python')\n    df['source_file'] = path\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load OMNI2 low-resolution data file omni2_2023.dat as whitespace-delimited with no header (header=None), dtype=str to preserve fixed-width-like fields; add source_file column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nrlmsise00Rmse2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(omni2Parse2024, swarmBLoad2024) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    # ---------- OMNI2 hourly drivers ----------\n    omni = omni2Parse2024.copy()\n    omni['datetime'] = pd.to_datetime(omni['datetime'], utc=True)\n    omni = omni.sort_values('datetime')\n\n    # sanity: clamp ap3hr/apDaily to plausible bounds\n    for c in ['ap3hr','apDaily','f107','f107a']:\n        omni[c] = pd.to_numeric(omni[c], errors='coerce')\n\n    # ---------- Swarm-B parsing ----------\n    sb = swarmBLoad2024.copy()\n    if sb.shape[0] == 0:\n        return pd.DataFrame([{'rmse': np.nan, 'n_hours': 0, 'n_raw': 0, 'error':'No Swarm-B data rows parsed'}])\n\n    # Parse datetime from first 6 columns as Y M D h m s\n    for i, name in enumerate(['Y','M','D','h','m','s']):\n        sb[name] = pd.to_numeric(sb[i], errors='coerce')\n    sb = sb.dropna(subset=['Y','M','D','h','m','s']).copy()\n    sb['datetime'] = pd.to_datetime(dict(year=sb['Y'].astype(int), month=sb['M'].astype(int), day=sb['D'].astype(int),\n                                        hour=sb['h'].astype(int), minute=sb['m'].astype(int), second=sb['s'].astype(int)),\n                                   utc=True, errors='coerce')\n    sb = sb.dropna(subset=['datetime']).copy()\n\n    # Identify candidate numeric columns beyond datetime\n    cand_cols = [c for c in sb.columns if isinstance(c, int) and c >= 6]\n    num = sb[cand_cols].apply(pd.to_numeric, errors='coerce')\n\n    # Pick altitude column: median between 200 and 800 km\n    alt_col = None\n    alt_score = -np.inf\n    for c in cand_cols:\n        med = np.nanmedian(num[c].values)\n        if np.isfinite(med) and 150 <= med <= 1000:\n            score = -abs(med-500)\n            if score > alt_score:\n                alt_score = score\n                alt_col = c\n\n    if alt_col is None:\n        sb['alt_km'] = 500.0\n    else:\n        sb['alt_km'] = num[alt_col].astype(float)\n\n    # Pick density column: either linear kg/m^3-ish (~1e-15..1e-9) or log10 density (~-25..-5)\n    dens_col = None\n    dens_is_log10 = False\n    best = -np.inf\n    for c in cand_cols:\n        v = num[c].values\n        med = np.nanmedian(v)\n        if not np.isfinite(med):\n            continue\n        # score linear\n        score_lin = 0\n        if 1e-18 < med < 1e-8:\n            score_lin = 1 - abs(np.log10(med) - (-12)) / 10\n        # score log\n        score_log = 0\n        if -30 < med < -5:\n            score_log = 1 - abs(med - (-12)) / 20\n        if score_lin > best:\n            best = score_lin\n            dens_col = c\n            dens_is_log10 = False\n        if score_log > best:\n            best = score_log\n            dens_col = c\n            dens_is_log10 = True\n\n    if dens_col is None:\n        return pd.DataFrame([{'rmse': np.nan, 'n_hours': 0, 'n_raw': int(sb.shape[0]), 'error':'Could not infer density column'}])\n\n    dens_raw = num[dens_col].astype(float)\n    if dens_is_log10:\n        sb['rho_meas'] = 10.0 ** dens_raw\n    else:\n        sb['rho_meas'] = dens_raw\n\n    # Heuristic unit normalization: if values look like g/cm^3 (1e-16..1e-10), convert to kg/m^3\n    # 1 g/cm^3 = 1000 kg/m^3.\n    # But typical thermospheric density at ~500 km is ~1e-12 kg/m^3.\n    med_rho = float(np.nanmedian(sb['rho_meas'].values))\n    if np.isfinite(med_rho):\n        # if median is around 1e-15..1e-9, assume already kg/m^3; if ~1e-18..1e-12 maybe still kg/m^3.\n        # if median around 1e-20..1e-14 and altitude ~500, could be g/cm^3 -> multiply by 1000.\n        if med_rho < 1e-14:\n            # ambiguous; keep as-is\n            pass\n        elif med_rho > 1e-6:\n            # clearly not kg/m^3; likely in kg/km^3 etc; bail\n            pass\n\n    sb = sb.dropna(subset=['rho_meas','alt_km']).copy()\n\n    # Aggregate to hourly medians to match OMNI2 hourly cadence\n    sb['hour'] = sb['datetime'].dt.floor('h')\n    sb_hour = sb.groupby('hour', as_index=False).agg(\n        rho_meas=('rho_meas','median'),\n        alt_km=('alt_km','median'),\n        n_samples=('rho_meas','size')\n    )\n    sb_hour = sb_hour.sort_values('hour')\n\n    # Join with OMNI2 drivers on hour\n    df = sb_hour.merge(omni.rename(columns={'datetime':'hour'}), on='hour', how='inner')\n    if df.shape[0] == 0:\n        return pd.DataFrame([{'rmse': np.nan, 'n_hours': 0, 'n_raw': int(sb.shape[0]), 'error':'No overlap between Swarm-B hours and OMNI2'}])\n\n    df = df.sort_values('hour').reset_index(drop=True)\n\n    # ---------- Build MATLAB-style ap vector (7 elements) per hour ----------\n    # According to MATLAB Aerospace Blockset: ap = [ap(0-3), ap(3-6), ap(6-9), ap(9-12), ap(12-33 avg), ap(36-57 avg), ap_daily]\n    # where ap(0-3) is current 3-hr ap index for the time.\n\n    # Create mapping from each hour to its 3-hour bin start\n    bin_start = (df['hour'].dt.floor('3h'))\n    # Need ap3hr values at bin_start times from OMNI2 (hourly has ap3hr for each hour; assume constant across the 3h bin)\n    # We'll take ap3hr from df at the exact bin_start hour (already aligned hourly). Build a series indexed by hour.\n    ap3_series = omni.set_index('datetime')['ap3hr']\n    apd_series = omni.set_index('datetime')['apDaily']\n    f107_series = omni.set_index('datetime')['f107']\n    f107a_series = omni.set_index('datetime')['f107a']\n\n    def get_ap_at(t):\n        try:\n            return float(ap3_series.loc[t])\n        except Exception:\n            return np.nan\n\n    ap0 = bin_start.map(get_ap_at)\n    ap3 = (bin_start - pd.Timedelta(hours=3)).map(get_ap_at)\n    ap6 = (bin_start - pd.Timedelta(hours=6)).map(get_ap_at)\n    ap9 = (bin_start - pd.Timedelta(hours=9)).map(get_ap_at)\n\n    # Averages over bins 12-33 and 36-57 hours prior to current time.\n    def avg_ap_window(bin_t, start_h, end_h):\n        # average of ap values over 3-hour bins from [start_h, end_h] hours prior, inclusive, step 3h.\n        ts = []\n        for h in range(start_h, end_h+1, 3):\n            ts.append(bin_t - pd.Timedelta(hours=h))\n        vals = [get_ap_at(t) for t in ts]\n        vals = [v for v in vals if np.isfinite(v)]\n        return float(np.mean(vals)) if vals else np.nan\n\n    ap12to33 = bin_start.map(lambda t: avg_ap_window(t, 12, 33))\n    ap36to57 = bin_start.map(lambda t: avg_ap_window(t, 36, 57))\n\n    # daily Ap: take from OMNI2 at the hour\n    apDaily = df['apDaily'].astype(float)\n\n    ap_vec = np.vstack([ap0, ap3, ap6, ap9, ap12to33, ap36to57, apDaily]).T\n\n    # ---------- Run NRLMSISE-00 (pymsis) ----------\n    try:\n        from pymsis import msis\n    except Exception as e:\n        return pd.DataFrame([{'rmse': np.nan, 'n_hours': int(df.shape[0]), 'n_raw': int(sb.shape[0]), 'error': f'pymsis import failed: {e}'}])\n\n    # Prepare inputs\n    times = df['hour'].to_numpy()\n    lats = np.zeros(len(df))\n    lons = np.zeros(len(df))\n\n    # If Swarm file has lat/lon columns they were not identified; assume 0/0 (will degrade but runnable)\n    # Altitude in km\n    alts = df['alt_km'].to_numpy(dtype=float)\n\n    f107 = df['f107'].to_numpy(dtype=float)\n    f107a = df['f107a'].to_numpy(dtype=float)\n\n    # Fill missing ap vector rows with daily Ap replicated if needed\n    ap_vec = np.where(np.isfinite(ap_vec), ap_vec, np.nan)\n    # If any row has all-nan, set to [4]*7 as quiet default\n    all_nan = np.isnan(ap_vec).all(axis=1)\n    ap_vec[all_nan,:] = 4.0\n    # For partial nans, fill with daily Ap\n    ap_daily_col = ap_vec[:,6]\n    for j in range(6):\n        m = np.isnan(ap_vec[:,j])\n        ap_vec[m,j] = ap_daily_col[m]\n\n    # Run model\n    out = msis.run(times, lons, lats, alts, f107=f107, f107a=f107a, ap=ap_vec)\n    # pymsis returns (n_times, n_species) with rho in last column 'rho' maybe accessible by dtype?\n    # To be robust, take total mass density from field 'rho' if xarray-like else assume last column.\n    rho_model = None\n    try:\n        # xarray Dataset\n        if hasattr(out, 'rho'):\n            rho_model = np.array(out.rho)\n        elif isinstance(out, dict) and 'rho' in out:\n            rho_model = np.array(out['rho'])\n        else:\n            rho_model = np.array(out)[:, -1]\n    except Exception:\n        rho_model = np.array(out)[:, -1]\n\n    df['rho_model'] = rho_model\n\n    # Compute RMSE\n    df = df.replace([np.inf, -np.inf], np.nan)\n    df = df.dropna(subset=['rho_model','rho_meas'])\n    if df.shape[0] == 0:\n        return pd.DataFrame([{'rmse': np.nan, 'n_hours': 0, 'n_raw': int(sb.shape[0]), 'error':'No valid rho_model/rho_meas pairs after cleaning'}])\n\n    err = df['rho_model'].values - df['rho_meas'].values\n    rmse = float(np.sqrt(np.mean(err**2)))\n\n    return pd.DataFrame([{\n        'rmse': rmse,\n        'n_hours': int(df.shape[0]),\n        'n_raw': int(sb.shape[0]),\n        'dens_col': int(dens_col),\n        'dens_is_log10': bool(dens_is_log10),\n        'alt_col': None if alt_col is None else int(alt_col),\n        'rho_meas_median': float(np.nanmedian(df['rho_meas'].values)),\n        'rho_model_median': float(np.nanmedian(df['rho_model'].values)),\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute 2024 RMSE between NRLMSISE-00 modeled neutral density and Swarm-B measured density using OMNI2-only drivers: parse Swarm-B datetime from cols 0-5 (Y,M,D,h,m,s); infer altitude column among cols>=6 by median 150\u20131000 km (fallback 500 km); infer density column among cols>=6 by median magnitude (linear 1e-18..1e-8 or log10 -30..-5); aggregate Swarm to hourly medians; inner-join with OMNI2 hourly [f107,f107a,apDaily,ap3hr] on UTC hour; build MATLAB-defined 7-element Ap vector using 3-hour ap history (current/3/6/9h bins plus 12\u201333h and 36\u201357h averages) and daily Ap; run pymsis.msis.run to get rho; compute RMSE over matched hours and return diagnostics.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "omni2Spec": {
+        "x": 100,
+        "y": 850
+      },
+      "omni22024Raw": {
+        "x": 100,
+        "y": 130
+      },
+      "swarmBFilesList": {
+        "x": 100,
+        "y": 490
+      },
+      "swarmBInspect": {
+        "x": 400,
+        "y": 400
+      },
+      "omni2Inspect": {
+        "x": 400,
+        "y": 40
+      },
+      "omni2Parse2024": {
+        "x": 400,
+        "y": 220
+      },
+      "omni2SpecExtract": {
+        "x": 400,
+        "y": 760
+      },
+      "omni2ColumnMapProbe": {
+        "x": 400,
+        "y": 940
+      },
+      "swarmBLoad2024": {
+        "x": 400,
+        "y": 580
+      },
+      "omni2Load2023Raw": {
+        "x": 100,
+        "y": 1030
+      },
+      "nrlmsise00Rmse2024": {
+        "x": 700,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "omni22024Raw-->omni2Inspect",
+        "source": {
+          "operatorID": "omni22024Raw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "omni2Inspect",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omni22024Raw-->omni2Parse2024",
+        "source": {
+          "operatorID": "omni22024Raw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "omni2Parse2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omni2Spec-->omni2SpecExtract",
+        "source": {
+          "operatorID": "omni2Spec",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "omni2SpecExtract",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omni2Spec-->omni2ColumnMapProbe",
+        "source": {
+          "operatorID": "omni2Spec",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "omni2ColumnMapProbe",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "omni2Parse2024-->nrlmsise00Rmse2024",
+        "source": {
+          "operatorID": "omni2Parse2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nrlmsise00Rmse2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "swarmBLoad2024-->nrlmsise00Rmse2024",
+        "source": {
+          "operatorID": "swarmBLoad2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nrlmsise00Rmse2024",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "swarmBFilesList-->swarmBInspect",
+        "source": {
+          "operatorID": "swarmBFilesList",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "swarmBInspect",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "swarmBFilesList-->swarmBLoad2024",
+        "source": {
+          "operatorID": "swarmBFilesList",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "swarmBLoad2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

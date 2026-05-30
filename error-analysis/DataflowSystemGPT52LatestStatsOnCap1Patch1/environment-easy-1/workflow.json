@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-12-5-1779138953920",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTesting2013",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/water-body-testing-2013.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2013.csv via pd.read_csv (defaults: comma delimiter, first row as header, UTF-8) to analyze Massachusetts beach water samples and bacterial standard exceedances during 2013 bathing season",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "maBeachViolationPct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTesting2013) -> pd.DataFrame:\n    import pandas as pd\n\n    df = waterBodyTesting2013.copy()\n\n    # Massachusetts beaches: interpret as all records in this dataset (Massachusetts DEP beach testing)\n    # 2013 bathing season: all samples in year 2013 (dataset already restricted to 2013)\n    df = df[df['Year'] == 2013]\n\n    # Exceeded bacterial standards leading to temporary closures: Violation == 'yes'\n    total = len(df)\n    violated = (df['Violation'].astype(str).str.strip().str.lower() == 'yes').sum()\n\n    pct = (violated / total) * 100 if total else float('nan')\n\n    return pd.DataFrame([{\n        'total_samples': total,\n        'samples_exceeded_standard': int(violated),\n        'percent_exceeded': pct\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute percent of 2013 Massachusetts beach water samples exceeding bacterial standards (temporary closure proxy): filter Year==2013; count rows where Violation (case/whitespace-normalized) == 'yes'; percent_exceeded = 100 * count_yes / total; return [total_samples, samples_exceeded_standard, percent_exceeded].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTesting2013": {
+        "x": 100,
+        "y": 40
+      },
+      "maBeachViolationPct": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyTesting2013-->maBeachViolationPct",
+        "source": {
+          "operatorID": "waterBodyTesting2013",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maBeachViolationPct",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

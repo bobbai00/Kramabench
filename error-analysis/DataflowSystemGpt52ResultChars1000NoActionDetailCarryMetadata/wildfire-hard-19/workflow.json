@@ -1,0 +1,574 @@
+{
+  "operators": [
+    {
+      "operatorID": "var_desc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    # Try common encodings for NOAA docs; cp1252 handles smart quotes (0x92)\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv using cp1252 encoding to avoid UnicodeDecodeError",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fires",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv', low_memory=False)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load wildfire incidents from data/wildfire/input/noaa_wildfires.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "weather",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv'\n    # Read with chunking and only needed columns to avoid timeout\n    usecols = None\n    # First read just header to decide columns\n    cols = pd.read_csv(path, nrows=0).columns.tolist()\n    # Heuristically select likely needed cols\n    wanted = [c for c in cols if c.lower() in ['station','station_id','id','date','day','time','latitude','lat','longitude','lon','precipitation','prcp','precip','rain','ppt','event_type','event','wx','snow','tmax','tmin'] or 'precip' in c.lower() or 'prcp' in c.lower()]\n    usecols = wanted if len(wanted)>0 else None\n    chunks = []\n    for ch in pd.read_csv(path, usecols=usecols, chunksize=200000):\n        chunks.append(ch)\n        if len(chunks) >= 5:\n            # don't load entire file; sample first ~1M rows for schema inspection\n            break\n    return pd.concat(chunks, ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load a sampled subset of WeatherEvents_Jan2016-Dec2022.csv using chunks and only precipitation/date/station/lat/lon-related columns to avoid timeout and inspect schema",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "weather_head",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv(\n        'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv',\n        nrows=200,\n        low_memory=False\n    )"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load first 200 rows of WeatherEvents_Jan2016-Dec2022.csv to inspect available columns (station/date/lat/lon/precip etc.)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fires_2016",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fires):\n    import pandas as pd\n    f = fires.copy()\n    f2016 = f[f['control_year'] == 2016].copy()\n    # ensure datetime\n    f2016['controlled_date'] = pd.to_datetime(f2016['controlled_date'])\n    f2016['control_date_minus1'] = f2016['controlled_date'] - pd.Timedelta(days=1)\n    # lat/lon numeric (they are int degrees in this dataset)\n    f2016['latitude'] = pd.to_numeric(f2016['latitude'], errors='coerce')\n    f2016['longitude'] = pd.to_numeric(f2016['longitude'], errors='coerce')\n    return f2016[['incident_number','controlled_date','control_date_minus1','latitude','longitude','state','region','incident_name']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter fires to those controlled in 2016 (control_year==2016); compute control_date_minus1; keep incident_number, controlled_date, lat/lon, and metadata",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "weather_2016_rain",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(weather) -> pd.DataFrame:\n    import pandas as pd\n\n    df = weather.copy()\n\n    # Ensure datetime\n    if 'StartTime(UTC)' in df.columns:\n        dt = pd.to_datetime(df['StartTime(UTC)'], errors='coerce', utc=True)\n    else:\n        # fallback if column naming differs\n        dt = pd.to_datetime(df.get('StartTime(UTC)', pd.NaT), errors='coerce', utc=True)\n    df['StartTime(UTC)'] = dt\n\n    # Precip numeric\n    if 'Precipitation(in)' in df.columns:\n        df['precip_in'] = pd.to_numeric(df['Precipitation(in)'], errors='coerce')\n    else:\n        df['precip_in'] = pd.to_numeric(df.get('precip_in'), errors='coerce')\n\n    # Basic filters\n    df = df[df['Type'].eq('Rain')].copy() if 'Type' in df.columns else df.iloc[0:0].copy()\n    df = df[df['StartTime(UTC)'].dt.year.eq(2016)].copy()\n    df = df[df['precip_in'].gt(0.05)].copy()\n\n    if 'Severity' in df.columns:\n        df = df[df['Severity'].isin(['Moderate', 'Heavy'])].copy()\n    else:\n        df = df.iloc[0:0].copy()\n\n    # Event date at day resolution (UTC)\n    df['event_date'] = df['StartTime(UTC)'].dt.floor('D')\n\n    # Location columns\n    lat_col = 'LocationLat' if 'LocationLat' in df.columns else 'lat'\n    lon_col = 'LocationLng' if 'LocationLng' in df.columns else 'lon'\n\n    out = df[[lat_col, lon_col, 'event_date', 'precip_in', 'Severity']].copy()\n    out = out.rename(columns={lat_col: 'lat', lon_col: 'lon'})\n\n    # Drop bad coords\n    out['lat'] = pd.to_numeric(out['lat'], errors='coerce')\n    out['lon'] = pd.to_numeric(out['lon'], errors='coerce')\n    out = out.dropna(subset=['lat', 'lon', 'event_date', 'precip_in'])\n\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter provided weather table (must already be loaded from WeatherEvents_Jan2016-Dec2022.csv) to 2016 Rain events with Severity in {Moderate, Heavy} and precip_in > 0.05; compute event_date (UTC day) and output lat/lon/event_date/precip_in/Severity without any file I/O.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "rain_near_fire_day",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fires_2016_loc, weather_2016_rain_load) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n\n    fires = fires_2016_loc.copy()\n    wx = weather_2016_rain_load.copy()\n\n    # Work in naive UTC dates (both already UTC midnights)\n    fires['control_date'] = pd.to_datetime(fires['controlled_date'], utc=True).dt.floor('D').dt.tz_localize(None)\n    fires['prev_date'] = pd.to_datetime(fires['control_date_minus1'], utc=True).dt.floor('D').dt.tz_localize(None)\n\n    wx['event_date'] = pd.to_datetime(wx['event_date'], utc=True).dt.floor('D').dt.tz_localize(None)\n\n    # Restrict weather to only dates appearing in fires (control or prev)\n    relevant_dates = pd.Index(pd.unique(pd.concat([fires['control_date'], fires['prev_date']], ignore_index=True)))\n    wx = wx[wx['event_date'].isin(relevant_dates)].copy()\n\n    # Fire coordinates are only integer degrees in this dataset; use generous distance threshold\n    # Narrowest diameter = 1km => radius = 0.5km, but since fire coords are coarse (int degrees),\n    # use 50km to approximate whether station could fall in area given rounding.\n    R_km = 6371.0088\n    max_km = 50.0\n\n    # Prebin to reduce cartesian explosion\n    fires['lat_bin'] = fires['lat'].round(0).astype(int)\n    fires['lon_bin'] = fires['lon'].round(0).astype(int)\n    wx['lat_bin'] = wx['lat'].round(0).astype(int)\n    wx['lon_bin'] = wx['lon'].round(0).astype(int)\n\n    # Expand fires to two dates\n    f1 = fires[['incident_number','lat','lon','lat_bin','lon_bin','control_date']].rename(columns={'control_date':'date'})\n    f2 = fires[['incident_number','lat','lon','lat_bin','lon_bin','prev_date']].rename(columns={'prev_date':'date'})\n    f2 = f2.rename(columns={'date':'date'})\n    f2['date'] = f2['date']\n    fdates = pd.concat([f1, f2], ignore_index=True)\n\n    merged = fdates.merge(wx, left_on=['lat_bin','lon_bin','date'], right_on=['lat_bin','lon_bin','event_date'], how='left')\n\n    # Compute haversine for matched candidates\n    lat1 = np.deg2rad(pd.to_numeric(merged['lat_x'], errors='coerce'))\n    lon1 = np.deg2rad(pd.to_numeric(merged['lon_x'], errors='coerce'))\n    lat2 = np.deg2rad(pd.to_numeric(merged['lat_y'], errors='coerce'))\n    lon2 = np.deg2rad(pd.to_numeric(merged['lon_y'], errors='coerce'))\n\n    dlat = lat2 - lat1\n    dlon = lon2 - lon1\n    a = np.sin(dlat/2.0)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2.0)**2\n    c = 2*np.arcsin(np.sqrt(a))\n    dist_km = R_km * c\n\n    merged['within'] = dist_km.le(max_km) & dist_km.notna()\n\n    any_match = merged.groupby('incident_number')['within'].any().reset_index()\n    any_match = any_match.rename(columns={'within':'any_rain_moderate_heavy'})\n\n    # Ensure all fires present\n    out = fires[['incident_number']].merge(any_match, on='incident_number', how='left')\n    out['any_rain_moderate_heavy'] = out['any_rain_moderate_heavy'].fillna(False)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Match 2016-controlled fires to Moderate/Heavy rain (precip>0.05) on control day or previous day using same rounded-degree bins and a more realistic distance tolerance (50km) due to coarse integer fire lat/lon; output any_rain_moderate_heavy per fire.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "fires_2016_loc",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fires_2016):\n    import numpy as np\n    df = fires_2016.copy()\n    df['lat'] = df['latitude'].astype(float)\n    df['lon'] = df['longitude'].astype(float)\n    return df[['incident_number','controlled_date','control_date_minus1','lat','lon']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Prepare 2016-controlled fires with float lat/lon and control dates for spatial join",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "weather_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv'\n    usecols = [\n        'Type','Severity','StartTime(UTC)','Precipitation(in)',\n        'AirportCode','LocationLat','LocationLng'\n    ]\n    df = pd.read_csv(path, usecols=usecols)\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full WeatherEvents_Jan2016-Dec2022.csv with only needed columns: Type, Severity, StartTime(UTC), Precipitation(in), AirportCode, LocationLat, LocationLng",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "weather_2016_rain_load",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv'\n    usecols = ['Type','Severity','StartTime(UTC)','Precipitation(in)','LocationLat','LocationLng']\n\n    # Filter as early as possible while streaming chunks\n    chunks = []\n    for ch in pd.read_csv(path, usecols=usecols, chunksize=500_000):\n        ch = ch[ch['Type'].eq('Rain')]\n        ch = ch[ch['Severity'].isin(['Moderate','Heavy'])]\n        # parse datetime and year filter\n        dt = pd.to_datetime(ch['StartTime(UTC)'], errors='coerce', utc=True)\n        ch = ch[dt.dt.year.eq(2016)]\n        ch = ch.assign(event_date=dt.dt.floor('D'))\n        # precip filter\n        precip = pd.to_numeric(ch['Precipitation(in)'], errors='coerce')\n        ch = ch.assign(precip_in=precip)\n        ch = ch[ch['precip_in'].gt(0.05)]\n        # coords\n        ch['lat'] = pd.to_numeric(ch['LocationLat'], errors='coerce')\n        ch['lon'] = pd.to_numeric(ch['LocationLng'], errors='coerce')\n        ch = ch.dropna(subset=['lat','lon','event_date','precip_in'])\n        chunks.append(ch[['lat','lon','event_date','precip_in','Severity']])\n\n    if not chunks:\n        return pd.DataFrame(columns=['lat','lon','event_date','precip_in','Severity'])\n    return pd.concat(chunks, ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Stream-read WeatherEvents_Jan2016-Dec2022.csv in chunks; keep only 2016 Rain events with Severity Moderate/Heavy and Precipitation(in)>0.05; output lat/lon/event_date/precip_in/Severity.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "pct_2016_control_rain",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(rain_within_0p5km) -> pd.DataFrame:\n    import pandas as pd\n\n    df = rain_within_0p5km.copy()\n    total = len(df)\n    with_rain = int(df['any_rain_within_0p5km'].sum())\n    pct = round(with_rain / total * 100, 2) if total else 0.0\n    return pd.DataFrame({\n        'total_fires_2016_controlled': [total],\n        'fires_with_mod_or_heavy_rain_same_or_prev_day': [with_rain],\n        'percentage': [pct]\n    })\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute percentage of 2016-controlled fires that had any Moderate/Heavy rain event (precip>0.05 in) within 0.5 km on control day or previous day; percentage rounded to 2 decimals.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "rain_within_0p5km",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fires_2016_loc, weather_2016_rain_load):\n    import pandas as pd\n    import numpy as np\n\n    fires = fires_2016_loc.copy()\n    wx = weather_2016_rain_load.copy()\n\n    fires['controlled_date'] = pd.to_datetime(fires['controlled_date'], utc=True, errors='coerce').dt.floor('D')\n    fires['control_date_minus1'] = pd.to_datetime(fires['control_date_minus1'], utc=True, errors='coerce').dt.floor('D')\n    wx['event_date'] = pd.to_datetime(wx['event_date'], utc=True, errors='coerce').dt.floor('D')\n\n    f1 = fires[['incident_number','lat','lon','controlled_date']].rename(columns={'controlled_date':'event_date'})\n    f0 = fires[['incident_number','lat','lon','control_date_minus1']].rename(columns={'control_date_minus1':'event_date'})\n    f_dates = pd.concat([f1, f0], ignore_index=True)\n\n    m = f_dates.merge(wx, on='event_date', how='left', suffixes=('_fire','_wx'))\n\n    # if no weather rows on that date, lat_wx/lon_wx will be NaN\n    lat_fire = pd.to_numeric(m['lat_fire'], errors='coerce')\n    lon_fire = pd.to_numeric(m['lon_fire'], errors='coerce')\n    lat_wx = pd.to_numeric(m['lat_wx'], errors='coerce')\n    lon_wx = pd.to_numeric(m['lon_wx'], errors='coerce')\n\n    # equirectangular approximation\n    lat1 = np.deg2rad(lat_fire)\n    lat2 = np.deg2rad(lat_wx)\n    dlat = lat2 - lat1\n    dlon = np.deg2rad(lon_wx - lon_fire)\n    x = dlon * np.cos((lat1 + lat2) / 2)\n    y = dlat\n    dist_km = 6371.0 * np.sqrt(x*x + y*y)\n\n    within = (dist_km <= 0.5) & dist_km.notna()\n    m['within_0p5km'] = within\n\n    any_within = (\n        m.groupby('incident_number', as_index=False)['within_0p5km']\n         .any()\n         .rename(columns={'within_0p5km':'any_rain_within_0p5km'})\n    )\n\n    out = fires[['incident_number']].merge(any_within, on='incident_number', how='left')\n    out['any_rain_within_0p5km'] = out['any_rain_within_0p5km'].fillna(False)\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "For each 2016-controlled fire, check if any Moderate/Heavy rain event (precip>0.05 in) occurred within 0.5 km radius (1km diameter) on control day or previous day; merge on event_date then compute distances using lat/lon columns (lat_fire/lon_fire vs lat_wx/lon_wx).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "fires_2016_loc_round",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fires_2016_loc):\n    import pandas as pd\n    df = fires_2016_loc.copy()\n    # round to 2 decimals (~1.11 km latitude), better than integer degrees\n    df['lat_r2'] = df['lat'].round(2)\n    df['lon_r2'] = df['lon'].round(2)\n    df['controlled_day'] = pd.to_datetime(df['controlled_date'], utc=True).dt.floor('D')\n    df['prev_day'] = pd.to_datetime(df['control_date_minus1'], utc=True).dt.floor('D')\n    return df[['incident_number','lat','lon','lat_r2','lon_r2','controlled_day','prev_day']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Prepare 2016-controlled fires with lat/lon rounded to 2 decimals and day-level controlled_day and prev_day (UTC) for exact-coordinate matching to weather stations/events.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "rain_within_50km",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fires_2016_loc, weather_2016_rain_load) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    fires = fires_2016_loc.copy()\n    wx = weather_2016_rain_load.copy()\n\n    # normalize dates to UTC day\n    fires['controlled_day'] = pd.to_datetime(fires['controlled_date'], utc=True).dt.floor('D')\n    fires['prev_day'] = fires['controlled_day'] - pd.Timedelta(days=1)\n\n    wx['event_date'] = pd.to_datetime(wx['event_date'], utc=True).dt.floor('D')\n\n    # build candidate pairs by date (control day or previous day)\n    f1 = fires[['incident_number','lat','lon','controlled_day']].rename(columns={'controlled_day':'day'})\n    f2 = fires[['incident_number','lat','lon','prev_day']].rename(columns={'prev_day':'day'})\n    fdays = pd.concat([f1,f2], ignore_index=True)\n\n    cand = fdays.merge(wx, left_on='day', right_on='event_date', how='left', suffixes=('_fire','_wx'))\n    # if no weather rows for that day -> NaNs\n    cand = cand.dropna(subset=['lat_wx','lon_wx'])\n\n    if cand.empty:\n        return fires[['incident_number']].assign(any_rain_within_50km=False)\n\n    # haversine distance (km)\n    R = 6371.0\n    lat1 = np.radians(cand['lat_fire'].astype(float).to_numpy())\n    lon1 = np.radians(cand['lon_fire'].astype(float).to_numpy())\n    lat2 = np.radians(cand['lat_wx'].astype(float).to_numpy())\n    lon2 = np.radians(cand['lon_wx'].astype(float).to_numpy())\n    dlat = lat2 - lat1\n    dlon = lon2 - lon1\n    a = np.sin(dlat/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2)**2\n    dist_km = 2*R*np.arcsin(np.sqrt(a))\n    cand['dist_km'] = dist_km\n\n    within = cand[dist_km <= 50.0]\n    any_by_fire = within.groupby('incident_number').size().gt(0)\n\n    out = fires[['incident_number']].copy()\n    out['any_rain_within_50km'] = out['incident_number'].map(any_by_fire).fillna(False)\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "For each 2016-controlled fire, check if any Moderate/Heavy rain event (precip>0.05 in) occurred within 50 km on control day or previous day (date join then haversine distance).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "var_desc": {
+      "x": 100,
+      "y": 310
+    },
+    "fires": {
+      "x": 100,
+      "y": 490
+    },
+    "weather": {
+      "x": 100,
+      "y": 670
+    },
+    "weather_head": {
+      "x": 100,
+      "y": 850
+    },
+    "fires_2016": {
+      "x": 430,
+      "y": 490
+    },
+    "weather_2016_rain": {
+      "x": 430,
+      "y": 670
+    },
+    "rain_near_fire_day": {
+      "x": 1090,
+      "y": 40
+    },
+    "fires_2016_loc": {
+      "x": 760,
+      "y": 490
+    },
+    "weather_full": {
+      "x": 100,
+      "y": 1030
+    },
+    "weather_2016_rain_load": {
+      "x": 760,
+      "y": 235
+    },
+    "pct_2016_control_rain": {
+      "x": 1420,
+      "y": 340
+    },
+    "rain_within_0p5km": {
+      "x": 1090,
+      "y": 340
+    },
+    "fires_2016_loc_round": {
+      "x": 1090,
+      "y": 595
+    },
+    "rain_within_50km": {
+      "x": 1090,
+      "y": 835
+    }
+  },
+  "links": [
+    {
+      "linkID": "fires-->fires_2016",
+      "source": {
+        "operatorID": "fires",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fires_2016",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fires_2016-->fires_2016_loc",
+      "source": {
+        "operatorID": "fires_2016",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fires_2016_loc",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "weather-->weather_2016_rain",
+      "source": {
+        "operatorID": "weather",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "weather_2016_rain",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fires_2016_loc-->rain_near_fire_day",
+      "source": {
+        "operatorID": "fires_2016_loc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rain_near_fire_day",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "weather_2016_rain_load-->rain_near_fire_day",
+      "source": {
+        "operatorID": "weather_2016_rain_load",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rain_near_fire_day",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "fires_2016_loc-->rain_within_0p5km",
+      "source": {
+        "operatorID": "fires_2016_loc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rain_within_0p5km",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "weather_2016_rain_load-->rain_within_0p5km",
+      "source": {
+        "operatorID": "weather_2016_rain_load",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rain_within_0p5km",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "fires_2016_loc-->fires_2016_loc_round",
+      "source": {
+        "operatorID": "fires_2016_loc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "fires_2016_loc_round",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "fires_2016_loc-->rain_within_50km",
+      "source": {
+        "operatorID": "fires_2016_loc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rain_within_50km",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "weather_2016_rain_load-->rain_within_50km",
+      "source": {
+        "operatorID": "weather_2016_rain_load",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rain_within_50km",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "rain_within_0p5km-->pct_2016_control_rain",
+      "source": {
+        "operatorID": "rain_within_0p5km",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "pct_2016_control_rain",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

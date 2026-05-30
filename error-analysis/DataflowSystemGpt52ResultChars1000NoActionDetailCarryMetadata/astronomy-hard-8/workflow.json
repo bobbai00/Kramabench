@@ -1,0 +1,830 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_kp",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2/omni2_Kp_Index.lst'\n    # read as fixed/whitespace separated; OMNI2 .lst often whitespace-delimited\n    df = pd.read_csv(path, delim_whitespace=True, header=None, comment='#', engine='python')\n    return pd.concat([df.head(5), df.tail(5)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample omni2_Kp_Index.lst (whitespace-delimited) to inspect columns and time encoding",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_pdyn",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2/omni2_Flow_Pressure.lst'\n    df = pd.read_csv(path, delim_whitespace=True, header=None)\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample omni2_Flow_Pressure.lst (whitespace-delimited) to inspect columns and time encoding",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "kp",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/astronomy/input/omni2/omni2_Kp_Index.lst'\n    df = pd.read_csv(path, delim_whitespace=True, header=None, names=['year','doy','hour','kp_x10'])\n    df['time'] = pd.to_datetime(df['year'].astype(int).astype(str), format='%Y') + pd.to_timedelta(df['doy'].astype(int)-1, unit='D') + pd.to_timedelta(df['hour'].astype(int), unit='h')\n    df['kp'] = df['kp_x10'] / 10.0\n    df = df[['time','kp']].sort_values('time').reset_index(drop=True)\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full omni2_Kp_Index.lst (year, doy, hour, Kp*10), build hourly timestamp, and convert Kp to real units",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "pdyn",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from datetime import datetime, timedelta\n\n    path = 'data/astronomy/input/omni2/omni2_Flow_Pressure.lst'\n    df = pd.read_csv(path, delim_whitespace=True, header=None)\n    df = df.iloc[:, :4].copy()\n    df.columns = ['year', 'doy', 'hour', 'pdyn']\n\n    # Build UTC timestamp from year + day-of-year + hour\n    base = pd.to_datetime(df['year'].astype(int).astype(str) + '-01-01', utc=True)\n    df['time'] = base + pd.to_timedelta(df['doy'].astype(int) - 1, unit='D') + pd.to_timedelta(df['hour'].astype(int), unit='h')\n\n    # Keep only May 11, 2024\n    start = pd.Timestamp('2024-05-11T00:00:00Z')\n    end = pd.Timestamp('2024-05-12T00:00:00Z')\n    out = df[(df['time'] >= start) & (df['time'] < end)][['time', 'pdyn']].sort_values('time').reset_index(drop=True)\n    out['pdyn'] = pd.to_numeric(out['pdyn'], errors='coerce')\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full omni2_Flow_Pressure.lst (year, doy, hour, Pdyn), build hourly UTC timestamp, and keep May 11, 2024 only",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_swarm",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from cdflib import CDF\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n    vars_ = cdf.cdf_info().zVariables\n    # candidate time variables\n    cand = [v for v in vars_ if any(k in v.upper() for k in ['TIME','UTC','EPOCH'])]\n    # include variables likely related to acceleration\n    acc_cand = [v for v in vars_ if 'ACC' in v.upper() or 'ALONG' in v.upper()]\n    out = pd.DataFrame([{\n        'n_vars': len(vars_),\n        'time_candidates': ','.join(cand[:20]),\n        'acc_candidates': ','.join(acc_cand[:30]),\n        'first30': ','.join(vars_[:30])\n    }])\n    return out\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect Swarm ACCACAL CDF with cdflib to list variable names and find time + along-track acceleration candidates",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_acc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    from cdflib import CDF, cdfepoch\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n\n    t = cdf.varget('time')  # TT2000\n    a_aa = cdf.varget('a_aa')\n\n    dt = pd.to_datetime(cdfepoch.to_datetime(t), utc=True)\n\n    a_aa = np.asarray(a_aa)\n    # a_aa appears to be Nx3; take along-track component as the 2nd column (index 1)\n    if a_aa.ndim == 2 and a_aa.shape[1] == 3:\n        along = a_aa[:, 1]\n    else:\n        along = a_aa.reshape(-1)\n\n    df = pd.DataFrame({'time': dt, 'a_aa': pd.to_numeric(pd.Series(along), errors='coerce')})\n\n    start = pd.Timestamp('2024-05-11T00:00:00Z')\n    end = pd.Timestamp('2024-05-12T00:00:00Z')\n    df = df[(df['time'] >= start) & (df['time'] < end)].sort_values('time').reset_index(drop=True)\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load Swarm Alpha ACCACAL CDF; extract TT2000 time and a_aa; if a_aa is Nx3 take the along-track component (column 1); convert time to UTC; filter to May 11, 2024",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_acc_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_acc) -> pd.DataFrame:\n    import pandas as pd\n    df = swarm_acc.copy()\n    df['a_aa'] = pd.to_numeric(df['a_aa'], errors='coerce')\n    # Common fill value in Swarm products is 9999\n    df.loc[df['a_aa'] >= 9990, 'a_aa'] = pd.NA\n    df = df.dropna(subset=['a_aa']).sort_values('time')\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean Swarm along-track acceleration a_aa by converting to numeric, replacing fill values (>=9990) with NA, dropping missing, and sorting by time",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_acc_fixload",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_acc) -> pd.DataFrame:\n    import pandas as pd\n    df = swarm_acc.copy()\n    # keep same columns\n    df['a_aa'] = pd.to_numeric(df['a_aa'], errors='coerce')\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Prep step: ensure Swarm a_aa is numeric; keep time and a_aa for further diagnostics",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_vars_diag",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    from cdflib import CDF\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n    info = cdf.cdf_info()\n\n    rvars = list(getattr(info, 'rVariables', []) or [])\n    zvars = list(getattr(info, 'zVariables', []) or [])\n    vars_all = rvars + zvars\n\n    def as_dict(x):\n        if isinstance(x, dict):\n            return x\n        if hasattr(x, '__dict__'):\n            return dict(x.__dict__)\n        return {}\n\n    rows = []\n    for v in vars_all:\n        try:\n            vi = cdf.varinq(v)\n        except Exception:\n            continue\n        vi_d = as_dict(vi)\n\n        try:\n            attrs = cdf.varattsget(v)\n        except Exception:\n            attrs = {}\n\n        fill = attrs.get('FILLVAL', None)\n        validmin = attrs.get('VALIDMIN', None)\n        validmax = attrs.get('VALIDMAX', None)\n\n        data = cdf.varget(v)\n        arr = np.array(data)\n\n        num_stats = {'min': None, 'max': None, 'nan_frac': None, 'unique_approx': None}\n        if np.issubdtype(arr.dtype, np.number):\n            a = arr.astype('float64', copy=False)\n            # apply fillval (exact compare)\n            if fill is not None:\n                try:\n                    fv = float(np.array(fill).ravel()[0])\n                    a = np.where(a == fv, np.nan, a)\n                except Exception:\n                    pass\n            with np.errstate(all='ignore'):\n                num_stats['nan_frac'] = float(np.isnan(a).mean())\n                if np.isfinite(a).any():\n                    num_stats['min'] = float(np.nanmin(a))\n                    num_stats['max'] = float(np.nanmax(a))\n            try:\n                flat = a.ravel()\n                flat = flat[np.isfinite(flat)]\n                if flat.size > 0:\n                    step = max(1, flat.size // 10000)\n                    samp = flat[::step]\n                    num_stats['unique_approx'] = int(pd.Series(samp).nunique())\n            except Exception:\n                pass\n\n        rows.append({\n            'var': v,\n            'var_group': 'r' if v in rvars else 'z',\n            'DataType': vi_d.get('DataType', None),\n            'NumElements': vi_d.get('NumElements', None),\n            'DimSizes': str(vi_d.get('DimSizes', None)),\n            'RecVary': vi_d.get('RecVary', None),\n            'fillval': str(fill)[:120],\n            'validmin': str(validmin)[:120],\n            'validmax': str(validmax)[:120],\n            **num_stats\n        })\n\n    df = pd.DataFrame(rows)\n    return df.sort_values(['var_group', 'var']).reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List Swarm CDF variables with dtype/dims and numeric min/max applying FILLVAL, using safe conversion of varinq() metadata to dict",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_load_full",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    from cdflib import CDF\n    from cdflib import cdfepoch\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n\n    t = cdf.varget('time')\n    a = cdf.varget('a_aa')\n\n    # Convert TT2000 to datetime (list of datetime)\n    dt = pd.to_datetime(cdfepoch.to_datetime(t), utc=True)\n\n    a = np.array(a)\n    if a.ndim == 2 and a.shape[1] >= 2:\n        a_along = a[:, 1]\n    else:\n        a_along = a.reshape(-1)\n\n    df = pd.DataFrame({'time': dt, 'a_along': pd.to_numeric(a_along, errors='coerce')})\n\n    # Fill value\n    fill = None\n    try:\n        atts = cdf.varattsget('a_aa')\n        fill = atts.get('FILLVAL', None)\n        if isinstance(fill, (list, tuple, np.ndarray)):\n            fill = np.array(fill).reshape(-1)[0]\n    except Exception:\n        fill = None\n    if fill is None:\n        fill = 9999.0\n\n    df.loc[df['a_along'] == float(fill), 'a_along'] = np.nan\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Reload Swarm ACCACAL CDF using cdflib.cdfepoch for TT2000->datetime conversion; extract along-track component from a_aa; replace FILLVAL (9999) with NaN",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_var_attrs",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from cdflib import CDF\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n\n    rows = []\n    for v in cdf.cdf_info().zVariables:\n        try:\n            attrs = cdf.varattsget(v)\n            if not isinstance(attrs, dict):\n                attrs = {}\n        except Exception:\n            attrs = {}\n\n        def getkey(*keys):\n            for k in keys:\n                if k in attrs:\n                    return attrs[k]\n            return None\n\n        rows.append({\n            'var': v,\n            'FILLVAL': getkey('FILLVAL', 'FillVal', 'FILL_VALUE'),\n            'VALIDMIN': getkey('VALIDMIN', 'ValidMin'),\n            'VALIDMAX': getkey('VALIDMAX', 'ValidMax'),\n            'UNITS': getkey('UNITS', 'Units'),\n            'FIELDNAM': getkey('FIELDNAM', 'FieldNam'),\n            'DEPEND_0': getkey('DEPEND_0'),\n            'LABLAXIS': getkey('LABLAXIS'),\n        })\n\n    # cdflib CDF has no close(); rely on garbage collection\n    return pd.DataFrame(rows)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Inspect CDF variable attributes (FILLVAL, VALIDMIN/MAX, UNITS, etc.) for Swarm ACCACAL variables; avoid calling nonexistent cdf.close()",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_a_tmp",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    from cdflib import CDF, cdfepoch\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n    t = cdf.varget('time')\n    dt = pd.to_datetime(cdfepoch.to_datetime(t), utc=True)\n\n    v = cdf.varget('a_tmp')\n    v = np.array(v)\n    if v.ndim == 2 and v.shape[1] >= 2:\n        v = v[:, 1]\n    v = v.astype('float64', copy=False)\n    v[v >= 9990] = np.nan\n\n    return pd.DataFrame({'time': dt, 'a_tmp_along': v})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load Swarm ACCACAL CDF; extract TT2000 time and a_tmp (temp-corrected acceleration), take along-track component (col 1 if vector), replace fill values (>=9990) with NaN",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_find_nonfill",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_acc):\n    import pandas as pd\n    df = swarm_acc.copy()\n    df['a_aa'] = pd.to_numeric(df['a_aa'], errors='coerce')\n    return pd.DataFrame({\n        'n': [len(df)],\n        'n_fill_9999': [(df['a_aa'] == 9999).sum()],\n        'n_not_9999': [(df['a_aa'] != 9999).sum()],\n        'min': [df['a_aa'].min()],\n        'max': [df['a_aa'].max()],\n    })\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Diagnostic: count how many Swarm a_aa samples differ from fill value 9999 and report min/max",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_load_a_cal",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    from cdflib import CDF, cdfepoch\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n\n    t = cdf.varget('time')\n    dt = pd.to_datetime(cdfepoch.to_datetime(t), utc=True)\n\n    a = cdf.varget('a_cal')\n    a = np.asarray(a)\n    if a.ndim == 2 and a.shape[1] >= 2:\n        a_along = a[:, 1]\n    else:\n        a_along = a.astype(float)\n\n    # fill\n    fill = 9999.0\n    a_along = a_along.astype(float)\n    a_along[np.isclose(a_along, fill)] = np.nan\n\n    return pd.DataFrame({'time': dt, 'a_cal_along': a_along}).sort_values('time').reset_index(drop=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load Swarm ACCACAL CDF; extract time and a_cal (calibrated acceleration), take along-track component (col 1 if vector), and replace FILLVAL=9999 with NaN",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_read_cdf_raw",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    from cdflib import CDF\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = CDF(path)\n\n    rows = []\n    for var in ['a_aa','a_cal','a_tmp','a_ca','a_gg']:\n        try:\n            data = cdf.varget(var)\n            arr = np.asarray(data)\n            rows.append({\n                'var': var,\n                'dtype': str(arr.dtype),\n                'ndim': arr.ndim,\n                'shape': str(arr.shape),\n                'min': float(np.nanmin(arr)) if np.size(arr)>0 else np.nan,\n                'max': float(np.nanmax(arr)) if np.size(arr)>0 else np.nan,\n                'unique_approx': int(len(np.unique(arr[:min(arr.shape[0],2000)]))) if arr.ndim==1 else int(len(np.unique(arr[:min(arr.shape[0],2000),:].ravel())))\n            })\n        except Exception as e:\n            rows.append({'var': var, 'dtype': None, 'ndim': None, 'shape': None, 'min': None, 'max': None, 'unique_approx': None, 'error': str(e)})\n\n    return pd.DataFrame(rows)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Diagnose Swarm CDF acceleration variables by reading raw arrays (no fill replacement) and reporting dtype/shape/min/max/approx unique to see if data are all zeros or all 9999",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_target",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_load_a_cal):\n    import pandas as pd\n    df = swarm_load_a_cal.copy()\n    # Use a_cal_along as along-track acceleration proxy if available; drop fill/NaN\n    df['a'] = pd.to_numeric(df['a_cal_along'], errors='coerce')\n    df = df.drop(columns=['a_cal_along'])\n    df = df[df['a'].notna()]\n    # remove any remaining fill values\n    df = df[df['a'] < 9000]\n    return df.sort_values('time').reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Create target series for Swarm Alpha along-track acceleration using a_cal_along (calibrated) as acceleration; drop NaN/fill values",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_load_a_cal_along0",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_load_a_cal):\n    import pandas as pd\n    df = swarm_load_a_cal.copy()\n    # some loads produced NaN for all; instead recompute along-track as column 0 from raw? can't here\n    return df"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Placeholder (no-op) to keep pipeline consistent; will be replaced after reloading Swarm calibrated acceleration with correct along-track component",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_load_a_cal_x",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    import cdflib\n\n    path = 'data/astronomy/input/swarm/SW_OPER_ACCACAL_2__20240511T000000_20240511T235959_0304.cdf'\n    cdf = cdflib.CDF(path)\n\n    t = cdf.varget('time')\n    dt = cdflib.cdfepoch.to_datetime(t)\n    time = pd.to_datetime(dt, utc=True)\n\n    a = cdf.varget('a_cal')\n    a = np.asarray(a)\n    # Determine which component has non-fill values most often\n    fill = 9999.0\n    if a.ndim == 2 and a.shape[1] == 3:\n        notfill_counts = []\n        for i in range(3):\n            col = a[:, i]\n            notfill_counts.append(np.sum(col != fill))\n        best_idx = int(np.argmax(notfill_counts))\n        along = a[:, best_idx]\n    else:\n        best_idx = None\n        along = a\n\n    along = along.astype(float)\n    along[along == fill] = np.nan\n\n    df = pd.DataFrame({'time': time, 'a_cal_along': along})\n    df['nonfill'] = df['a_cal_along'].notna()\n    df.attrs['best_idx'] = best_idx\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Reload Swarm a_cal and auto-select the component (0/1/2) with most non-fill (!=9999) samples; output time, selected a_cal_along (NaN where fill), plus nonfill flag for diagnostics",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarm_1min",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_load_a_cal_x):\n    import pandas as pd\n    df = swarm_load_a_cal_x[['time','a_cal_along']].copy()\n    df['time'] = pd.to_datetime(df['time'], utc=True)\n    df = df.set_index('time').sort_index()\n    # 1-second data -> take 1-minute mean\n    out = df.resample('1min').mean(numeric_only=True).reset_index()\n    out = out.rename(columns={'a_cal_along':'acc_along'})\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Resample Swarm calibrated along-track acceleration to 1-minute means (acc_along) indexed by UTC time",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "omni_hourly",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(kp, pdyn) -> pd.DataFrame:\n    import pandas as pd\n    df = kp.merge(pdyn, on='time', how='inner').sort_values('time')\n    df['time'] = pd.to_datetime(df['time'], utc=True)\n    return df\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Merge hourly OMNI Kp and Pdyn on UTC hour timestamp for May 11, 2024",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarm_hourly",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_1min):\n    import pandas as pd\n    df = swarm_1min.copy()\n    df['time'] = pd.to_datetime(df['time'], utc=True)\n    out = (df.set_index('time')\n             .resample('1h')['acc_along']\n             .mean()\n             .reset_index())\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Aggregate Swarm 1-minute along-track acceleration (acc_along) to hourly means aligned to top-of-hour UTC",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "model_data",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarm_hourly, omni_hourly) -> pd.DataFrame:\n    import pandas as pd\n    df = swarm_hourly.merge(omni_hourly, on='time', how='inner').sort_values('time').reset_index(drop=True)\n    # create 3-hour ahead target (t+3) using current features at time t\n    df['y_tplus3'] = df['acc_along'].shift(-3)\n    df = df.dropna(subset=['y_tplus3']).reset_index(drop=True)\n    return df[['time','kp','pdyn','y_tplus3']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Join Swarm hourly mean acceleration with hourly OMNI (Kp, Pdyn) on time; build 3-hour-ahead target y_tplus3 by shifting Swarm acc_along by -3 and dropping last 3 hours",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "rmse_models",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(model_data):\n    import numpy as np\n    import pandas as pd\n    from sklearn.linear_model import LinearRegression\n    from sklearn.metrics import mean_squared_error\n\n    df = model_data.copy().sort_values('time').reset_index(drop=True)\n\n    # time-ordered split: 70% train, 30% test\n    n = len(df)\n    n_train = int(np.floor(0.7 * n))\n    train = df.iloc[:n_train]\n    test = df.iloc[n_train:]\n\n    def fit_rmse(xcol):\n        X_train = train[[xcol]].values\n        y_train = train['y_tplus3'].values\n        X_test = test[[xcol]].values\n        y_test = test['y_tplus3'].values\n\n        lr = LinearRegression()\n        lr.fit(X_train, y_train)\n        pred = lr.predict(X_test)\n        rmse = float(np.sqrt(mean_squared_error(y_test, pred)))\n        return rmse\n\n    rmse_kp = fit_rmse('kp')\n    rmse_pdyn = fit_rmse('pdyn')\n\n    return pd.DataFrame([{\n        'rmse_kp': rmse_kp,\n        'rmse_pdyn': rmse_pdyn,\n        'n_total': n,\n        'n_train': n_train,\n        'n_test': n - n_train\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Fit two separate single-variable LinearRegression models to predict 3-hour-ahead Swarm hourly along-track acceleration (y_tplus3) using either kp or pdyn; use chronological 70/30 train-test split; report test RMSEs",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_kp": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_pdyn": {
+      "x": 100,
+      "y": 220
+    },
+    "kp": {
+      "x": 430,
+      "y": 940
+    },
+    "pdyn": {
+      "x": 430,
+      "y": 2110
+    },
+    "sample_swarm": {
+      "x": 100,
+      "y": 400
+    },
+    "swarm_acc": {
+      "x": 100,
+      "y": 1480
+    },
+    "swarm_acc_clean": {
+      "x": 430,
+      "y": 1120
+    },
+    "swarm_acc_fixload": {
+      "x": 430,
+      "y": 1390
+    },
+    "swarm_vars_diag": {
+      "x": 100,
+      "y": 760
+    },
+    "swarm_load_full": {
+      "x": 100,
+      "y": 940
+    },
+    "swarm_var_attrs": {
+      "x": 100,
+      "y": 1120
+    },
+    "swarm_a_tmp": {
+      "x": 100,
+      "y": 1300
+    },
+    "swarm_find_nonfill": {
+      "x": 430,
+      "y": 1570
+    },
+    "swarm_load_a_cal": {
+      "x": 100,
+      "y": 1840
+    },
+    "swarm_read_cdf_raw": {
+      "x": 100,
+      "y": 1660
+    },
+    "swarm_target": {
+      "x": 430,
+      "y": 1750
+    },
+    "swarm_load_a_cal_along0": {
+      "x": 430,
+      "y": 1930
+    },
+    "swarm_load_a_cal_x": {
+      "x": 100,
+      "y": 580
+    },
+    "swarm_1min": {
+      "x": 430,
+      "y": 580
+    },
+    "omni_hourly": {
+      "x": 760,
+      "y": 1660
+    },
+    "swarm_hourly": {
+      "x": 760,
+      "y": 580
+    },
+    "model_data": {
+      "x": 1090,
+      "y": 1300
+    },
+    "rmse_models": {
+      "x": 1420,
+      "y": 1300
+    }
+  },
+  "links": [
+    {
+      "linkID": "swarm_acc-->swarm_acc_clean",
+      "source": {
+        "operatorID": "swarm_acc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_acc_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_acc-->swarm_acc_fixload",
+      "source": {
+        "operatorID": "swarm_acc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_acc_fixload",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_acc-->swarm_find_nonfill",
+      "source": {
+        "operatorID": "swarm_acc",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_find_nonfill",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_load_a_cal-->swarm_target",
+      "source": {
+        "operatorID": "swarm_load_a_cal",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_target",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_load_a_cal-->swarm_load_a_cal_along0",
+      "source": {
+        "operatorID": "swarm_load_a_cal",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_load_a_cal_along0",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_load_a_cal_x-->swarm_1min",
+      "source": {
+        "operatorID": "swarm_load_a_cal_x",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_1min",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "kp-->omni_hourly",
+      "source": {
+        "operatorID": "kp",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "omni_hourly",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "pdyn-->omni_hourly",
+      "source": {
+        "operatorID": "pdyn",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "omni_hourly",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "swarm_1min-->swarm_hourly",
+      "source": {
+        "operatorID": "swarm_1min",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarm_hourly",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarm_hourly-->model_data",
+      "source": {
+        "operatorID": "swarm_hourly",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "model_data",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "omni_hourly-->model_data",
+      "source": {
+        "operatorID": "omni_hourly",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "model_data",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "model_data-->rmse_models",
+      "source": {
+        "operatorID": "model_data",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rmse_models",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

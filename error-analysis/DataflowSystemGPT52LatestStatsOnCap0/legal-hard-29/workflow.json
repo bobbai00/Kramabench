@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-622-7-1779125426392",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadStateMsaFraud",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        try:\n            df = pd.read_csv(p, dtype=str)\n        except Exception:\n            # fallback for odd encodings\n            df = pd.read_csv(p, dtype=str, encoding_errors='ignore')\n        df[\"_source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files matching pattern \"State MSA Fraud and Other data/*.csv\" (glob); read each via pd.read_csv(dtype=str); add provenance column _source_file=basename; concat into a single table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanStateMsaFraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadStateMsaFraud):\n    import pandas as pd\n\n    df = loadStateMsaFraud.copy()\n\n    # Standardize column names\n    df = df.rename(columns={\n        'Metropolitan Areas: Fraud and Other Reports': 'msa',\n        'Unnamed: 1': 'reports_raw'\n    })\n\n    # Derive state from filename\n    df['state'] = (\n        df['_source_file']\n        .str.replace('.csv', '', regex=False)\n        .str.strip()\n    )\n\n    # Drop non-data rows\n    drop_msa = {\n        'Metropolitan Area',\n        'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission'\n    }\n    df = df[df['msa'].notna()].copy()\n    df['msa'] = df['msa'].astype(str).str.strip()\n    df = df[~df['msa'].isin(drop_msa)].copy()\n\n    # Parse reports: keep as string (Texera schema stability) and numeric helper\n    reports_num = (\n        df['reports_raw']\n        .astype(str)\n        .str.strip()\n        .str.replace(',', '', regex=False)\n    )\n    df['reportsNum'] = pd.to_numeric(reports_num, errors='coerce')\n\n    # Keep only valid numeric rows\n    df = df[df['reportsNum'].notna()].copy()\n\n    # Provide a stable STRING column for reports (and numeric helper for downstream)\n    df['reports'] = df['reportsNum'].round(0).astype('Int64').astype(str)\n\n    return df[['state', 'msa', 'reports', 'reportsNum', '_source_file']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean loadStateMsaFraud into a rectangular fact table: rename columns to msa and reports_raw; derive state from _source_file basename without .csv; drop non-data rows (msa null, 'Metropolitan Area', and FTC source note); parse reports_raw by removing commas; compute numeric reportsNum via pd.to_numeric; keep rows with non-null reportsNum; output [state, msa, reports (string), reportsNum (numeric helper), _source_file] to avoid type-mismatch errors",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "msaFraudShareWithinState",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanStateMsaFraud) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanStateMsaFraud.copy()\n\n    # Count metro/micro areas per state (as present in the file)\n    state_counts = (\n        df.groupby('state', as_index=False)\n          .agg(nAreas=('msa', 'nunique'))\n    )\n\n    eligible_states = state_counts[state_counts['nAreas'] >= 5][['state', 'nAreas']]\n\n    df2 = df.merge(eligible_states, on='state', how='inner')\n\n    # Compute total reports per state and each MSA share\n    state_totals = (\n        df2.groupby('state', as_index=False)\n           .agg(stateTotalReports=('reportsNum', 'sum'))\n    )\n\n    df3 = df2.merge(state_totals, on='state', how='left')\n    df3['share'] = df3['reportsNum'] / df3['stateTotalReports']\n\n    # Find overall max share among eligible states\n    top = df3.sort_values(['share', 'reportsNum'], ascending=[False, False]).head(1)\n\n    return top[['msa', 'state', 'reportsNum', 'stateTotalReports', 'share', 'nAreas']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Among states with >=5 unique metro/micro areas (counted by nunique(msa) within each state), compute each area's within-state fraud-report share = reportsNum / sum(reportsNum) over that state; then select the single row with the maximum share overall (tie-breaker: higher reportsNum). Output msa plus context columns [state, reportsNum, stateTotalReports, share, nAreas].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadStateMsaFraud": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanStateMsaFraud": {
+        "x": 400,
+        "y": 40
+      },
+      "msaFraudShareWithinState": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadStateMsaFraud-->cleanStateMsaFraud",
+        "source": {
+          "operatorID": "loadStateMsaFraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanStateMsaFraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanStateMsaFraud-->msaFraudShareWithinState",
+        "source": {
+          "operatorID": "cleanStateMsaFraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "msaFraudShareWithinState",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

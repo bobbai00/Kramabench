@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-47-7-1779139450647",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # File contains Windows-1252 smart quotes (e.g., 0x93); use cp1252.\n    return pd.read_csv(path, encoding=\"cp1252\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv via pd.read_csv with encoding='cp1252' (fix UnicodeDecodeError from smart-quote bytes); comma delimiter, first row as header",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanReportCategories2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCategories2024.copy()\n\n    # The file is a formatted table with a title row and a header row.\n    # Find the header row where the first cell is 'Rank'.\n    header_idx = df.index[df.iloc[:, 0].astype(str).str.strip().eq('Rank')]\n    if len(header_idx) == 0:\n        raise ValueError(\"Could not find header row with 'Rank' in first column\")\n    h = int(header_idx[0])\n\n    data = df.iloc[h + 1 :].copy()\n    data.columns = ['rank', 'category', 'numReports', 'percentage']\n\n    # Drop footers/blank rows\n    data = data.dropna(subset=['rank', 'category'], how='any')\n    data = data[~data['rank'].astype(str).str.contains('Source:', na=False)]\n\n    # Parse rank and numeric\n    data['rank'] = pd.to_numeric(data['rank'], errors='coerce')\n    data['numReports'] = (\n        data['numReports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.replace('\\u00a0', ' ', regex=False)\n        .str.strip()\n    )\n    data['numReports'] = pd.to_numeric(data['numReports'], errors='coerce')\n\n    data['percentage'] = (\n        data['percentage']\n        .astype(str)\n        .str.replace('%', '', regex=False)\n        .str.strip()\n    )\n    data['percentage'] = pd.to_numeric(data['percentage'], errors='coerce') / 100.0\n\n    data = data.dropna(subset=['rank', 'category', 'numReports', 'percentage']).sort_values('rank')\n    data['rank'] = data['rank'].astype(int)\n\n    return data.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and normalize 2024 report category table from reportCategories2024: detect header row where first column equals 'Rank'; set columns to [rank, category, numReports, percentage]; drop blank/footer rows (including 'Source:'), parse rank as int, numReports as numeric after removing commas, percentage as fraction after stripping '%'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "minCatsFor50pct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanReportCategories2024):\n    import pandas as pd\n\n    df = cleanReportCategories2024.copy()\n    df = df.sort_values(['percentage', 'numReports'], ascending=[False, False]).reset_index(drop=True)\n    df['cumPct'] = df['percentage'].cumsum()\n    # minimum k such that cumulative percentage >= 0.5\n    k = int((df['cumPct'] >= 0.5).idxmax() + 1)\n    return pd.DataFrame([{'minCategoriesForAtLeast50pct': k}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute minimum number of 2024 report categories to reach \u226550% of reports: sort cleanReportCategories2024 by percentage desc (tie-breaker numReports desc), compute cumulative sum of percentage as cumPct, find smallest k where cumPct >= 0.5, return single-row DataFrame with minCategoriesForAtLeast50pct",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanReportCategories2024": {
+        "x": 400,
+        "y": 40
+      },
+      "minCatsFor50pct": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCategories2024-->cleanReportCategories2024",
+        "source": {
+          "operatorID": "reportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanReportCategories2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanReportCategories2024-->minCatsFor50pct",
+        "source": {
+          "operatorID": "cleanReportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "minCatsFor50pct",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-86-5-1779100850090",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadIdentityTheftFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p, dtype=str)\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and concatenate all CSV files matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv' via glob.glob; read with pd.read_csv(dtype=str) and add provenance column '__source_file' (basename)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadFraudFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    pattern = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\"\n    paths = sorted(glob.glob(pattern))\n    if not paths:\n        raise FileNotFoundError(f\"No files matched pattern: {pattern}\")\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p, dtype=str)\n        df[\"__source_file\"] = p.split(\"/\")[-1]\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and concatenate all CSV files matching 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv' via glob.glob; read with pd.read_csv(dtype=str) and add provenance column '__source_file' (basename)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compareIdentityVsFraudByMsa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadIdentityTheftFiles, loadFraudFiles) -> pd.DataFrame:\n    import pandas as pd\n\n    def to_long(df: pd.DataFrame) -> pd.DataFrame:\n        # Normalize to 2-column table: msa, reports\n        cols = list(df.columns)\n        msa_col = cols[0]\n        reports_col = None\n        for c in cols:\n            if c.strip() in [\"# of Reports\", \"# of reports\", \"Number of Reports\", \"Reports\"]:\n                reports_col = c\n                break\n        if reports_col is None:\n            # Many files use 'Unnamed: 1' for the count column\n            reports_col = \"Unnamed: 1\" if \"Unnamed: 1\" in df.columns else cols[1]\n\n        out = df[[msa_col, reports_col]].copy()\n        out.columns = [\"msa\", \"reports_raw\"]\n\n        # Drop header/footer/noise rows\n        out[\"msa\"] = out[\"msa\"].astype(str).str.strip()\n        out[\"reports_raw\"] = out[\"reports_raw\"].astype(str).str.strip()\n        bad_msa = {\n            \"nan\",\n            \"Metropolitan Area\",\n            \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission\",\n            \"Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission.\",\n            \"\",\n        }\n        out = out[~out[\"msa\"].isin(bad_msa)]\n\n        # Coerce numeric reports\n        out[\"reports\"] = pd.to_numeric(out[\"reports_raw\"].str.replace(\",\", \"\", regex=False), errors=\"coerce\")\n        out = out.dropna(subset=[\"reports\"])\n\n        # In case of duplicates across files, sum (shouldn't happen, but safe)\n        out = out.groupby(\"msa\", as_index=False)[\"reports\"].sum()\n        return out\n\n    idt = to_long(loadIdentityTheftFiles)\n    frd = to_long(loadFraudFiles)\n\n    merged = idt.merge(frd, on=\"msa\", how=\"inner\", suffixes=(\"_identity\", \"_fraud\"))\n    merged[\"identityExceedsFraud\"] = merged[\"reports_identity\"] > merged[\"reports_fraud\"]\n\n    any_true = bool(merged[\"identityExceedsFraud\"].any())\n    return pd.DataFrame([{ \"answer\": \"Yes\" if any_true else \"No\" }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Transform identity theft and fraud CSV concatenations into standardized [msa, reports] tables (use first column as MSA name; use '# of Reports' if present else 'Unnamed: 1' as count; drop header/footer rows; coerce counts to numeric; groupby msa sum reports). Inner-join identity vs fraud on msa; compute whether any MSA has identity reports > fraud reports; output single-row DataFrame with column 'answer' ('Yes'/'No').",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadIdentityTheftFiles": {
+        "x": 100,
+        "y": 40
+      },
+      "loadFraudFiles": {
+        "x": 100,
+        "y": 220
+      },
+      "compareIdentityVsFraudByMsa": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadIdentityTheftFiles-->compareIdentityVsFraudByMsa",
+        "source": {
+          "operatorID": "loadIdentityTheftFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareIdentityVsFraudByMsa",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadFraudFiles-->compareIdentityVsFraudByMsa",
+        "source": {
+          "operatorID": "loadFraudFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareIdentityVsFraudByMsa",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

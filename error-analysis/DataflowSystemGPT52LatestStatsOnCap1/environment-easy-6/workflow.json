@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-116-5-1779101431412",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBody2002",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/water-body-testing-2002.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2002.csv via pd.read_csv with default parameters (comma delimiter, header row inferred, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterBodyAllYears",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = sorted(glob.glob('data/environment/input/water-body-testing-*.csv'))\n    if not paths:\n        raise FileNotFoundError('No files matched data/environment/input/water-body-testing-*.csv')\n\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df['sourceFile'] = p.split('/')[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and union all yearly water-body-testing-*.csv files (glob data/environment/input/water-body-testing-*.csv); read each via pd.read_csv (defaults), add provenance column sourceFile=basename, and pd.concat into one table for cross-year analysis",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marineExceedanceRate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = waterBodyAllYears.copy()\n\n    # Standardize key fields\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df['Beach Type Description'] = df['Beach Type Description'].astype(str)\n\n    # Violation is yes/no; treat any case-insensitive 'yes' as exceedance\n    viol = df['Violation'].astype(str).str.strip().str.lower()\n    df['_isExceed'] = viol.eq('yes')\n\n    # Filter to target years and marine beaches\n    df = df[(df['Year'] >= 2002) & (df['Year'] <= 2023) & (df['Beach Type Description'].str.strip().str.lower().eq('marine'))]\n\n    # Average exceedance rate across all marine samples in the period\n    rate = df['_isExceed'].mean() * 100.0\n\n    return pd.DataFrame([{\n        'avgHistoricalExceedanceRatePct': rate,\n        'marineSamples': int(df.shape[0]),\n        'marineExceedances': int(df['_isExceed'].sum())\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average historical exceedance rate for Marine beaches (Beach Type Description == 'Marine') for years 2002-2023 inclusive: coerce Year numeric; flag exceedance where Violation case-insensitive == 'yes'; filter Year in [2002,2023] and Marine; compute mean(exceedance)*100 as avgHistoricalExceedanceRatePct; also output sample/exceedance counts for validation",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBody2002": {
+        "x": 100,
+        "y": 40
+      },
+      "waterBodyAllYears": {
+        "x": 100,
+        "y": 220
+      },
+      "marineExceedanceRate": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyAllYears-->marineExceedanceRate",
+        "source": {
+          "operatorID": "waterBodyAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineExceedanceRate",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

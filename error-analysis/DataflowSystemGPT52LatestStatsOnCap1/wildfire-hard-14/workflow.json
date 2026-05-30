@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-635-5-1779125515123",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "annualAqiByCounty2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/annual_aqi_by_county_2024.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load annual_aqi_by_county_2024.csv via pd.read_csv (comma delimiter, first row as header, UTF-8) from data/wildfire/input/annual_aqi_by_county_2024.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfireAcresByState",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Wildfire_Acres_by_State.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Wildfire_Acres_by_State.csv via pd.read_csv (comma delimiter, first row as header, UTF-8) from data/wildfire/input/Wildfire_Acres_by_State.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stateUnsafeProportionAndFire",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(annualAqiByCounty2024, wildfireAcresByState) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    aqi = annualAqiByCounty2024.copy()\n    fire = wildfireAcresByState.copy()\n\n    # Ensure numeric\n    numeric_cols = [\n        'Days with AQI',\n        'Unhealthy for Sensitive Groups Days',\n        'Unhealthy Days',\n        'Very Unhealthy Days',\n        'Hazardous Days'\n    ]\n    for c in numeric_cols:\n        aqi[c] = pd.to_numeric(aqi[c], errors='coerce')\n\n    fire['Total Acres Burned'] = pd.to_numeric(fire['Total Acres Burned'], errors='coerce')\n\n    # \"Generally unsafe\" interpreted as EPA categories at/above Unhealthy for Sensitive Groups\n    aqi['unsafeDays'] = (\n        aqi['Unhealthy for Sensitive Groups Days'].fillna(0)\n        + aqi['Unhealthy Days'].fillna(0)\n        + aqi['Very Unhealthy Days'].fillna(0)\n        + aqi['Hazardous Days'].fillna(0)\n    )\n    aqi['unsafeProp'] = np.where(aqi['Days with AQI'] > 0, aqi['unsafeDays'] / aqi['Days with AQI'], np.nan)\n\n    # Aggregate to state level (sum days across counties, then compute proportion)\n    stateAgg = (\n        aqi.groupby('State', as_index=False)\n           .agg(daysWithAqi=('Days with AQI', 'sum'), unsafeDays=('unsafeDays', 'sum'))\n    )\n    stateAgg['unsafeProp'] = np.where(stateAgg['daysWithAqi'] > 0, stateAgg['unsafeDays'] / stateAgg['daysWithAqi'], np.nan)\n\n    merged = stateAgg.merge(fire[['State', 'Total Acres Burned']], on='State', how='inner')\n    merged = merged.dropna(subset=['unsafeProp', 'Total Acres Burned'])\n\n    corr = merged['unsafeProp'].corr(merged['Total Acres Burned'])\n\n    return pd.DataFrame([{\n        'correlation': corr,\n        'nStates': len(merged)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute state-level proportion of generally unsafe AQI days and correlate with 2024 wildfire acres burned: (1) from annual_aqi_by_county_2024.csv compute unsafeDays = (Unhealthy for Sensitive Groups + Unhealthy + Very Unhealthy + Hazardous) and unsafeProp = unsafeDays / Days with AQI per county; (2) aggregate to state by summing Days with AQI and unsafeDays across counties and recompute unsafeProp_state = unsafeDays_sum / daysWithAqi_sum; (3) inner join to Wildfire_Acres_by_State.csv on State and drop rows with null unsafeProp or Total Acres Burned; (4) compute Pearson correlation between unsafeProp_state and Total Acres Burned; output correlation and number of matched states.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "annualAqiByCounty2024": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfireAcresByState": {
+        "x": 100,
+        "y": 220
+      },
+      "stateUnsafeProportionAndFire": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "annualAqiByCounty2024-->stateUnsafeProportionAndFire",
+        "source": {
+          "operatorID": "annualAqiByCounty2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateUnsafeProportionAndFire",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfireAcresByState-->stateUnsafeProportionAndFire",
+        "source": {
+          "operatorID": "wildfireAcresByState",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "stateUnsafeProportionAndFire",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

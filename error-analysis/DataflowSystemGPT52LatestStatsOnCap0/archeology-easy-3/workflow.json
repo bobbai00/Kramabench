@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-314-5-1779106812382",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "romanCities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/roman_cities.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load roman_cities.csv from data/archeology/input/roman_cities.csv using pd.read_csv with default parameters (comma delimiter, header inferred from first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "greeceAvgRank",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(romanCities):\n    import pandas as pd\n    import numpy as np\n\n    df = romanCities.copy()\n\n    # Filter to Greece\n    df = df[df[\"Country\"].astype(str).str.strip().str.lower() == \"greece\"].copy()\n\n    # Parse Barrington Atlas Rank where values can be like '4 or 5', '-', '3', etc.\n    s = df[\"Barrington Atlas Rank\"].astype(str).str.strip().str.lower()\n\n    def parse_rank(x: str):\n        if x in {\"-\", \"\", \"nan\", \"none\"}:\n            return np.nan\n        if \"or\" in x:\n            parts = [p.strip() for p in x.split(\"or\")]\n            nums = []\n            for p in parts:\n                try:\n                    nums.append(float(p))\n                except Exception:\n                    pass\n            return float(np.mean(nums)) if nums else np.nan\n        try:\n            return float(x)\n        except Exception:\n            return np.nan\n\n    df[\"rankNumeric\"] = s.map(parse_rank)\n\n    avg_rank = df[\"rankNumeric\"].mean()\n\n    return pd.DataFrame([{\"avg_rank\": avg_rank}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter romanCities to rows where Country == 'Greece' (case/whitespace-insensitive); parse 'Barrington Atlas Rank' to numeric where 'X or Y' becomes mean(X,Y) and '-' becomes NaN; compute mean rank across Greek cities and return single-row DataFrame with avg_rank.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "romanCities": {
+        "x": 100,
+        "y": 40
+      },
+      "greeceAvgRank": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "romanCities-->greeceAvgRank",
+        "source": {
+          "operatorID": "romanCities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "greeceAvgRank",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

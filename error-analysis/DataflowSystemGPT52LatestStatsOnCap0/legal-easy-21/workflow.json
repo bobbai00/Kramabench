@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-615-8-1779125300286",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "stateIdentityTheftReports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Identity_Theft_Reports.csv\"\n\n    # Read without forcing a header so we can locate the true header row reliably.\n    raw = pd.read_csv(path, header=None, dtype=str)\n\n    # Find the row that contains the expected header labels.\n    expected = [\"State\", \"Theft Type\", \"# of Reports\", \"Percentage\"]\n    header_row = None\n    for i in range(min(50, len(raw))):\n        row = [str(x).strip() if x is not None else \"\" for x in raw.iloc[i].tolist()]\n        if row[:4] == expected:\n            header_row = i\n            break\n    if header_row is None:\n        raise ValueError(\"Could not find expected header row: %s\" % expected)\n\n    df = raw.iloc[header_row + 1 :].copy()\n    df.columns = expected\n\n    # Drop fully-empty/footer rows\n    df = df.dropna(how=\"all\")\n    df = df[df[\"State\"].notna()]\n\n    return df.reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Identity_Theft_Reports.csv from data/legal/input/csn-data-book-2024-csv/CSVs by reading headerless first, locating the true header row matching ['State','Theft Type','# of Reports','Percentage'], then assigning columns, dropping fully-empty/footer rows, and returning a clean table with those 4 columns as strings.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "alabamaTotalReporters2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(stateIdentityTheftReports):\n    import pandas as pd\n\n    df = stateIdentityTheftReports.copy()\n\n    # Keep only valid data rows (exclude footnotes) and the requested state\n    df = df[(df[\"State\"] == \"Alabama\") & (df[\"Theft Type\"].notna()) & (df[\"# of Reports\"].notna())]\n\n    # Parse counts like \"1,202\" -> 1202\n    df[\"reports\"] = (\n        df[\"# of Reports\"].astype(str).str.replace(\",\", \"\", regex=False).str.strip()\n    )\n    df[\"reports\"] = pd.to_numeric(df[\"reports\"], errors=\"coerce\")\n\n    total = int(df[\"reports\"].sum(skipna=True))\n\n    return pd.DataFrame([{\"total_identity_theft_reporters_alabama_2024\": total}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter stateIdentityTheftReports to rows where State == 'Alabama' and both 'Theft Type' and '# of Reports' are non-null (exclude footnote/footer rows); parse '# of Reports' by removing thousands separators and converting to numeric; sum across all theft types to get total identity theft reporters in Alabama in 2024; return single-row table with the total.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "stateIdentityTheftReports": {
+        "x": 100,
+        "y": 40
+      },
+      "alabamaTotalReporters2024": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "stateIdentityTheftReports-->alabamaTotalReporters2024",
+        "source": {
+          "operatorID": "stateIdentityTheftReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "alabamaTotalReporters2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

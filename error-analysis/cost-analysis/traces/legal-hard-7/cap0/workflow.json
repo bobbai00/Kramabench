@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-26-6-1779099883752",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadIdentityTheftTopThree",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv via pd.read_csv (comma delimiter, first row as header, UTF-8 inferred) from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanIdentityTheftTopThree",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadIdentityTheftTopThree) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadIdentityTheftTopThree.copy()\n    # The real header is on row 1: [Theft Type, Year, # of Reports]\n    df = df.rename(\n        columns={\n            'Top Three Identity Theft Reports by Year': 'c0',\n            'Unnamed: 1': 'c1',\n            'Unnamed: 2': 'c2',\n        }\n    )\n\n    # Keep only rows where c0 is a 4-digit year\n    df['Year'] = pd.to_numeric(df['c0'], errors='coerce')\n    df = df[df['Year'].between(2020, 2024, inclusive='both')].copy()\n\n    df = df.rename(columns={'c1': 'Theft Type', 'c2': 'ReportsRaw'})\n    df['# of Reports'] = (\n        df['ReportsRaw']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df['# of Reports'] = pd.to_numeric(df['# of Reports'], errors='coerce')\n\n    out = df[['Theft Type', 'Year', '# of Reports']].dropna(subset=['Theft Type', 'Year', '# of Reports'])\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean loadIdentityTheftTopThree into a tidy table by renaming columns to [c0,c1,c2], parsing Year from c0 (keep 2020-2024), mapping c1->Theft Type and c2->ReportsRaw, converting '# of Reports' to numeric by removing commas, and returning columns [Theft Type, Year, # of Reports] with non-null rows only",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fastestRelativeGrowth2020to2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanIdentityTheftTopThree) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanIdentityTheftTopThree.copy()\n\n    # Keep only endpoints\n    endpoints = df[df['Year'].isin([2020, 2024])]\n\n    wide = endpoints.pivot_table(index='Theft Type', columns='Year', values='# of Reports', aggfunc='sum')\n    wide = wide.rename(columns={2020: 'reports2020', 2024: 'reports2024'}).reset_index()\n\n    # Relative growth: (2024/2020) - 1\n    wide['relativeGrowth'] = (wide['reports2024'] / wide['reports2020']) - 1\n\n    out = wide.sort_values(['relativeGrowth', 'reports2020'], ascending=[False, True]).head(1)\n    return out[['Theft Type', 'relativeGrowth', 'reports2020', 'reports2024']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute fastest relative growth in '# of Reports' from 2020 to 2024 by Theft Type: filter to Year in {2020,2024}, pivot to columns reports2020/reports2024, compute relativeGrowth=(reports2024/reports2020)-1, sort descending by relativeGrowth (tie-breaker: smaller reports2020), return top 1 Theft Type with growth metrics",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadIdentityTheftTopThree": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanIdentityTheftTopThree": {
+        "x": 400,
+        "y": 40
+      },
+      "fastestRelativeGrowth2020to2024": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadIdentityTheftTopThree-->cleanIdentityTheftTopThree",
+        "source": {
+          "operatorID": "loadIdentityTheftTopThree",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanIdentityTheftTopThree",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanIdentityTheftTopThree-->fastestRelativeGrowth2020to2024",
+        "source": {
+          "operatorID": "cleanIdentityTheftTopThree",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fastestRelativeGrowth2020to2024",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

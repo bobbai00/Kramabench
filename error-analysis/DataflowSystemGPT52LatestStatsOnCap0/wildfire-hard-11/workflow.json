@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-229-5-1779103470399",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wildfireAcresByState",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Wildfire_Acres_by_State.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Wildfire_Acres_by_State.csv via pd.read_csv from data/wildfire/input/Wildfire_Acres_by_State.csv (defaults: comma delimiter, header inferred from first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "perCapitaMostImpacted",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfireAcresByState):\n    import pandas as pd\n\n    df = wildfireAcresByState.copy()\n\n    # Coerce numerics safely\n    df['Total Acres Burned'] = pd.to_numeric(df['Total Acres Burned'], errors='coerce')\n    df['Population'] = pd.to_numeric(df['Population'], errors='coerce')\n\n    # Keep rows with both metrics present and population > 0\n    df = df.dropna(subset=['Total Acres Burned', 'Population'])\n    df = df[df['Population'] > 0]\n\n    df['acresPerCapita'] = df['Total Acres Burned'] / df['Population']\n\n    # Return top 1 state by acres per capita\n    out = df.sort_values('acresPerCapita', ascending=False).head(1)[['State', 'acresPerCapita', 'Total Acres Burned', 'Population']]\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute fire impact per capita: coerce 'Total Acres Burned' and 'Population' to numeric; drop rows with missing values and require Population>0; compute acresPerCapita = (Total Acres Burned / Population); sort descending by acresPerCapita and return top 1 with columns [State, acresPerCapita, Total Acres Burned, Population].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wildfireAcresByState": {
+        "x": 100,
+        "y": 40
+      },
+      "perCapitaMostImpacted": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfireAcresByState-->perCapitaMostImpacted",
+        "source": {
+          "operatorID": "wildfireAcresByState",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "perCapitaMostImpacted",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

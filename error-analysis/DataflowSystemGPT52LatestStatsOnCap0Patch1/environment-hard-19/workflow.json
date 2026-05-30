@@ -1,0 +1,258 @@
+{
+  "headId": "step-agent-103-5-1779140590042",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "waterBodyTestingAll",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = sorted(glob.glob('data/environment/input/water-body-testing-*.csv'))\n    assert len(paths) > 0, 'No water-body-testing-*.csv files matched'\n\n    dfs = []\n    for p in paths:\n        # try normal header\n        df = pd.read_csv(p)\n        df['sourceFile'] = p.split('/')[-1]\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and concatenate all annual water body testing CSVs matched by glob 'data/environment/input/water-body-testing-*.csv' (2002\u20132023); read each via pd.read_csv with default comma delimiter/header; add 'sourceFile' basename column; concat with ignore_index=True, sort=False",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "monthlyPrecipBoston",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/monthly_precipitations_boston.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_boston.csv via pd.read_csv (defaults: comma delimiter, first row as header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "monthlyPrecipChatham",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/environment/input/monthly_precipitations_chatham.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_chatham.csv via pd.read_csv (defaults: comma delimiter, first row as header, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marineExceedanceByYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterBodyTestingAll) -> pd.DataFrame:\n    import pandas as pd\n\n    df = waterBodyTestingAll.copy()\n\n    # Filter to Marine beaches\n    df = df[df['Beach Type Description'].astype(str).str.strip().str.lower() == 'marine']\n\n    # Normalize violation to boolean exceedance\n    v = df['Violation'].astype(str).str.strip().str.lower()\n    exceed = v.isin(['yes', 'y', 'true', '1'])\n\n    out = (\n        df.assign(exceed=exceed)\n          .groupby('Year', as_index=False)\n          .agg(samples=('exceed', 'size'), exceedances=('exceed', 'sum'))\n    )\n    out['avgExceedanceRate'] = out['exceedances'] / out['samples']\n\n    out = out.sort_values('Year')\n    out['prevYearRate'] = out['avgExceedanceRate'].shift(1)\n    out['rateDiffVsPrevYear'] = out['avgExceedanceRate'] - out['prevYearRate']\n\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute annual marine-beach exceedance rate and its year-over-year difference: filter waterBodyTestingAll where Beach Type Description='Marine'; normalize Violation to boolean exceed (yes/y/true/1); group by Year to get samples=count, exceedances=sum; compute avgExceedanceRate=exceedances/samples; sort by Year; compute rateDiffVsPrevYear = avgExceedanceRate - prior year's rate (shift(1)).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "summerRainByYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(monthlyPrecipBoston, monthlyPrecipChatham) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    def clean_precip(df: pd.DataFrame, location: str) -> pd.DataFrame:\n        d = df.copy()\n        # Drop non-year summary rows like 'Max', 'Min' if present\n        d = d[pd.to_numeric(d['Year'], errors='coerce').notna()].copy()\n        d['Year'] = d['Year'].astype(int)\n\n        months = ['Jun', 'Jul', 'Aug']\n        for m in months:\n            d[m] = pd.to_numeric(d[m].replace({'M': np.nan, 'T': np.nan, '': np.nan}), errors='coerce')\n\n        # Impute missing with median for that month across non-missing years (within this station)\n        for m in months:\n            med = d[m].median(skipna=True)\n            d[m] = d[m].fillna(med)\n\n        d['summerRain'] = d[months].sum(axis=1)\n        return d[['Year', 'summerRain']].assign(location=location)\n\n    b = clean_precip(monthlyPrecipBoston, 'Boston')\n    c = clean_precip(monthlyPrecipChatham, 'Chatham')\n\n    combined = pd.concat([b, c], ignore_index=True)\n\n    # Total summer rain across the two locations\n    tot = combined.groupby('Year', as_index=False)['summerRain'].sum().rename(columns={'summerRain': 'totalSummerRain'})\n\n    tot = tot.sort_values('Year')\n    tot['prevYearTotalSummerRain'] = tot['totalSummerRain'].shift(1)\n    tot['rainDiffVsPrevYear'] = tot['totalSummerRain'] - tot['prevYearTotalSummerRain']\n\n    return tot.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute total June+July+August rainfall by year across Boston and Chatham with missing-value imputation: for each station, drop non-numeric Year rows (e.g., Max/Min), coerce Jun/Jul/Aug to numeric treating 'M'/'T'/'' as missing; impute each month with that station's median for that month across non-missing years; compute summerRain=Jun+Jul+Aug; sum Boston+Chatham to totalSummerRain by Year; sort by Year; compute rainDiffVsPrevYear = totalSummerRain - prior year's total (shift(1)).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "comparePeakYears",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(marineExceedanceByYear, summerRainByYear) -> pd.DataFrame:\n    import pandas as pd\n\n    ex = marineExceedanceByYear.dropna(subset=['rateDiffVsPrevYear']).copy()\n    rn = summerRainByYear.dropna(subset=['rainDiffVsPrevYear']).copy()\n\n    # Year with highest average exceedance rate difference vs previous year\n    exYear = ex.loc[ex['rateDiffVsPrevYear'].idxmax(), 'Year']\n\n    # Year with highest total summer rainfall difference vs previous year\n    rnYear = rn.loc[rn['rainDiffVsPrevYear'].idxmax(), 'Year']\n\n    return pd.DataFrame([{\n        'maxExceedanceDiffYear': int(exYear),\n        'maxRainDiffYear': int(rnYear),\n        'sameYear': bool(int(exYear) == int(rnYear))\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare peak year-over-year changes: take marineExceedanceByYear and select Year with maximum rateDiffVsPrevYear (excluding first-year NaN); take summerRainByYear and select Year with maximum rainDiffVsPrevYear (excluding first-year NaN); output maxExceedanceDiffYear, maxRainDiffYear, and sameYear boolean.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "waterBodyTestingAll": {
+        "x": 100,
+        "y": 40
+      },
+      "monthlyPrecipBoston": {
+        "x": 100,
+        "y": 220
+      },
+      "monthlyPrecipChatham": {
+        "x": 100,
+        "y": 400
+      },
+      "marineExceedanceByYear": {
+        "x": 400,
+        "y": 40
+      },
+      "summerRainByYear": {
+        "x": 400,
+        "y": 310
+      },
+      "comparePeakYears": {
+        "x": 700,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "waterBodyTestingAll-->marineExceedanceByYear",
+        "source": {
+          "operatorID": "waterBodyTestingAll",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineExceedanceByYear",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "monthlyPrecipBoston-->summerRainByYear",
+        "source": {
+          "operatorID": "monthlyPrecipBoston",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summerRainByYear",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "monthlyPrecipChatham-->summerRainByYear",
+        "source": {
+          "operatorID": "monthlyPrecipChatham",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summerRainByYear",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "marineExceedanceByYear-->comparePeakYears",
+        "source": {
+          "operatorID": "marineExceedanceByYear",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "comparePeakYears",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "summerRainByYear-->comparePeakYears",
+        "source": {
+          "operatorID": "summerRainByYear",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "comparePeakYears",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

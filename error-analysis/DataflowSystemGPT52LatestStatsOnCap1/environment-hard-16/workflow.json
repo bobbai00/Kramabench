@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-573-7-1779124783394",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadAllYears",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    import re\n\n    paths = [\n      \"data/environment/input/water-body-testing-2023.csv\",\n      \"data/environment/input/water-body-testing-2015.csv\",\n      \"data/environment/input/water-body-testing-2014.csv\",\n      \"data/environment/input/water-body-testing-2016.csv\",\n      \"data/environment/input/water-body-testing-2012.csv\",\n      \"data/environment/input/water-body-testing-2006.csv\",\n      \"data/environment/input/water-body-testing-2007.csv\",\n      \"data/environment/input/water-body-testing-2009.csv\",\n      \"data/environment/input/water-body-testing-2018.csv\",\n      \"data/environment/input/water-body-testing-2011.csv\",\n      \"data/environment/input/water-body-testing-2005.csv\",\n      \"data/environment/input/water-body-testing-2008.csv\",\n      \"data/environment/input/water-body-testing-2020.csv\",\n      \"data/environment/input/water-body-testing-2004.csv\",\n      \"data/environment/input/water-body-testing-2022.csv\",\n      \"data/environment/input/water-body-testing-2021.csv\",\n      \"data/environment/input/water-body-testing-2002.csv\",\n      \"data/environment/input/water-body-testing-2017.csv\",\n      \"data/environment/input/water-body-testing-2013.csv\",\n      \"data/environment/input/water-body-testing-2010.csv\",\n      \"data/environment/input/water-body-testing-2003.csv\",\n      \"data/environment/input/water-body-testing-2019.csv\"\n    ]\n\n    files = []\n    for p in paths:\n        matches = glob.glob(p)\n        if not matches:\n            raise FileNotFoundError(f\"No files matched: {p}\")\n        files.extend(matches)\n\n    def infer_year(path: str) -> int:\n        m = re.search(r'(19|20)\\\\d{2}', path)\n        return int(m.group(0)) if m else None\n\n    dfs = []\n    for f in sorted(set(files)):\n        year = infer_year(f)\n        df = pd.read_csv(f, dtype=str)\n        df['sourceFile'] = f\n        df['year'] = year\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and vertically concatenate water body testing CSVs for years 2002-2023 from the provided file paths; read each via pd.read_csv(dtype=str); add columns year (parsed 4-digit year from filename) and sourceFile; return combined table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fixLoadAllYears",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadAllYears.copy()\n\n    # Use the in-file Year column rather than filename-parsed year (which is all-null)\n    df['year'] = pd.to_numeric(df['Year'], errors='coerce')\n\n    # Keep only years in scope and with a known year value\n    df = df[df['year'].between(2002, 2023, inclusive='both')].copy()\n\n    # Force year to string to satisfy runtime schema inference expectations\n    df['year'] = df['year'].round(0).astype('Int64').astype(str)\n\n    # Normalize key text fields for consistent grouping/filtering\n    df['beachName'] = df['Beach Name'].astype(str).str.strip()\n    df['beachType'] = df['Beach Type Description'].astype(str).str.strip()\n\n    # Normalize violation to boolean-like string: 'true'/'false'/<NA>\n    vnorm = df['Violation'].astype(str).str.strip().str.lower()\n    df['violationFlag'] = vnorm.map({'yes': 'true', 'no': 'false'})\n\n    return df[['year', 'beachName', 'beachType', 'violationFlag']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Fix combined water-body testing table schema: derive numeric year from in-file column Year, filter to 2002-2023 inclusive, then cast year to STRING for runtime compatibility; standardize Beach Name and Beach Type Description (trim); normalize Violation to a string flag violationFlag where {yes->'true', no->'false'} case-insensitive; output columns [year, beachName, beachType, violationFlag]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "marineAlwaysSafeCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fixLoadAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = fixLoadAllYears.copy()\n\n    # Marine beaches only\n    marine = df[df['beachType'].astype(str).str.strip().str.lower() == 'marine'].copy()\n\n    # A beach is unsafe at any point in 2002-2023 if it has at least one violationFlag == 'true'\n    # (Rows with missing violationFlag are treated as not-violations, consistent with \"no violation at all\" intent.)\n    marine['isViolation'] = marine['violationFlag'].astype(str).str.lower().eq('true')\n\n    unsafe_beaches = marine.loc[marine['isViolation'], 'beachName'].dropna().unique()\n    always_safe_count = int(marine['beachName'].nunique() - len(unsafe_beaches))\n\n    return pd.DataFrame([{'alwaysSafeMarineBeaches2002to2023': always_safe_count}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count marine beaches that had zero violations across 2002-2023 inclusive: filter fixLoadAllYears to beachType=='Marine' (case-insensitive); mark rows with violationFlag=='true' as violations; compute unsafe_beaches as unique beachName with any violation; always-safe count = (# unique marine beachName) - (# unsafe_beaches); return single-row table with alwaysSafeMarineBeaches2002to2023",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadAllYears": {
+        "x": 100,
+        "y": 40
+      },
+      "fixLoadAllYears": {
+        "x": 400,
+        "y": 40
+      },
+      "marineAlwaysSafeCount": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadAllYears-->fixLoadAllYears",
+        "source": {
+          "operatorID": "loadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fixLoadAllYears",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fixLoadAllYears-->marineAlwaysSafeCount",
+        "source": {
+          "operatorID": "fixLoadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineAlwaysSafeCount",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

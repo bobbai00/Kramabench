@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-82-4-1779140263624",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "loadAllYears",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import pandas as pd\n\n    paths = [\n        \"data/environment/input/water-body-testing-2002.csv\",\n        \"data/environment/input/water-body-testing-2003.csv\",\n        \"data/environment/input/water-body-testing-2004.csv\",\n        \"data/environment/input/water-body-testing-2005.csv\",\n        \"data/environment/input/water-body-testing-2006.csv\",\n        \"data/environment/input/water-body-testing-2007.csv\",\n        \"data/environment/input/water-body-testing-2008.csv\",\n        \"data/environment/input/water-body-testing-2009.csv\",\n        \"data/environment/input/water-body-testing-2010.csv\",\n        \"data/environment/input/water-body-testing-2011.csv\",\n        \"data/environment/input/water-body-testing-2012.csv\",\n        \"data/environment/input/water-body-testing-2013.csv\",\n        \"data/environment/input/water-body-testing-2014.csv\",\n        \"data/environment/input/water-body-testing-2015.csv\",\n        \"data/environment/input/water-body-testing-2016.csv\",\n        \"data/environment/input/water-body-testing-2017.csv\",\n        \"data/environment/input/water-body-testing-2018.csv\",\n        \"data/environment/input/water-body-testing-2019.csv\",\n        \"data/environment/input/water-body-testing-2020.csv\",\n        \"data/environment/input/water-body-testing-2021.csv\",\n        \"data/environment/input/water-body-testing-2022.csv\",\n        \"data/environment/input/water-body-testing-2023.csv\",\n    ]\n\n    all_files = []\n    for p in paths:\n        matches = glob.glob(p)\n        if not matches:\n            raise FileNotFoundError(f\"No files matched: {p}\")\n        all_files.extend(matches)\n\n    dfs = []\n    for fp in sorted(set(all_files)):\n        # year from filename\n        import re\n        m = re.search(r\"(20\\d{2})\", fp)\n        year = int(m.group(1)) if m else None\n        df = pd.read_csv(fp)\n        df[\"sourceFile\"] = fp\n        df[\"year\"] = year\n        dfs.append(df)\n\n    out = pd.concat(dfs, ignore_index=True, sort=False)\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and concatenate annual water-body testing CSVs for years 2002-2023 inclusive from provided file paths (using glob for each path); add provenance columns 'sourceFile' (file path) and 'year' (parsed 4-digit year from filename); return combined table (no row subsetting).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectColumns",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadAllYears\n    cols = list(df.columns)\n    sample = df.head(5)\n\n    # simple non-null counts for top columns\n    nn = df.notna().sum().sort_values(ascending=False).head(40)\n    nn_df = nn.reset_index()\n    nn_df.columns = [\"column\", \"nonNullCount\"]\n\n    # return columns list and sample as a compact table\n    cols_df = pd.DataFrame({\"column\": cols})\n    cols_df[\"order\"] = range(len(cols_df))\n\n    # combine: first rows show sample columns and values? keep separate blocks via concat with markers\n    sample_long = sample.reset_index(drop=True).melt(var_name=\"column\", value_name=\"sampleValue\")\n    sample_long = sample_long.groupby(\"column\").head(1)\n\n    out = cols_df.merge(nn_df, on=\"column\", how=\"left\").merge(sample_long, on=\"column\", how=\"left\")\n    out = out.sort_values(\"order\").drop(columns=[\"order\"])\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect combined dataset schema: list all columns in loadAllYears in original order, along with non-null counts (overall) and a representative sample value from the first 5 rows for each column (to identify key fields like beach name, water-body type, and violation indicator).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "countSafeBeaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAllYears) -> pd.DataFrame:\n    import pandas as pd\n\n    df = loadAllYears.copy()\n\n    # normalize column names for robust matching\n    norm = {c: c.strip() for c in df.columns}\n    df = df.rename(columns=norm)\n\n    # Heuristically determine key columns\n    cols_lower = {c: c.lower() for c in df.columns}\n\n    def find_col(keywords, must_all=False):\n        hits = []\n        for c, cl in cols_lower.items():\n            if must_all:\n                if all(k in cl for k in keywords):\n                    hits.append(c)\n            else:\n                if any(k in cl for k in keywords):\n                    hits.append(c)\n        return hits\n\n    # Likely columns\n    marine_candidates = find_col([\"marine\"], must_all=False) + find_col([\"water\", \"type\"], must_all=False)\n    beach_candidates = find_col([\"beach\"], must_all=False)\n    name_candidates = []\n    for kw in [(\"beach\", \"name\"), (\"site\", \"name\"), (\"location\",), (\"waterbody\",), (\"water body\",)]:\n        name_candidates += find_col(list(kw), must_all=False)\n\n    # Violation indicator candidates\n    viol_candidates = find_col([\"violation\"], must_all=False) + find_col([\"exceed\"], must_all=False) + find_col([\"advisory\"], must_all=False) + find_col([\"closure\"], must_all=False) + find_col([\"posted\"], must_all=False)\n\n    # choose best guess columns by preference order\n    def pick(preferred_list):\n        for c in preferred_list:\n            if c in df.columns:\n                return c\n        return None\n\n    beach_name_col = pick([c for c in df.columns if \"beach\" in c.lower() and \"name\" in c.lower()])\n    if beach_name_col is None:\n        beach_name_col = pick([c for c in df.columns if \"beach\" in c.lower()])\n    if beach_name_col is None:\n        beach_name_col = pick([c for c in df.columns if \"site\" in c.lower() and \"name\" in c.lower()])\n    if beach_name_col is None:\n        # last resort: first string-like id\n        beach_name_col = df.columns[0]\n\n    water_type_col = pick([c for c in df.columns if \"water\" in c.lower() and \"type\" in c.lower()])\n    if water_type_col is None:\n        water_type_col = pick([c for c in df.columns if \"type\" in c.lower()])\n\n    violation_col = pick([c for c in df.columns if \"violation\" in c.lower()])\n    if violation_col is None:\n        # common phrasing like \"Result\" \"Status\" \"Advisory\" etc.\n        violation_col = pick([c for c in df.columns if any(k in c.lower() for k in [\"advisory\", \"closure\", \"posted\", \"status\", \"exceed\"])])\n\n    # Filter marine beaches\n    marine_df = df\n    if water_type_col is not None:\n        marine_df = marine_df[marine_df[water_type_col].astype(str).str.contains(\"marine\", case=False, na=False)]\n    else:\n        # if no water type col, try a broader filter for rows mentioning marine\n        marine_df = marine_df[df.apply(lambda r: r.astype(str).str.contains('marine', case=False, na=False).any(), axis=1)]\n\n    # Determine violations: treat as violation if violation_col contains common \"bad\" indicators or equals True/1\n    if violation_col is None:\n        # If no explicit violation flag, assume no way to detect violations -> count 0\n        out = pd.DataFrame([{ \"safeMarineBeachesAllYears\": 0, \"beachNameCol\": beach_name_col, \"waterTypeCol\": water_type_col, \"violationCol\": None }])\n        return out\n\n    v = marine_df[violation_col]\n    # boolean-like\n    violation_flag = pd.Series(False, index=marine_df.index)\n    if pd.api.types.is_bool_dtype(v):\n        violation_flag = v.fillna(False)\n    elif pd.api.types.is_numeric_dtype(v):\n        violation_flag = v.fillna(0) != 0\n    else:\n        vs = v.astype(str).str.strip().str.lower()\n        bad_tokens = [\"violation\", \"yes\", \"y\", \"true\", \"t\", \"1\", \"exceed\", \"exceeded\", \"unsafe\", \"advisory\", \"posted\", \"close\", \"closed\", \"closure\", \"do not swim\", \"warning\"]\n        good_tokens = [\"no\", \"n\", \"false\", \"f\", \"0\", \"safe\", \"ok\", \"none\"]\n        violation_flag = vs.apply(lambda s: any(tok in s for tok in bad_tokens) and not any(tok == s for tok in good_tokens))\n        # if value exactly 'no violation' etc.\n        violation_flag = violation_flag & (~vs.str.contains(r\"no\\s+violation\", na=False))\n\n    marine_df = marine_df.assign(_violation=violation_flag)\n\n    # A beach is safe for entire period if it has no violation records in any year.\n    # If missing year, assumed safe => only need to ensure _violation never true.\n    beach_viols = marine_df.groupby(beach_name_col, dropna=False)[\"_violation\"].any().reset_index(name=\"anyViolation\")\n    safe_count = int((~beach_viols[\"anyViolation\"]).sum())\n\n    out = pd.DataFrame([{ \"safeMarineBeachesAllYears\": safe_count, \"beachNameCol\": beach_name_col, \"waterTypeCol\": water_type_col, \"violationCol\": violation_col, \"marineBeachesObserved\": beach_viols.shape[0] }])\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute count of marine beaches that had zero violations across all observed records from 2002-2023 (missing years assumed safe): detect columns for beach name, water type (filter rows containing 'marine'), and violation indicator (column name contains 'violation' or related terms); flag a record as violation via boolean/numeric truthiness or string token matching; group by beach name and mark anyViolation=any(record violation); return safeMarineBeachesAllYears as integer plus chosen column names for transparency.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "loadAllYears": {
+        "x": 100,
+        "y": 130
+      },
+      "inspectColumns": {
+        "x": 400,
+        "y": 40
+      },
+      "countSafeBeaches": {
+        "x": 400,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadAllYears-->inspectColumns",
+        "source": {
+          "operatorID": "loadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectColumns",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadAllYears-->countSafeBeaches",
+        "source": {
+          "operatorID": "loadAllYears",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "countSafeBeaches",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

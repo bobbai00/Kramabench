@@ -1,0 +1,133 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_csn",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(10), df.tail(10)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 10 rows of 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv to inspect columns, headers, and year values",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "csn",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv'\n    raw = pd.read_csv(path, header=None, dtype=str)\n\n    # Find the embedded header row where row contains 'Theft Type' and 'Year'\n    header_idx = None\n    for i in range(len(raw)):\n        row = raw.iloc[i].fillna('').astype(str).str.strip().tolist()\n        if 'Theft Type' in row and 'Year' in row:\n            header_idx = i\n            break\n    if header_idx is None:\n        return pd.DataFrame(columns=['year', 'theft_type', 'reports'])\n\n    df = raw.iloc[header_idx+1:].copy()\n    df.columns = ['year', 'theft_type', 'reports']\n\n    # Drop rows without year/theft_type/reports\n    for c in ['year','theft_type','reports']:\n        df[c] = df[c].astype(str).str.strip()\n    df = df.replace({'nan': np.nan, 'NaN': np.nan, '': np.nan})\n    df = df.dropna(subset=['year','theft_type','reports'])\n\n    # Keep only rows where year is 4-digit number\n    df['year_num'] = pd.to_numeric(df['year'], errors='coerce')\n    df = df[df['year_num'].between(1900, 2100)]\n    df['year'] = df['year_num'].astype(int)\n    df = df.drop(columns=['year_num'])\n\n    # Parse reports like '393,446'\n    df['reports'] = df['reports'].str.replace(',', '', regex=False)\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df.dropna(subset=['reports'])\n    df['reports'] = df['reports'].astype(int)\n\n    return df[['year','theft_type','reports']]\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and clean 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv: read header=None, detect embedded header row, set columns year/theft_type/reports, drop blanks/footers, keep 4-digit years, parse reports with commas to int",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "csn_raw",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv'\n    # Read without assuming a header; file appears to have blank rows and an embedded header row\n    return pd.read_csv(path, header=None, dtype=str)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load raw 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv with header=None to preserve embedded header row and blank/footer rows for robust cleaning",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "credit_card_ratio_2024_2020",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(csn):\n    import pandas as pd\n    df = csn.copy()\n    df['theft_type_norm'] = df['theft_type'].astype(str).str.strip().str.lower()\n    cc = df[df['theft_type_norm'].eq('credit card')]\n    reports_2020 = cc.loc[cc['year'].eq(2020), 'reports'].sum()\n    reports_2024 = cc.loc[cc['year'].eq(2024), 'reports'].sum()\n    ratio = reports_2024 / reports_2020 if reports_2020 != 0 else float('nan')\n    return pd.DataFrame([{\n        'reports_2020': int(reports_2020),\n        'reports_2024': int(reports_2024),\n        'ratio': ratio,\n        'ratio_rounded_4dp': round(ratio, 4)\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter csn to theft_type == 'Credit Card', take reports for years 2020 and 2024, compute ratio (2024/2020) and rounded to 4 decimal places",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_csn": {
+      "x": 100,
+      "y": 40
+    },
+    "csn": {
+      "x": 100,
+      "y": 220
+    },
+    "csn_raw": {
+      "x": 100,
+      "y": 400
+    },
+    "credit_card_ratio_2024_2020": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "csn-->credit_card_ratio_2024_2020",
+      "source": {
+        "operatorID": "csn",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "credit_card_ratio_2024_2020",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

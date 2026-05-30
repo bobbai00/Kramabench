@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "climate",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    path = 'data/archeology/input/climateMeasurements.xlsx'\n    df = pd.read_excel(path)\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load climateMeasurements.xlsx into a dataframe",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "climate_raw",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    # Load entire workbook, first sheet by default\n    return pd.read_excel('data/archeology/input/climateMeasurements.xlsx', sheet_name=0, header=None)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load raw climateMeasurements.xlsx (sheet 0) with header=None to inspect true header rows/structure",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "climate_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate_raw):\n    import pandas as pd\n    df = climate_raw.copy()\n\n    # Find the header row containing the wet-dry index label\n    header_row = None\n    wet_col_idx = None\n    for i in range(min(200, len(df))):\n        row = df.iloc[i].astype(str).str.lower()\n        hits = row.str.contains('wet', na=False) & row.str.contains('dry', na=False)\n        if hits.any():\n            header_row = i\n            wet_col_idx = hits[hits].index[0]\n            break\n\n    # Fallback: search for 'wet-dry' token\n    if header_row is None:\n        for i in range(min(200, len(df))):\n            row = df.iloc[i].astype(str).str.lower()\n            hits = row.str.contains('wet-dry', na=False)\n            if hits.any():\n                header_row = i\n                wet_col_idx = hits[hits].index[0]\n                break\n\n    if header_row is None:\n        raise ValueError('Could not find header row containing wet-dry index')\n\n    # Build column names from header row; de-duplicate\n    cols = df.iloc[header_row].tolist()\n    cols = [str(c).strip() if pd.notna(c) else f'col_{j}' for j, c in enumerate(cols)]\n    # de-dup\n    seen = {}\n    new_cols = []\n    for c in cols:\n        if c in seen:\n            seen[c] += 1\n            new_cols.append(f\"{c}_{seen[c]}\")\n        else:\n            seen[c] = 0\n            new_cols.append(c)\n    cols = new_cols\n\n    data = df.iloc[header_row+1:].copy()\n    data.columns = cols\n\n    # Identify age/year column candidates\n    low_cols = {c: c.lower() for c in data.columns}\n    age_candidates = [c for c, lc in low_cols.items() if ('age' in lc) or ('ka' in lc) or ('kyr' in lc) or ('year' in lc)]\n    # If none, use the first numeric-looking column\n    if not age_candidates:\n        age_candidates = [data.columns[0]]\n    age_col = age_candidates[0]\n\n    # Wet-dry index column\n    wet_candidates = [c for c, lc in low_cols.items() if ('wet' in lc and 'dry' in lc) or ('wet-dry' in lc)]\n    if wet_candidates:\n        wet_col = wet_candidates[0]\n    else:\n        wet_col = str(wet_col_idx)\n        if wet_col not in data.columns:\n            # map original index to constructed name\n            wet_col = data.columns[int(wet_col_idx)]\n\n    out = data[[age_col, wet_col]].rename(columns={age_col: 'year', wet_col: 'wet_dry_index'})\n\n    # Convert to numeric\n    out['year'] = pd.to_numeric(out['year'], errors='coerce')\n    out['wet_dry_index'] = pd.to_numeric(out['wet_dry_index'], errors='coerce')\n\n    # Drop missing\n    out = out.dropna(subset=['year', 'wet_dry_index'])\n\n    # If year is in ka (thousands of years), might be fractional; keep as provided.\n    # Ensure sorted by year ascending\n    out = out.sort_values('year').reset_index(drop=True)\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse climateMeasurements.xlsx (loaded as climate_raw header=None): detect header row containing 'wet-dry', extract the age/year column and wet-dry index column, coerce to numeric, drop nulls, and sort by year ascending.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "wetdry_increasing_pct",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(climate_clean) -> pd.DataFrame:\n    import pandas as pd\n    df = climate_clean.copy()\n    df = df.sort_values('year')\n    df['delta'] = df['wet_dry_index'].diff()\n    # exclude first row (NaN delta)\n    valid = df['delta'].dropna()\n    pct = (valid.gt(0).mean() * 100) if len(valid) else float('nan')\n    return pd.DataFrame({'percent_increasing':[round(pct,2)]})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute year-over-year change in wet_dry_index after sorting by year; calculate percent of intervals with positive change and express as percentage rounded to 2 decimals.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "climate": {
+      "x": 100,
+      "y": 40
+    },
+    "climate_raw": {
+      "x": 100,
+      "y": 220
+    },
+    "climate_clean": {
+      "x": 430,
+      "y": 220
+    },
+    "wetdry_increasing_pct": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "climate_raw-->climate_clean",
+      "source": {
+        "operatorID": "climate_raw",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "climate_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "climate_clean-->wetdry_increasing_pct",
+      "source": {
+        "operatorID": "climate_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "wetdry_increasing_pct",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

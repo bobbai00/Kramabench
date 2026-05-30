@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-84-6-1779140070649",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudOtherLoad",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv\"\n    # Files contain non-UTF8 bytes (e.g., non-breaking spaces). Use a permissive encoding.\n    return pd.read_csv(path, encoding=\"latin-1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv via pd.read_csv with encoding='latin-1' (handles non-UTF8 bytes such as non-breaking spaces); comma delimiter, first row as header",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identityTheftLoad",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv\"\n    # Files contain non-UTF8 bytes (e.g., non-breaking spaces). Use a permissive encoding.\n    return pd.read_csv(path, encoding=\"latin-1\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Identity_Theft_Reports.csv via pd.read_csv with encoding='latin-1' (handles non-UTF8 bytes such as non-breaking spaces); comma delimiter, first row as header",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "reportDensityTopState",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudOtherLoad, identityTheftLoad) -> pd.DataFrame:\n    import pandas as pd\n\n    def tidy(df: pd.DataFrame, first_col_name: str) -> pd.DataFrame:\n        # First column contains rank for data rows, but is mislabeled; row 1 contains the real header.\n        df2 = df.copy()\n        df2.columns = ['rank', 'state', 'reportsPer100k', 'numReports']\n\n        # Keep only rows where rank is numeric (1..n)\n        df2 = df2[df2['rank'].astype(str).str.fullmatch(r'\\d+')].copy()\n\n        # Clean numeric fields (commas)\n        for c in ['reportsPer100k', 'numReports']:\n            df2[c] = (\n                df2[c]\n                .astype(str)\n                .str.replace(',', '', regex=False)\n                .str.strip()\n            )\n            df2[c] = pd.to_numeric(df2[c], errors='coerce')\n\n        return df2[['state', 'reportsPer100k', 'numReports']]\n\n    fraud = tidy(fraudOtherLoad, first_col_name=fraudOtherLoad.columns[0])\n    it = tidy(identityTheftLoad, first_col_name=identityTheftLoad.columns[0])\n\n    combined = fraud.merge(it, on='state', how='inner', suffixes=('_fraudOther', '_identityTheft'))\n\n    combined['totalReports'] = combined['numReports_fraudOther'] + combined['numReports_identityTheft']\n    combined['totalReportsPer100k'] = combined['reportsPer100k_fraudOther'] + combined['reportsPer100k_identityTheft']\n\n    top = combined.sort_values('totalReportsPer100k', ascending=False).head(1)\n    return top[['state', 'totalReportsPer100k', 'totalReports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and standardize both state ranking tables by renaming columns to [rank, state, reportsPer100k, numReports], filtering to numeric Rank rows only, and parsing numeric fields by stripping commas; inner-join on State; compute total reports per 100K as sum of (Fraud+Other reports per 100K) + (Identity Theft reports per 100K) and total # of reports as sum; return the single top state by totalReportsPer100k (columns: state, totalReportsPer100k, totalReports).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudOtherLoad": {
+        "x": 100,
+        "y": 40
+      },
+      "identityTheftLoad": {
+        "x": 100,
+        "y": 220
+      },
+      "reportDensityTopState": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudOtherLoad-->reportDensityTopState",
+        "source": {
+          "operatorID": "fraudOtherLoad",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "reportDensityTopState",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identityTheftLoad-->reportDensityTopState",
+        "source": {
+          "operatorID": "identityTheftLoad",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "reportDensityTopState",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

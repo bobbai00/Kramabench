@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_reports_by_type",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv'\n    df = pd.read_csv(path)\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv to inspect schema and any header/format issues.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "reports_by_type",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv'\n    # Raw file has a title row, a blank row, and a source footer. Read without header then clean.\n    raw = pd.read_csv(path, header=None, dtype=str)\n    # Find header row containing 'Year'\n    header_idx = raw.index[raw.iloc[:,0].astype(str).str.strip().eq('Year')]\n    if len(header_idx)==0:\n        # Sometimes 'Year' may appear in any column\n        header_idx = raw.index[raw.apply(lambda r: r.astype(str).str.strip().eq('Year').any(), axis=1)]\n    header_i = int(header_idx[0])\n    headers = raw.iloc[header_i].tolist()\n    df = raw.iloc[header_i+1:].copy()\n    df.columns = headers\n    # Drop footer/blank rows: keep rows with Year as 4-digit number\n    df['Year'] = df['Year'].astype(str).str.strip()\n    df = df[df['Year'].str.fullmatch(r'\\d{4}')].copy()\n    # Clean numeric columns (remove commas/spaces)\n    for c in df.columns:\n        if c != 'Year':\n            df[c] = df[c].astype(str).str.replace(',', '', regex=False).str.strip()\n            df[c] = pd.to_numeric(df[c], errors='coerce')\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce').astype('Int64')\n    # Standardize column names\n    df = df.rename(columns={\n        'Fraud ': 'Fraud',\n        'Identity Theft ': 'Identity Theft',\n        'Other ': 'Other'\n    })\n    return df[['Year','Fraud','Identity Theft','Other']]\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Number_of_Reports_by_Type.csv, detect true header row, drop blanks/footer, parse Year and report counts (Fraud, Identity Theft, Other) as numeric.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "other_more_than_half_check",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(reports_by_type):\n    import pandas as pd\n    df = reports_by_type.copy()\n    df['Total'] = df[['Fraud','Identity Theft','Other']].sum(axis=1)\n    df['Other_share'] = df['Other'] / df['Total']\n    df['Other_gt_half'] = df['Other_share'] > 0.5\n    return df[['Year','Fraud','Identity Theft','Other','Total','Other_share','Other_gt_half']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute Total reports per year (Fraud+Identity Theft+Other), calculate Other share and flag years where Other > 50% of Total.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "any_year_other_gt_half",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(other_more_than_half_check):\n    import pandas as pd\n    any_true = bool(other_more_than_half_check['Other_gt_half'].any())\n    return pd.DataFrame([{'Any_year_2001_2024_other_gt_half': any_true}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Return a single boolean indicating whether any year from 2001-2024 has Other reports > 50% of total reports.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_reports_by_type": {
+      "x": 100,
+      "y": 40
+    },
+    "reports_by_type": {
+      "x": 100,
+      "y": 220
+    },
+    "other_more_than_half_check": {
+      "x": 430,
+      "y": 220
+    },
+    "any_year_other_gt_half": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "reports_by_type-->other_more_than_half_check",
+      "source": {
+        "operatorID": "reports_by_type",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "other_more_than_half_check",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "other_more_than_half_check-->any_year_other_gt_half",
+      "source": {
+        "operatorID": "other_more_than_half_check",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "any_year_other_gt_half",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,389 @@
+{
+  "headId": "step-agent-583-9-1779124818006",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "amherstPrecip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_amherst.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_amherst.csv via pd.read_csv with default parameters (comma delimiter, header row=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "chathamPrecip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_chatham.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_chatham.csv via pd.read_csv with default parameters (comma delimiter, header row=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "ashburnhamPrecip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_ashburnham.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_ashburnham.csv via pd.read_csv with default parameters (comma delimiter, header row=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "bostonPrecip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/monthly_precipitations_boston.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly_precipitations_boston.csv via pd.read_csv with default parameters (comma delimiter, header row=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterTesting2015",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/water-body-testing-2015.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2015.csv via pd.read_csv with default parameters (comma delimiter, header row=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "summerRainfall2015",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(amherstPrecip, chathamPrecip, ashburnhamPrecip, bostonPrecip) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    def to_float(x):\n        if pd.isna(x):\n            return np.nan\n        s = str(x).strip()\n        if s in {'M', 'm', ''}:\n            return np.nan\n        # some rows like \"1.01 2004\" in Min/Max rows\n        try:\n            return float(s.split()[0])\n        except Exception:\n            return np.nan\n\n    def summer_total_wide(df: pd.DataFrame) -> float:\n        d = df.copy()\n        d.columns = [str(c).strip() for c in d.columns]\n        # drop summary rows like Max/Min at bottom; keep rows where Year is a 4-digit year\n        d['YearNum'] = pd.to_numeric(d['Year'], errors='coerce')\n        d = d[d['YearNum'].notna()]\n        d = d[d['YearNum'].between(1900, 2100)]\n\n        row2015 = d.loc[d['YearNum'] == 2015]\n        if row2015.empty:\n            return np.nan\n\n        for m in ['Jun', 'Jul', 'Aug']:\n            if m not in row2015.columns:\n                raise ValueError(f'Missing expected month column {m} in precipitation file. Columns={list(row2015.columns)}')\n\n        vals = [to_float(row2015.iloc[0][m]) for m in ['Jun', 'Jul', 'Aug']]\n        return float(np.nansum(vals))\n\n    city_totals = [\n        {'city': 'Amherst', 'summerRainfall': summer_total_wide(amherstPrecip)},\n        {'city': 'Chatham', 'summerRainfall': summer_total_wide(chathamPrecip)},\n        {'city': 'Ashburnham', 'summerRainfall': summer_total_wide(ashburnhamPrecip)},\n        {'city': 'Boston', 'summerRainfall': summer_total_wide(bostonPrecip)},\n    ]\n    out = pd.DataFrame(city_totals)\n    out = out.sort_values(['summerRainfall', 'city'], ascending=[True, True]).reset_index(drop=True)\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-3",
+            "displayName": "Input 3",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute total summer (Jun+Jul+Aug) rainfall for year=2015 from each monthly_precipitations_{city}.csv (wide format with columns Year, Jan..Dec). Steps: coerce 'Year' to numeric, drop non-year summary rows (e.g., Min/Max), select Year==2015, parse Jun/Jul/Aug values handling 'M' and strings like '1.01 2004', sum ignoring NaN; output columns [city, summerRainfall] sorted ascending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "leastRainCity",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(summerRainfall2015) -> pd.DataFrame:\n    # Keep as a 1-row DataFrame to drive downstream filtering\n    return summerRainfall2015.nsmallest(1, 'summerRainfall').reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Select the single city with the minimum total summerRainfall from summerRainfall2015 using nsmallest(1, 'summerRainfall'); output 1-row DataFrame with columns [city, summerRainfall]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "top3PollutedBeaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(waterTesting2015, leastRainCity) -> pd.DataFrame:\n    import pandas as pd\n\n    df = waterTesting2015.copy()\n    city = str(leastRainCity.loc[0, 'city']).strip()\n\n    # Normalize key columns\n    df['Community'] = df['Community'].astype(str).str.strip()\n    df['Beach Name'] = df['Beach Name'].astype(str).str.strip()\n    df['Violation'] = df['Violation'].astype(str).str.strip().str.lower()\n\n    # Filter to the target city/town (\"Community\" column in testing data)\n    df = df[df['Community'].str.casefold() == city.casefold()].copy()\n\n    # Pollution metric: violation rate (share of samples with Violation == 'yes')\n    df['violationFlag'] = (df['Violation'] == 'yes').astype(int)\n\n    agg = (\n        df.groupby('Beach Name', as_index=False)\n        .agg(\n            violationRate=('violationFlag', 'mean'),\n            nSamples=('violationFlag', 'size'),\n        )\n        .rename(columns={'Beach Name': 'beach'})\n    )\n\n    # Top 3 most polluted: highest violation rate; break ties by more samples then beach name\n    top3 = (\n        agg.sort_values(['violationRate', 'nSamples', 'beach'], ascending=[False, False, True])\n        .head(3)\n        .reset_index(drop=True)\n    )\n    top3.insert(0, 'city', city)\n    return top3\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From water-body-testing-2015.csv: filter rows where Community matches the least-rainfall city/town from leastRainCity['city'] (case-insensitive); compute pollution as violation rate per beach (Violation=='yes' => 1 else 0); aggregate by 'Beach Name' to get violationRate=mean(violationFlag) and nSamples=size; rename 'Beach Name' to 'beach'; return top 3 beaches sorted by highest violationRate, tie-breakers nSamples desc then beach asc; include city column.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalBeachesList",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(top3PollutedBeaches) -> pd.DataFrame:\n    import pandas as pd\n    beaches = top3PollutedBeaches['beach'].astype(str).tolist()\n    as_python_list = '[' + ', '.join([f\"'{b}'\" for b in beaches]) + ']'\n    return pd.DataFrame([{'as_python_list': as_python_list}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Format the ordered top-3 beach names from top3PollutedBeaches['beach'] into a single-row DataFrame with one column 'as_python_list' containing a Python-style list literal of single-quoted strings (e.g., \"['A', 'B', 'C']\"); preserves order as given in top3PollutedBeaches",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "amherstPrecip": {
+        "x": 100,
+        "y": 40
+      },
+      "chathamPrecip": {
+        "x": 100,
+        "y": 220
+      },
+      "ashburnhamPrecip": {
+        "x": 100,
+        "y": 400
+      },
+      "bostonPrecip": {
+        "x": 100,
+        "y": 580
+      },
+      "waterTesting2015": {
+        "x": 700,
+        "y": 130
+      },
+      "summerRainfall2015": {
+        "x": 400,
+        "y": 310
+      },
+      "leastRainCity": {
+        "x": 700,
+        "y": 310
+      },
+      "top3PollutedBeaches": {
+        "x": 1000,
+        "y": 220
+      },
+      "finalBeachesList": {
+        "x": 1300,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "amherstPrecip-->summerRainfall2015",
+        "source": {
+          "operatorID": "amherstPrecip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summerRainfall2015",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "chathamPrecip-->summerRainfall2015",
+        "source": {
+          "operatorID": "chathamPrecip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summerRainfall2015",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "ashburnhamPrecip-->summerRainfall2015",
+        "source": {
+          "operatorID": "ashburnhamPrecip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summerRainfall2015",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "bostonPrecip-->summerRainfall2015",
+        "source": {
+          "operatorID": "bostonPrecip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summerRainfall2015",
+          "portID": "input-3"
+        }
+      },
+      {
+        "linkID": "summerRainfall2015-->leastRainCity",
+        "source": {
+          "operatorID": "summerRainfall2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "leastRainCity",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterTesting2015-->top3PollutedBeaches",
+        "source": {
+          "operatorID": "waterTesting2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top3PollutedBeaches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "leastRainCity-->top3PollutedBeaches",
+        "source": {
+          "operatorID": "leastRainCity",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top3PollutedBeaches",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "top3PollutedBeaches-->finalBeachesList",
+        "source": {
+          "operatorID": "top3PollutedBeaches",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalBeachesList",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

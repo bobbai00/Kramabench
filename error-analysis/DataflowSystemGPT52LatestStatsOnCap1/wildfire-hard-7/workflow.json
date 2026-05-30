@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-184-7-1779102721546",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "lightningAcres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_lightning_caused_acres.csv'\n\n    # The file appears to be a tab-delimited table; read as TSV to correctly split columns.\n    # Use the python engine and skip bad lines to tolerate occasional malformed rows.\n    df = pd.read_csv(path, sep='\\t', engine='python', on_bad_lines='skip')\n\n    # If the parse still produced a single column (header not split), fall back to comma CSV.\n    if df.shape[1] == 1:\n        df = pd.read_csv(path, engine='python', on_bad_lines='skip')\n\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_lightning_caused_acres.csv from data/wildfire/input/nifc_lightning_caused_acres.csv; primarily parse as TSV (sep='\\t') with engine='python' and on_bad_lines='skip' to correctly split Year + geographic area columns while tolerating malformed rows; if TSV parse still yields a single column, fall back to comma-delimited parsing.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "humanAcres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_human_caused_acres.csv'\n\n    # First attempt: standard CSV parse (fast C engine)\n    try:\n        df = pd.read_csv(path)\n    except Exception:\n        # Fall back: tolerate malformed rows\n        df = pd.read_csv(path, engine='python', on_bad_lines='skip')\n\n    # If the entire header got read as a single column, split it.\n    if df.shape[1] == 1 and isinstance(df.columns[0], str) and ('\\t' in df.columns[0]):\n        # Re-read as TSV\n        df = pd.read_csv(path, sep='\\t')\n\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_human_caused_acres.csv from data/wildfire/input/nifc_human_caused_acres.csv; try standard pd.read_csv first, fallback to engine='python' with on_bad_lines='skip' for malformed rows; if header is a single tab-delimited column, re-read with sep='\\t' to correctly split into Year and geographic area columns.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mostAnomalousAreaYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(lightningAcres, humanAcres) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    def to_long(df: pd.DataFrame, western_gb_label: str | None = None) -> pd.DataFrame:\n        out = df.copy()\n\n        # Standardize column names (trim whitespace)\n        out.columns = [str(c).strip() for c in out.columns]\n\n        # Fix Western Great Basin column name difference across files\n        if western_gb_label is not None and western_gb_label in out.columns:\n            out = out.rename(columns={western_gb_label: 'Western Great Basin'})\n\n        if 'Year' not in out.columns:\n            # Try to find year-like column\n            year_col = next((c for c in out.columns if c.lower() == 'year'), None)\n            if year_col is None:\n                raise ValueError(f\"Could not find 'Year' column. Columns={list(out.columns)}\")\n            out = out.rename(columns={year_col: 'Year'})\n\n        out['Year'] = pd.to_numeric(out['Year'], errors='coerce')\n\n        # Melt: all non-Year columns are geographic areas\n        value_vars = [c for c in out.columns if c != 'Year']\n        long = out.melt(id_vars=['Year'], value_vars=value_vars,\n                        var_name='geographic_area', value_name='acres_raw')\n\n        # Parse acres (allow commas, blanks)\n        long['acres'] = (\n            long['acres_raw']\n            .astype(str)\n            .str.replace(',', '', regex=False)\n            .str.strip()\n            .replace({'': np.nan, 'nan': np.nan, 'None': np.nan})\n        )\n        long['acres'] = pd.to_numeric(long['acres'], errors='coerce')\n\n        long = long.dropna(subset=['Year', 'acres'])\n        long['year'] = long['Year'].astype(int)\n        long['geographic_area'] = long['geographic_area'].astype(str).str.strip()\n\n        return long[['geographic_area', 'year', 'acres']]\n\n    # Convert both causes to long form and combine\n    lightning_long = to_long(lightningAcres, western_gb_label='Western Great Basin*')\n    human_long = to_long(humanAcres, western_gb_label='Western Great Basin')\n\n    combined = pd.concat([lightning_long, human_long], ignore_index=True)\n\n    # Total acres by geographic_area-year across both causes\n    area_year = combined.groupby(['geographic_area', 'year'], as_index=False)['acres'].sum()\n\n    # Per-area mean/std across years\n    stats = area_year.groupby('geographic_area')['acres'].agg(mean='mean', std='std').reset_index()\n    merged = area_year.merge(stats, on='geographic_area', how='left')\n\n    # z-score; drop areas with std=0 or missing\n    merged['z'] = (merged['acres'] - merged['mean']) / merged['std']\n    merged = merged.replace([np.inf, -np.inf], np.nan).dropna(subset=['z'])\n\n    merged['abs_z'] = merged['z'].abs()\n\n    top = merged.sort_values(['abs_z', 'geographic_area', 'year'], ascending=[False, True, True]).head(1)\n\n    return top[['geographic_area', 'year', 'z', 'acres', 'mean', 'std', 'abs_z']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Melt lightningAcres and humanAcres wide tables into long format [geographic_area, year, acres] (parse acres strings with commas; normalize 'Western Great Basin*' to 'Western Great Basin'); concatenate both causes; aggregate total acres by geographic_area-year; compute per-area mean and std over years; compute z-score (acres-mean)/std and take the single geographic_area-year with the maximum absolute z-score (ties broken by geographic_area then year).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "lightningAcres": {
+        "x": 100,
+        "y": 40
+      },
+      "humanAcres": {
+        "x": 100,
+        "y": 220
+      },
+      "mostAnomalousAreaYear": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "lightningAcres-->mostAnomalousAreaYear",
+        "source": {
+          "operatorID": "lightningAcres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mostAnomalousAreaYear",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "humanAcres-->mostAnomalousAreaYear",
+        "source": {
+          "operatorID": "humanAcres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mostAnomalousAreaYear",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

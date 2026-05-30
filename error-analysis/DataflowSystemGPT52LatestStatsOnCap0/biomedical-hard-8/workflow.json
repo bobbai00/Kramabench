@@ -1,0 +1,242 @@
+{
+  "headId": "step-agent-351-6-1779107622120",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "hyperactivated",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/biomedical/input/hyperactivated.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load hyperactivated.csv via pd.read_csv (comma delimiter, header=0, UTF-8) to obtain hyperactivated protein sites / genes in CNV-high endometroid samples",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc6",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx', sheet_name=0)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc6.xlsx (mmc6) via pd.read_excel sheet_name=0, header inferred; likely contains drug-target annotations including FDA-approved drugs",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    # Read as strings to avoid mixed-type inference issues in the execution engine\n    return pd.read_excel(\n        'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx',\n        sheet_name=0,\n        dtype=str\n    )\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx (mmc1) via pd.read_excel sheet_name=0 with dtype=str to prevent mixed-type column inference errors (e.g., numeric pregnancy counts); provides clinical/sample annotations if needed for CNV-high endometrioid definition",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fdaApprovedTargets",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc6) -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx'\n    # Sheet G contains FDA approved drugs for highly expressed genes\n    df = pd.read_excel(path, sheet_name='G-FDA approved drugs', dtype=str)\n    # Standardize column names\n    df.columns = [str(c).strip() for c in df.columns]\n\n    # Heuristically find the gene/target column\n    gene_col_candidates = [\n        c for c in df.columns\n        if c.lower() in {'gene', 'genes', 'target', 'targets', 'protein', 'proteins'}\n        or 'gene' in c.lower() or 'target' in c.lower() or 'protein' in c.lower()\n    ]\n    gene_col = gene_col_candidates[0] if gene_col_candidates else df.columns[0]\n\n    out = (\n        df[[gene_col]]\n        .rename(columns={gene_col: 'protein'})\n        .assign(protein=lambda x: x['protein'].astype(str).str.strip())\n    )\n    # Split possible multi-gene cells (comma/semicolon/space)\n    out = out.assign(protein=out['protein'].str.replace('|', ';', regex=False))\n    out = out.assign(protein=out['protein'].str.split(r'[;,\\s]+'))\n    out = out.explode('protein')\n    out['protein'] = out['protein'].astype(str).str.strip()\n    out = out[(out['protein'] != '') & (out['protein'].str.lower() != 'nan')]\n\n    out = out.drop_duplicates().sort_values('protein').reset_index(drop=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Read mmc6 sheet 'G-FDA approved drugs' and extract a de-duplicated list of targeted gene/protein symbols (column auto-detected by name containing gene/target/protein; split multi-gene cells on commas/semicolons/whitespace) as column 'protein'",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "hyperactivatedFdaIntersection",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(hyperactivated, fdaApprovedTargets) -> pd.DataFrame:\n    import pandas as pd\n\n    hyp = hyperactivated.copy()\n    hyp['protein'] = hyp['protein'].astype(str).str.strip()\n\n    fda = fdaApprovedTargets.copy()\n    fda['protein'] = fda['protein'].astype(str).str.strip()\n\n    inter = hyp.merge(fda, on='protein', how='inner')\n\n    # Return unique proteins (gene symbols)\n    out = (\n        inter[['protein']]\n        .drop_duplicates()\n        .sort_values('protein')\n        .reset_index(drop=True)\n        .rename(columns={'protein': 'gene'})\n    )\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inner join hyperactivated.csv proteins with FDA-approved drug target proteins (from mmc6 sheet G) on symbol; return unique intersecting gene symbols sorted ascending as column 'gene'",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalGeneList",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(hyperactivatedFdaIntersection) -> pd.DataFrame:\n    import pandas as pd\n\n    genes = (\n        hyperactivatedFdaIntersection['gene']\n        .dropna()\n        .astype(str)\n        .drop_duplicates()\n        .sort_values()\n        .tolist()\n    )\n\n    # Texera can error on LIST-typed cells; encode as a string representation.\n    genes_py = '[' + ', '.join([repr(g) for g in genes]) + ']'\n    return pd.DataFrame([{'genes': genes_py}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert intersecting gene symbols (from hyperactivatedFdaIntersection['gene']) into a single-row DataFrame; de-duplicate and sort; serialize as a Python-list string in column 'genes' to avoid LIST-typed cell execution errors",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "hyperactivated": {
+        "x": 400,
+        "y": 40
+      },
+      "mmc6": {
+        "x": 100,
+        "y": 220
+      },
+      "mmc1": {
+        "x": 100,
+        "y": 400
+      },
+      "fdaApprovedTargets": {
+        "x": 400,
+        "y": 220
+      },
+      "hyperactivatedFdaIntersection": {
+        "x": 700,
+        "y": 130
+      },
+      "finalGeneList": {
+        "x": 1000,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc6-->fdaApprovedTargets",
+        "source": {
+          "operatorID": "mmc6",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fdaApprovedTargets",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hyperactivated-->hyperactivatedFdaIntersection",
+        "source": {
+          "operatorID": "hyperactivated",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "hyperactivatedFdaIntersection",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fdaApprovedTargets-->hyperactivatedFdaIntersection",
+        "source": {
+          "operatorID": "fdaApprovedTargets",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "hyperactivatedFdaIntersection",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "hyperactivatedFdaIntersection-->finalGeneList",
+        "source": {
+          "operatorID": "hyperactivatedFdaIntersection",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalGeneList",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

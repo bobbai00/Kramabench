@@ -1,0 +1,266 @@
+{
+  "headId": "step-agent-652-27-1779125968515",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "zhvi",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import os\n\n    path = 'data/wildfire/input/ZHVI.csv'\n\n    # The task provides this path. In the current environment the file is absent,\n    # so return a single-row DataFrame capturing the issue rather than erroring\n    # (keeps downstream operators from hard-failing while we debug).\n    if not os.path.exists(path):\n        return pd.DataFrame([\n            {\n                'error': 'FileNotFoundError',\n                'missing_path': path,\n                'note': 'ZHVI.csv not present under data/wildfire/input in this runtime; cannot compute residential value change without this file.'\n            }\n        ])\n\n    return pd.read_csv(path, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load ZHVI.csv from 'data/wildfire/input/ZHVI.csv' via pd.read_csv with dtype=str; if the file is missing at runtime, return a single-row diagnostic DataFrame with columns [error, missing_path, note] instead of raising FileNotFoundError.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stateMap",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import json, pandas as pd\n    path = 'data/wildfire/input/state_abbreviation_to_state.json'\n    with open(path, 'r', encoding='utf-8') as f:\n        d = json.load(f)\n    # Expect dict like {\"CA\":\"California\", ...}\n    return pd.DataFrame([{'abbr': k, 'state': v} for k, v in d.items()])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load state_abbreviation_to_state.json and convert mapping dict {abbr -> full state name} into a two-column DataFrame with columns ['abbr','state'].",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "zhviInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    # Diagnostic: find correct filename/case in the folder\n    import glob\n    candidates = sorted(glob.glob('data/wildfire/input/*'))\n    return pd.DataFrame({'path': candidates})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic listing of files under 'data/wildfire/input/*' via glob.glob to verify the exact ZHVI filename/case when pd.read_csv hits FileNotFoundError.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "zhviInspect2",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = sorted(glob.glob('data/wildfire/input/*zhvi*')) + sorted(glob.glob('data/wildfire/input/*ZHVI*'))\n    return pd.DataFrame({'path': paths})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic glob for potential ZHVI file names under data/wildfire/input using patterns '*zhvi*' and '*ZHVI*'; return matching paths.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "zhviInspect3",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = sorted(glob.glob('data/wildfire/input/*.csv'))\n    return pd.DataFrame({'path': paths})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic listing of all CSV files under 'data/wildfire/input/*.csv' via glob.glob to locate the home value (ZHVI) file if named differently.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "zhviRawInspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/ZHVI.csv'\n    try:\n        df = pd.read_csv(path, header=None, dtype=str, nrows=30)\n        return df\n    except FileNotFoundError as e:\n        return pd.DataFrame([{'error': str(e), 'attempted_path': path}])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: attempt to read first 30 rows of 'data/wildfire/input/ZHVI.csv' with header=None,dtype=str; if FileNotFoundError, return single-row DataFrame with error and attempted_path (to confirm path mismatch).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "findZhviPath",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, os\n\n    root = 'data/wildfire/input'\n    matches = []\n    for dirpath, _, filenames in os.walk(root):\n        for fn in filenames:\n            if 'zhvi' in fn.lower():\n                matches.append(os.path.join(dirpath, fn))\n    matches = sorted(set(matches))\n    return pd.DataFrame({'path': matches})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search for any file under 'data/wildfire/input' whose filename contains 'zhvi' case-insensitively (os.walk); return all matching paths to locate the correct ZHVI file path if not present as ZHVI.csv.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cannotAnswer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(zhviInspect) -> pd.DataFrame:\n    import pandas as pd\n\n    return pd.DataFrame([\n        {\n            'status': 'cannot_compute',\n            'reason': 'The required file data/wildfire/input/ZHVI.csv is not present in the runtime. Without a residential property value series by state for 2005 and 2010, the requested value-loss computation cannot be performed from NOAA wildfire data alone.',\n            'files_present_under_input': ', '.join(sorted(zhviInspect['path'].astype(str).tolist()))\n        }\n    ])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Produce a single-row diagnostic result explaining inability to compute top-3 state residential value loss 2005-2010 because ZHVI.csv is missing; include list of files found under data/wildfire/input from zhviInspect.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "zhvi": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "stateMap": {
+        "x": 100,
+        "y": 400
+      },
+      "zhviInspect": {
+        "x": 100,
+        "y": 580
+      },
+      "zhviInspect2": {
+        "x": 100,
+        "y": 760
+      },
+      "zhviInspect3": {
+        "x": 100,
+        "y": 940
+      },
+      "zhviRawInspect": {
+        "x": 100,
+        "y": 1120
+      },
+      "findZhviPath": {
+        "x": 100,
+        "y": 1300
+      },
+      "cannotAnswer": {
+        "x": 400,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "zhviInspect-->cannotAnswer",
+        "source": {
+          "operatorID": "zhviInspect",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cannotAnswer",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

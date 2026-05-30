@@ -1,0 +1,136 @@
+{
+  "headId": "step-agent-546-6-1779123722383",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    # Force all cells to string to avoid Texera schema type mismatch errors\n    return pd.read_excel(path, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Excel file 1-s2.0-S0092867420301070-mmc1.xlsx via pd.read_excel with dtype=str for all columns (prevents mixed-type schema mismatch); default first sheet",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc7",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    return pd.read_excel(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Excel file 1-s2.0-S0092867420301070-mmc7.xlsx (default first sheet) via pd.read_excel; return full sheet as a DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc7Raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    # Read all sheets as raw tables (strings) to locate serous tumor samples and variant/Mbp field\n    sheets = pd.read_excel(path, sheet_name=None, dtype=str)\n    out = []\n    for name, df in sheets.items():\n        df2 = df.copy()\n        df2['__sheet__'] = name\n        df2['__nrows__'] = str(df.shape[0])\n        df2['__ncols__'] = str(df.shape[1])\n        # Keep only first ~200 rows per sheet to keep output manageable\n        out.append(df2.head(200))\n    return pd.concat(out, ignore_index=True)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc7.xlsx all sheets (sheet_name=None) with dtype=str; concatenate first 200 rows per sheet and add __sheet__/__nrows__/__ncols__ columns for inspection",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1SerousMedian",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1) -> pd.DataFrame:\n    import pandas as pd\n\n    df = mmc1.copy()\n\n    # Identify histology column and filter to serous\n    hist_col = None\n    for c in df.columns:\n        if str(c).strip().lower() == 'histologic_type':\n            hist_col = c\n            break\n    if hist_col is None:\n        return pd.DataFrame([{'error':'Histologic_type column not found', 'columns': ','.join(df.columns)}])\n\n    serous = df[df[hist_col].astype(str).str.strip().str.lower().str.contains('serous', na=False)].copy()\n\n    # Find a likely \"variants per Mbp\" column (case-insensitive, ignore underscores/spaces)\n    def norm(s: str) -> str:\n        return ''.join(ch for ch in str(s).lower() if ch.isalnum())\n\n    target_col = None\n    for c in serous.columns:\n        nc = norm(c)\n        if 'variant' in nc and ('mbp' in nc or 'megabase' in nc or 'permb' in nc or 'permbp' in nc):\n            target_col = c\n            break\n        if nc in {'variantspermbp','variantspermb','variantsmbp','variantpermbp'}:\n            target_col = c\n            break\n    if target_col is None:\n        # fallback: typical naming in genomics tables\n        for c in serous.columns:\n            nc = norm(c)\n            if nc in {'tmb','tumormutationalburden','mutationburden'}:\n                target_col = c\n                break\n\n    if target_col is None:\n        # Return diagnostics: candidate columns containing 'variant' or 'mbp'\n        candidates = [c for c in df.columns if ('variant' in str(c).lower() or 'mbp' in str(c).lower() or 'tmb' in str(c).lower())]\n        return pd.DataFrame([{\n            'error': 'No variants-per-Mbp/TMB column found',\n            'nSerous': int(serous.shape[0]),\n            'candidateColumns': '; '.join(map(str, candidates))\n        }])\n\n    # Coerce to numeric\n    vals = pd.to_numeric(serous[target_col].astype(str).str.replace(',', '', regex=False), errors='coerce')\n    med = float(vals.median())\n\n    return pd.DataFrame([{\n        'histologyFilter': 'contains(serous) on Histologic_type',\n        'nTotal': int(df.shape[0]),\n        'nSerous': int(serous.shape[0]),\n        'variantsPerMbpColumn': str(target_col),\n        'medianVariantsPerMbp': med\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter mmc1 cohort table to serous tumors using Histologic_type contains 'serous' (case-insensitive); auto-detect a variants-per-Mbp/TMB column by searching column names for 'variant' + ('mbp'/'megabase') (fallback to common 'TMB'/'tumor mutational burden'); convert selected column to numeric and compute the median across serous samples; return diagnostics including nSerous, chosen column name, and medianVariantsPerMbp",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc1": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc7": {
+        "x": 100,
+        "y": 220
+      },
+      "mmc7Raw": {
+        "x": 100,
+        "y": 400
+      },
+      "mmc1SerousMedian": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1-->mmc1SerousMedian",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mmc1SerousMedian",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

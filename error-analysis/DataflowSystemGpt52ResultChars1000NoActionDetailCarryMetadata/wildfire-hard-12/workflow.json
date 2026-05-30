@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_fire_weather",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = glob.glob('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv')\n    df = pd.read_csv(paths[0])\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows of Fire_Weather_Data_2002-2014_2016.csv to inspect columns and date fields for fire start timing analysis",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "fire_weather",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv', low_memory=False)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full wildfire fire-weather dataset from data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv for analyzing shift in start_day_of_year over start_year",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "start_doy_trend",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fire_weather) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    df = fire_weather.copy()\n\n    # Ensure numeric\n    df['start_year'] = pd.to_numeric(df['start_year'], errors='coerce')\n    df['start_day_of_year'] = pd.to_numeric(df['start_day_of_year'], errors='coerce')\n    df = df.dropna(subset=['start_year', 'start_day_of_year'])\n\n    # Yearly distribution summaries\n    yearly = (df.groupby('start_year')\n                .agg(n=('start_day_of_year','size'),\n                     mean_doy=('start_day_of_year','mean'),\n                     median_doy=('start_day_of_year','median'))\n                .reset_index()\n                .sort_values('start_year'))\n\n    # Robust trend: Spearman correlation between year and yearly median DOY\n    y = yearly['median_doy'].to_numpy()\n    x = yearly['start_year'].to_numpy()\n\n    # Spearman via rank correlation\n    def rankdata(a):\n        return pd.Series(a).rank(method='average').to_numpy()\n    rho = np.corrcoef(rankdata(x), rankdata(y))[0,1]\n\n    # Also compute simple linear slope for median_doy vs year\n    slope = np.polyfit(x, y, 1)[0]\n\n    out = yearly.copy()\n    out['spearman_rho_year_vs_median_doy'] = rho\n    out['linear_slope_median_doy_per_year'] = slope\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute yearly mean/median start_day_of_year by start_year, plus Spearman correlation and linear slope of yearly median DOY vs year to assess whether fire starts shifted earlier (negative slope) or later (positive slope) over time.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_fire_weather": {
+      "x": 100,
+      "y": 40
+    },
+    "fire_weather": {
+      "x": 100,
+      "y": 220
+    },
+    "start_doy_trend": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "fire_weather-->start_doy_trend",
+      "source": {
+        "operatorID": "fire_weather",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "start_doy_trend",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

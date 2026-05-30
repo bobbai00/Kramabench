@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-20-6-1779139064074",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraudReportsByPaymentMethod",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv\"\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Fraud_Reports_by_Payment_Method.csv via pd.read_csv (comma delimiter, header in first row, UTF-8 inferred) to analyze fraud counts and money befrauded by payment method",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanPaymentMethodLosses",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraudReportsByPaymentMethod) -> pd.DataFrame:\n    import pandas as pd\n    df = fraudReportsByPaymentMethod.copy()\n\n    # Row 1 contains the real header; data rows start at 2.\n    df = df.rename(columns={\n        'Fraud Reports by Payment Method': 'payment_method',\n        'Unnamed: 1': 'num_reports',\n        'Unnamed: 2': 'total_loss'\n    })\n\n    # Keep rows that look like payment-method data: non-null payment_method and a dollar value.\n    df = df[df['payment_method'].notna()]\n    df = df[df['total_loss'].astype(str).str.contains(r'\\$', na=False)]\n\n    # Drop the header row embedded in the body.\n    df = df[df['payment_method'].str.strip().ne('Payment Method')]\n\n    def parse_loss_to_millions(x: str):\n        if pd.isna(x):\n            return pd.NA\n        s = str(x).strip()\n        # Examples in this table: \"$275M\". Also handle \"$1.2B\" just in case.\n        s = s.replace('$', '').replace(',', '').strip()\n        mult = 1.0\n        if s.endswith('B'):\n            mult = 1000.0\n            s = s[:-1]\n        elif s.endswith('M'):\n            mult = 1.0\n            s = s[:-1]\n        else:\n            # If no suffix, assume dollars and convert to millions.\n            mult = 1.0 / 1_000_000.0\n        return float(s) * mult\n\n    df['loss_millions'] = df['total_loss'].map(parse_loss_to_millions)\n    df = df.dropna(subset=['loss_millions'])\n\n    return df[['payment_method', 'loss_millions', 'total_loss', 'num_reports']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean 2024_CSN_Fraud_Reports_by_Payment_Method table: rename columns to [payment_method, num_reports, total_loss]; filter to rows with non-null payment_method and total_loss containing '$'; drop embedded header row where payment_method == 'Payment Method'; parse total_loss strings like '$275M'/'$1.2B' into numeric loss_millions; output per payment method with loss_millions",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "totalBefraudedMillions",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanPaymentMethodLosses) -> pd.DataFrame:\n    import pandas as pd\n\n    total_millions = cleanPaymentMethodLosses['loss_millions'].sum()\n\n    # Return as single integer (millions of dollars)\n    return pd.DataFrame([{'total_millions': int(round(total_millions))}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sum loss_millions across all payment methods from cleanPaymentMethodLosses; round to nearest integer and return single-row DataFrame with total_millions (integer, in millions of dollars).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraudReportsByPaymentMethod": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanPaymentMethodLosses": {
+        "x": 400,
+        "y": 40
+      },
+      "totalBefraudedMillions": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraudReportsByPaymentMethod-->cleanPaymentMethodLosses",
+        "source": {
+          "operatorID": "fraudReportsByPaymentMethod",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanPaymentMethodLosses",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanPaymentMethodLosses-->totalBefraudedMillions",
+        "source": {
+          "operatorID": "cleanPaymentMethodLosses",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "totalBefraudedMillions",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

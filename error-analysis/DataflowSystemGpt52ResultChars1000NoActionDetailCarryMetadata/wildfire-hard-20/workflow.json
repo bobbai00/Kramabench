@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "var_desc",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    # Try a Windows-1252 compatible encoding commonly needed for NOAA docs\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NOAA wildfire variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv using cp1252 encoding to avoid UnicodeDecodeError",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "wildfires",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv', encoding='cp1252')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NOAA wildfire incidents from data/wildfire/input/noaa_wildfires.csv (cp1252 encoding).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "houses_2008",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(wildfires):\n    import pandas as pd\n    df = wildfires.copy()\n    # Residential houses damaged corresponds to prim_threatened_aggregate in this dataset (per variable description)\n    df = df[df['start_year'] == 2008].copy()\n    df['prim_threatened_aggregate'] = pd.to_numeric(df['prim_threatened_aggregate'], errors='coerce').fillna(0)\n    return df[['incident_number','incident_name','start_year','prim_threatened_aggregate']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter wildfires to start_year==2008 and select residential houses damaged (prim_threatened_aggregate) per NOAA variable description",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "pct_fires_90pct_damage",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(houses_2008):\n    import numpy as np\n    df = houses_2008.copy()\n    # Treat negative as 0 just in case (shouldn't happen)\n    df['prim_threatened_aggregate'] = df['prim_threatened_aggregate'].clip(lower=0)\n\n    total = df['prim_threatened_aggregate'].sum()\n    fires_total = len(df)\n\n    if total == 0:\n        fires_needed = 0\n        prop = 0.0\n    else:\n        df = df.sort_values('prim_threatened_aggregate', ascending=False, kind='mergesort')\n        cum = df['prim_threatened_aggregate'].cumsum()\n        # minimum count where cumulative reaches at least 90%\n        fires_needed = int((cum >= 0.9 * total).idxmax())  # idx label\n        # idxmax returns index label; convert to position\n        fires_needed = int(np.where(cum.values >= 0.9 * total)[0][0] + 1)\n        prop = fires_needed / fires_total\n\n    return df.head(0).assign(\n        start_year=[2008],\n        total_houses_damaged=[float(total)],\n        fires_total=[int(fires_total)],\n        fires_needed_for_90pct=[int(fires_needed)],\n        prop_fires_for_90pct=[float(prop)]\n    )"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "For 2008 incidents: sort by prim_threatened_aggregate desc, compute cumulative sum and find the minimum number of fires whose cumulative damaged houses reaches >=90% of the total; output proportion fires_needed/fires_total as prop_fires_for_90pct.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "var_desc": {
+      "x": 100,
+      "y": 40
+    },
+    "wildfires": {
+      "x": 100,
+      "y": 220
+    },
+    "houses_2008": {
+      "x": 430,
+      "y": 220
+    },
+    "pct_fires_90pct_damage": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "wildfires-->houses_2008",
+      "source": {
+        "operatorID": "wildfires",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "houses_2008",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "houses_2008-->pct_fires_90pct_damage",
+      "source": {
+        "operatorID": "houses_2008",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "pct_fires_90pct_damage",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

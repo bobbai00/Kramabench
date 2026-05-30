@@ -1,0 +1,306 @@
+{
+  "headId": "step-agent-71-13-1779100713288",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "militaryReports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Reports_by_Military_Consumers.csv via pd.read_csv (comma-delimited, first row header, UTF-8) to obtain counts of reports for military consumers by report category.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "reportCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # File appears to be encoded in a Windows codepage (smart quotes present).\n    return pd.read_csv(path, encoding=\"cp1252\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv via pd.read_csv with encoding='cp1252' (Windows-1252) to handle smart-quote bytes; comma-delimited, first row header.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanMilitaryCategories",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(militaryReports) -> pd.DataFrame:\n    import pandas as pd\n\n    df = militaryReports.copy()\n\n    col0 = 'Reports by Military Consumers'\n    col1 = 'Unnamed: 1'\n\n    out = df[[col0, col1]].rename(columns={col0: 'categoryRaw', col1: 'reportsRaw'})\n\n    # Drop header/footer/blank rows\n    out['categoryRaw'] = out['categoryRaw'].astype('string')\n    out['reportsRaw'] = out['reportsRaw'].astype('string')\n\n    out = out[out['categoryRaw'].notna() & out['reportsRaw'].notna()]\n    out = out[~out['categoryRaw'].str.contains('Report Type|Source:', case=False, na=False)]\n\n    # Parse counts like \"99,443\"\n    reportsNum = (\n        out['reportsRaw']\n        .str.replace(',', '', regex=False)\n        .str.replace(r'\\s+', '', regex=True)\n    )\n    reportsNum = pd.to_numeric(reportsNum, errors='coerce')\n\n    out = out.assign(\n        category=out['categoryRaw'].str.strip(),\n        reports=reportsNum\n    ).dropna(subset=['reports'])\n\n    # Cast reports to string to satisfy downstream type expectations in this environment\n    out['reports'] = out['reports'].astype('Int64').astype('string')\n\n    return out[['category', 'reports']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean 2024_CSN_Reports_by_Military_Consumers table into tidy [category, reports]: select columns ['Reports by Military Consumers','Unnamed: 1']; drop header/footer/blank rows (exclude 'Report Type' and 'Source:'); parse comma-formatted counts to numeric then cast to nullable Int and to string for compatibility; strip category text.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cleanGeneralCategories",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCategories.copy()\n\n    out = df[['Unnamed: 1', 'Unnamed: 2']].rename(columns={'Unnamed: 1': 'categoryRaw', 'Unnamed: 2': 'reportsRaw'})\n    out['categoryRaw'] = out['categoryRaw'].astype('string')\n    out['reportsRaw'] = out['reportsRaw'].astype('string')\n\n    out = out[out['categoryRaw'].notna() & out['reportsRaw'].notna()]\n    out = out[~out['categoryRaw'].str.contains('^Category$|Source:', case=False, na=False, regex=True)]\n\n    reports_num = (\n        out['reportsRaw']\n        .str.replace(',', '', regex=False)\n        .str.replace(r'\\s+', '', regex=True)\n    )\n    reports_num = pd.to_numeric(reports_num, errors='coerce')\n\n    out = out.assign(\n        category=out['categoryRaw'].str.strip(),\n        reports=reports_num\n    ).dropna(subset=['reports'])\n\n    # Texera type system compatibility: keep numeric as string\n    out['reports'] = out['reports'].astype('Int64').astype('string')\n\n    return out[['category', 'reports']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean 2024_CSN_Report_Categories into tidy [category, reports] where reports is returned as STRING for runtime compatibility: select columns ['Unnamed: 1' (Category), 'Unnamed: 2' (# of Reports)]; drop blank/header/footer rows (exclude literal 'Category' and 'Source:' rows); parse comma-formatted counts to numeric; strip category; cast reports to nullable Int then to string before returning.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "militaryImposterShare",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(militaryReports) -> pd.DataFrame:\n    import pandas as pd\n\n    df = militaryReports.copy()\n\n    # total reports for military consumers = sum of top-level categories\n    col0, col1 = df.columns[0], df.columns[1]\n    top = df[[col0, col1]].copy()\n    top.columns = ['label', 'value']\n    top['label'] = top['label'].astype(str).str.strip()\n    top['valueNum'] = (\n        top['value']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+(?:\\.\\d+)?)', expand=False)\n    )\n    top['valueNum'] = pd.to_numeric(top['valueNum'], errors='coerce')\n    total = float(top[top['label'].isin(['Fraud', 'Identity Theft', 'Other'])]['valueNum'].sum())\n\n    # Find a row/section where Identity Theft subcategories and their percentages are listed.\n    # The file layout can vary; scan all columns for a subcategory label and an adjacent percent.\n    candidates = []\n    for c in df.columns:\n        s = df[c].astype(str).str.strip()\n        mask = s.str.fullmatch('Imposter Scams', case=False, na=False)\n        if mask.any():\n            idxs = list(df.index[mask])\n            for idx in idxs:\n                candidates.append((c, idx))\n\n    imposter_share = float('nan')\n    pct_raw = None\n\n    if candidates:\n        # choose first hit; locate percent value in same row, searching other columns\n        c_label, idx = candidates[0]\n        row = df.loc[idx]\n\n        # look for a percent-like string in the row (excluding the label cell)\n        pct_val = None\n        for c in df.columns:\n            if c == c_label:\n                continue\n            v = row[c]\n            if pd.isna(v):\n                continue\n            vs = str(v).strip()\n            if '%' in vs or vs.replace('.', '', 1).isdigit():\n                # prefer something with %\n                if '%' in vs:\n                    pct_val = vs\n                    break\n                if pct_val is None:\n                    pct_val = vs\n\n        if pct_val is not None:\n            pct_raw = pct_val\n            pct_num = pd.to_numeric(str(pct_raw).replace('%', ''), errors='coerce')\n            if pd.notna(pct_num):\n                imposter_share = float(pct_num / 100.0) if pct_num > 1 else float(pct_num)\n\n    return pd.DataFrame([{\n        'demographic': 'military',\n        'totalReports': total,\n        'imposterShare': imposter_share,\n        'imposterPctRaw': pct_raw\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute military consumers' imposter scam share of all reports in 2024 from militaryReports: (1) totalReports=sum of counts for top-level categories {'Fraud','Identity Theft','Other'} parsed from first two columns; (2) scan all columns/rows to locate 'Imposter Scams' label anywhere, then within that row search other columns for a percent-like value (preferring strings containing '%'); parse to fraction (treat values >1 as percent, else as already-fraction); output single-row [demographic,totalReports,imposterShare,imposterPctRaw].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "generalImposterShare",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanGeneralCategories) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanGeneralCategories.copy()\n\n    # reports are strings; convert safely to numeric\n    df['reportsNum'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df.dropna(subset=['reportsNum'])\n\n    total = float(df['reportsNum'].sum())\n\n    imp = df[df['category'].str.fullmatch('Imposter Scams', case=False, na=False)]\n    if imp.empty:\n        imp = df[df['category'].str.contains('Imposter', case=False, na=False)]\n    imposter_reports = float(imp['reportsNum'].sum())\n\n    share = imposter_reports / total if total else float('nan')\n\n    return pd.DataFrame([{\n        'demographic': 'general',\n        'totalReports': total,\n        'imposterReports': imposter_reports,\n        'imposterShare': share\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute general population imposter scam share of all reports in 2024 from cleanGeneralCategories: convert reports (string) to numeric reportsNum; totalReports=sum(reportsNum) across all categories; imposterReports=sum(reportsNum) where category == 'Imposter Scams' (case-insensitive, fallback contains 'Imposter'); imposterShare=imposterReports/totalReports; return single-row [demographic,totalReports,imposterReports,imposterShare].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compareImposterShares",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(militaryImposterShare, generalImposterShare) -> pd.DataFrame:\n    import pandas as pd\n\n    m = militaryImposterShare.iloc[0]\n    g = generalImposterShare.iloc[0]\n\n    m_share = m['imposterShare']\n    g_share = g['imposterShare']\n\n    higher = None\n    if pd.notna(m_share) and pd.notna(g_share):\n        higher = bool(float(m_share) > float(g_share))\n\n    return pd.DataFrame([{\n        'militaryImposterShare': m_share,\n        'generalImposterShare': g_share,\n        'militaryHigher': higher\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare imposter scam shares between military consumers and general population: read single-row summaries; set militaryHigher=True if militaryImposterShare > generalImposterShare; return [militaryImposterShare,generalImposterShare,militaryHigher].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "militaryReports": {
+        "x": 400,
+        "y": 130
+      },
+      "reportCategories": {
+        "x": 100,
+        "y": 400
+      },
+      "cleanMilitaryCategories": {
+        "x": 700,
+        "y": 40
+      },
+      "cleanGeneralCategories": {
+        "x": 400,
+        "y": 400
+      },
+      "militaryImposterShare": {
+        "x": 700,
+        "y": 220
+      },
+      "generalImposterShare": {
+        "x": 700,
+        "y": 400
+      },
+      "compareImposterShares": {
+        "x": 1000,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "militaryReports-->cleanMilitaryCategories",
+        "source": {
+          "operatorID": "militaryReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanMilitaryCategories",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "militaryImposterShare-->compareImposterShares",
+        "source": {
+          "operatorID": "militaryImposterShare",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareImposterShares",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "generalImposterShare-->compareImposterShares",
+        "source": {
+          "operatorID": "generalImposterShare",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compareImposterShares",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "reportCategories-->cleanGeneralCategories",
+        "source": {
+          "operatorID": "reportCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanGeneralCategories",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanGeneralCategories-->generalImposterShare",
+        "source": {
+          "operatorID": "cleanGeneralCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "generalImposterShare",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "militaryReports-->militaryImposterShare",
+        "source": {
+          "operatorID": "militaryReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "militaryImposterShare",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

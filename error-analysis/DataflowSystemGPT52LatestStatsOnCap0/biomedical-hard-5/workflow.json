@@ -1,0 +1,207 @@
+{
+  "headId": "step-agent-528-8-1779123507526",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "mmc7Preview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx\"\n    return pd.read_excel(path, header=None, dtype=str, nrows=40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 1-s2.0-S0092867420301070-mmc7.xlsx by reading first 40 rows with header=None and dtype=str to determine sheet structure and header row.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1Preview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    return pd.read_excel(path, header=None, dtype=str, nrows=40)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect 1-s2.0-S0092867420301070-mmc1.xlsx by reading first 40 rows with header=None and dtype=str to determine sheet structure and header row.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx\"\n    # Load everything as strings to avoid mixed-type schema issues in the runtime.\n    return pd.read_excel(path, sheet_name=0, dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 1-s2.0-S0092867420301070-mmc1.xlsx (sheet_name=0) via pd.read_excel with dtype=str to prevent mixed-type column inference issues (e.g., Num_full_term_pregnancies as int vs str); first row used as header.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc7Sheets",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc7.xlsx'\n    xf = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xf.sheet_names})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load sheet list from 1-s2.0-S0092867420301070-mmc7.xlsx by opening with pd.ExcelFile and returning a single-column DataFrame of sheet_name values.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1Cols",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1) -> pd.DataFrame:\n    import pandas as pd\n    return pd.DataFrame({'column': list(mmc1.columns)})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all column names present in mmc1 (clinical/omics metadata table) by returning a single-column DataFrame 'column'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "mmc1SerousMedian",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mmc1) -> pd.DataFrame:\n    import pandas as pd\n\n    df = mmc1.copy()\n\n    # Identify histologic type and the variants/Mbp column robustly\n    hist_col = None\n    for c in df.columns:\n        if str(c).strip().lower() == 'histologic_type':\n            hist_col = c\n            break\n    if hist_col is None:\n        raise ValueError(\"Could not find 'Histologic_type' column in mmc1\")\n\n    variants_col = None\n    for c in df.columns:\n        cl = str(c).strip().lower()\n        if 'variant' in cl and ('/mb' in cl or 'per mb' in cl or 'mbp' in cl):\n            variants_col = c\n            break\n    # Fallback: common naming in these supplements\n    if variants_col is None:\n        for c in df.columns:\n            cl = str(c).strip().lower()\n            if cl in {'variants_per_mbp', 'variants per mbp', 'variants/mbp', 'variants_per_mb', 'variants/mb'}:\n                variants_col = c\n                break\n    if variants_col is None:\n        # last resort: search mutation burden style columns\n        cand = [c for c in df.columns if 'mutation' in str(c).lower() and ('/mb' in str(c).lower() or 'per mb' in str(c).lower() or 'mbp' in str(c).lower())]\n        if len(cand) == 1:\n            variants_col = cand[0]\n        else:\n            raise ValueError(\"Could not uniquely identify a 'variants per Mbp' column. Candidates: \" + str(cand[:20]))\n\n    # Filter to serous tumors\n    serous_mask = df[hist_col].astype(str).str.strip().str.lower().eq('serous')\n    serous = df.loc[serous_mask, [hist_col, variants_col]].copy()\n\n    # Coerce to numeric\n    serous['variantsPerMbp'] = pd.to_numeric(serous[variants_col], errors='coerce')\n\n    median_val = float(serous['variantsPerMbp'].dropna().median())\n\n    return pd.DataFrame([{\n        'histologic_type': 'serous',\n        'variantsPerMbp_column': str(variants_col),\n        'n_serous_rows': int(serous.shape[0]),\n        'n_nonnull_variantsPerMbp': int(serous['variantsPerMbp'].notna().sum()),\n        'median_variants_per_mbp': round(median_val, 4),\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From mmc1, identify 'Histologic_type' column and a column representing variants-per-megabase (name contains 'variant' and '/mb'/'per mb'/'mbp'); filter rows where Histologic_type == 'serous' (case/whitespace-insensitive); coerce variants-per-Mbp field to numeric; compute median across non-null serous samples; return one-row DataFrame with counts and median rounded to 4 decimals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "mmc7Preview": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc1Preview": {
+        "x": 100,
+        "y": 220
+      },
+      "mmc1": {
+        "x": 100,
+        "y": 400
+      },
+      "mmc7Sheets": {
+        "x": 100,
+        "y": 580
+      },
+      "mmc1Cols": {
+        "x": 400,
+        "y": 310
+      },
+      "mmc1SerousMedian": {
+        "x": 400,
+        "y": 490
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1-->mmc1Cols",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mmc1Cols",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc1-->mmc1SerousMedian",
+        "source": {
+          "operatorID": "mmc1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mmc1SerousMedian",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

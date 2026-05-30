@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-571-7-1779124370511",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "pleasureBayData",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv'\n    # File has a multi-row header/section labels. Read without header to locate/construct the real header.\n    return pd.read_csv(path, header=None, dtype=str)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Reload pleasure_bay_and_castle_island_beach_datasheet.csv using pd.read_csv(header=None, dtype=str) to avoid incorrect header inference given multi-row header/section labels; enables downstream parsing by explicitly handling header rows.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "pleasureBayClean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pleasureBayData) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    df = pleasureBayData.copy()\n\n    # Find the first row that looks like the column header row (starts with 'Sample Date')\n    header_idx = None\n    for i in range(min(len(df), 80)):\n        v = str(df.iloc[i, 0])\n        if v.strip().lower() in {'sample date', 'date', 'sample_date'}:\n            header_idx = i\n            break\n    if header_idx is None:\n        for i in range(min(len(df), 120)):\n            v = str(df.iloc[i, 0]).lower()\n            if 'sample' in v and 'date' in v:\n                header_idx = i\n                break\n\n    if header_idx is None:\n        for i in range(min(len(df), 200)):\n            v = str(df.iloc[i, 0])\n            if any(m in v for m in ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']):\n                header_idx = i - 1\n                break\n\n    header = df.iloc[header_idx].tolist() if header_idx is not None else df.iloc[2].tolist()\n    data = df.iloc[(header_idx + 1) if header_idx is not None else 3:].copy()\n\n    # Ensure unique column labels (duplicate labels can cause boolean indexing errors)\n    def make_unique(cols):\n        seen = {}\n        out = []\n        for c in cols:\n            c = str(c).strip() if pd.notna(c) else ''\n            base = c if c != '' else 'col'\n            if base not in seen:\n                seen[base] = 0\n                out.append(base)\n            else:\n                seen[base] += 1\n                out.append(f\"{base}.{seen[base]}\")\n        return out\n\n    data.columns = make_unique(header)\n\n    # Drop fully empty rows\n    data = data.dropna(how='all')\n\n    def find_col(keywords):\n        for c in data.columns:\n            cl = str(c).lower()\n            if all(k in cl for k in keywords):\n                return c\n        return None\n\n    date_col = find_col(['date'])\n    rain_col = find_col(['rain'])\n    entero_col = find_col(['enteroc'])\n    site_col = find_col(['site']) or find_col(['station']) or find_col(['location'])\n\n    keep_cols = [c for c in [date_col, site_col, rain_col, entero_col] if c is not None]\n    out = data[keep_cols].copy()\n\n    if date_col is not None:\n        out[date_col] = pd.to_datetime(out[date_col], errors='coerce')\n\n    def to_num(x):\n        if pd.isna(x):\n            return np.nan\n        s = str(x).strip()\n        s = s.replace('<', '').replace('>', '')\n        s2 = ''.join(ch for ch in s if ch.isdigit() or ch in ['.', '-'])\n        if s2 in ['', '.', '-']:\n            return np.nan\n        try:\n            return float(s2)\n        except Exception:\n            return np.nan\n\n    if rain_col is not None:\n        out[rain_col] = out[rain_col].map(to_num)\n    if entero_col is not None:\n        out[entero_col] = out[entero_col].map(to_num)\n\n    if site_col is not None:\n        mask_pb = out[site_col].astype(str).str.contains('Pleasure Bay', case=False, na=False)\n        out = out.loc[mask_pb]\n\n    if entero_col is not None:\n        # Avoid issues if entero_col selection yields multiple columns (shouldn't after make_unique, but safe)\n        series = out[entero_col]\n        if isinstance(series, pd.DataFrame):\n            series = series.iloc[:, 0]\n        out = out.loc[series > 104]\n\n    rename = {}\n    if date_col is not None:\n        rename[date_col] = 'sampleDate'\n    if site_col is not None:\n        rename[site_col] = 'site'\n    if rain_col is not None:\n        rename[rain_col] = 'rain1DayPrior'\n    if entero_col is not None:\n        rename[entero_col] = 'enterococcus'\n    out = out.rename(columns=rename)\n\n    return out.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse pleasureBayData (raw header=None CSV) into a properly headered table by locating the header row (prefers row where first cell equals 'Sample Date'); assign columns while forcing uniqueness (append .1, .2, ...) to avoid duplicate-label indexing errors; select key fields (sample date, site/location, rainfall 1-day prior, Enterococcus count) via fuzzy column-name matching; coerce date to datetime; coerce rainfall/Enterococcus to numeric (strip '<'/'>' qualifiers and non-numeric chars); filter to rows where site contains 'Pleasure Bay' (if site column exists) and to swimming-standard failures where Enterococcus > 104; output standardized columns [sampleDate, site, rain1DayPrior, enterococcus].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avgRainFailed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pleasureBayClean) -> pd.DataFrame:\n    import pandas as pd\n\n    df = pleasureBayClean.copy()\n    if 'rain1DayPrior' not in df.columns:\n        return pd.DataFrame([{'avgRain1DayPrior': None, 'nFailedSamples': len(df)}])\n\n    avg = df['rain1DayPrior'].mean()\n    return pd.DataFrame([{\n        'avgRain1DayPrior': round(float(avg), 2) if pd.notna(avg) else None,\n        'nFailedSamples': int(df['rain1DayPrior'].notna().sum()),\n        'nFailedTotalRows': int(len(df))\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the mean rainfall in the 1-day period prior to sampling (rain1DayPrior) among Pleasure Bay Beach samples that failed swimming standards (Enterococcus > 104), then round to 2 decimal places; also report counts of failed rows and non-null rainfall values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "pleasureBayData": {
+        "x": 100,
+        "y": 40
+      },
+      "pleasureBayClean": {
+        "x": 400,
+        "y": 40
+      },
+      "avgRainFailed": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "pleasureBayClean-->avgRainFailed",
+        "source": {
+          "operatorID": "pleasureBayClean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avgRainFailed",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "pleasureBayData-->pleasureBayClean",
+        "source": {
+          "operatorID": "pleasureBayData",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "pleasureBayClean",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

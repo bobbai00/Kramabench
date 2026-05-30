@@ -1,0 +1,265 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # Try common encodings for FTC CSVs exported from Excel\n    for enc in ['utf-8-sig','cp1252','latin1']:\n        try:\n            df = pd.read_csv(path, encoding=enc)\n            df['_encoding_used'] = enc\n            return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n        except UnicodeDecodeError:\n            continue\n    # fallback\n    df = pd.read_csv(path, encoding='latin1', engine='python')\n    df['_encoding_used'] = 'latin1_engine_python'\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample 2024_CSN_Report_Categories.csv using fallback encodings (utf-8-sig/cp1252/latin1) to inspect schema and find 'Imposter Scams' row/column representations",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_military",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from pathlib import Path\n    path = Path('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv')\n    # try encodings and detect header row by finding a line containing 'Category'\n    for enc in ['utf-8-sig','cp1252','latin1']:\n        try:\n            raw = pd.read_csv(path, header=None, dtype=str, encoding=enc)\n            break\n        except Exception:\n            raw = None\n    if raw is None:\n        raise RuntimeError('Could not read file with fallback encodings')\n\n    # find header row\n    hdr_idx = None\n    for i in range(min(len(raw), 50)):\n        row = raw.iloc[i].astype(str).str.lower().tolist()\n        if any('category' in c for c in row) and any('report' in c for c in row):\n            hdr_idx = i\n            break\n    if hdr_idx is None:\n        hdr_idx = 0\n\n    df = pd.read_csv(path, header=hdr_idx, dtype=str, encoding=enc)\n    df['_encoding_used'] = enc\n    # sample head/tail\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample 2024_CSN_Reports_by_Military_Consumers.csv with fallback encodings; auto-detect header row containing Category/Reports; return head/tail to inspect schema and whether Imposter Scams appears",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # try encodings\n    last_err = None\n    for enc in ['utf-8-sig','cp1252','latin1']:\n        try:\n            raw = pd.read_csv(path, encoding=enc, header=None)\n            used = enc\n            break\n        except Exception as e:\n            last_err = e\n    else:\n        raise last_err\n\n    # find header row containing 'Rank' and 'Category'\n    header_idx = None\n    for i in range(min(50, len(raw))):\n        row = raw.iloc[i].astype(str).str.strip().str.lower().tolist()\n        if any('rank' == x for x in row) and any('category' == x for x in row):\n            header_idx = i\n            break\n    if header_idx is None:\n        # fallback: first row\n        header_idx = 0\n\n    df = pd.read_csv(path, encoding=used, header=header_idx)\n    df.columns = [str(c).strip() for c in df.columns]\n\n    # drop fully empty rows\n    df = df.dropna(how='all')\n\n    # keep relevant columns if present\n    # Normalize column names\n    colmap = {}\n    for c in df.columns:\n        cl = c.lower().strip()\n        if cl == 'rank':\n            colmap[c] = 'Rank'\n        elif cl == 'category':\n            colmap[c] = 'Category'\n        elif 'reports' in cl:\n            colmap[c] = 'Reports'\n        elif 'percentage' in cl or cl.startswith('%'):\n            colmap[c] = 'Percentage'\n    df = df.rename(columns=colmap)\n\n    # parse reports and percentage\n    if 'Reports' in df.columns:\n        df['Reports'] = df['Reports'].astype(str).str.replace(',', '', regex=False).str.replace('\\u00a0','', regex=False).str.strip()\n        df['Reports'] = pd.to_numeric(df['Reports'], errors='coerce')\n    if 'Percentage' in df.columns:\n        df['Percentage'] = df['Percentage'].astype(str).str.replace('%','', regex=False).str.strip()\n        df['Percentage'] = pd.to_numeric(df['Percentage'], errors='coerce')\n\n    df['__encoding_used'] = used\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Report_Categories.csv, detect header row, normalize columns (Rank/Category/Reports/Percentage), and parse numeric fields for general population report categories.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "military",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n    import re\n    \n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv'\n    # read with utf-8-sig first (works in sample)\n    df0 = pd.read_csv(path, header=None, dtype=str, encoding='utf-8-sig')\n\n    # find header row containing 'Category' and '# of Reports'\n    header_idx = None\n    for i in range(min(50, len(df0))):\n        row = df0.iloc[i].astype(str).str.strip().str.lower().tolist()\n        if any('category' == x for x in row) and any('reports' in x for x in row):\n            header_idx = i\n            break\n    if header_idx is None:\n        # fallback: assume first non-empty row\n        nonempty = df0.dropna(how='all')\n        header_idx = nonempty.index[0]\n\n    header = df0.iloc[header_idx].tolist()\n    df = df0.iloc[header_idx+1:].copy()\n    df.columns = header\n\n    # normalize column names\n    def norm(c):\n        c = str(c).strip()\n        c = re.sub(r'\\s+', ' ', c)\n        return c\n    df.columns = [norm(c) for c in df.columns]\n\n    # Keep relevant columns\n    col_map = {}\n    for c in df.columns:\n        lc = c.lower()\n        if lc == 'rank':\n            col_map[c] = 'Rank'\n        elif lc == 'category':\n            col_map[c] = 'Category'\n        elif 'reports' in lc:\n            col_map[c] = 'Reports'\n    df = df.rename(columns=col_map)\n    keep = [c for c in ['Rank','Category','Reports'] if c in df.columns]\n    df = df[keep]\n\n    # drop footnotes/source/blank\n    df = df.dropna(how='all')\n    if 'Category' in df.columns:\n        df = df[df['Category'].notna()]\n        df = df[~df['Category'].astype(str).str.lower().str.startswith('source')]\n\n    # parse reports\n    if 'Reports' in df.columns:\n        df['Reports'] = (df['Reports'].astype(str)\n                         .str.replace(',', '', regex=False)\n                         .str.extract(r'(\\d+)', expand=False))\n        df['Reports'] = pd.to_numeric(df['Reports'], errors='coerce')\n\n    # ensure Category trimmed\n    df['Category'] = df['Category'].astype(str).str.strip()\n\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Reports_by_Military_Consumers.csv; detect header row; keep Rank/Category/Reports; drop source/footer rows; parse Reports as numeric.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "general_imposter_pct",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(categories) -> pd.DataFrame:\n    import pandas as pd\n    df = categories.copy()\n    df = df[df['Category'].notna()]\n    row = df[df['Category'].str.strip().str.lower()=='imposter scams']\n    if row.empty:\n        return pd.DataFrame([{'group':'general','imposter_reports':None,'total_reports':None,'imposter_pct':None}])\n    imposter_reports = float(row['Reports'].iloc[0])\n    # total reports given in note: 6,471,708\n    total_reports = 6471708.0\n    imposter_pct = imposter_reports/total_reports*100\n    return pd.DataFrame([{'group':'general','imposter_reports':imposter_reports,'total_reports':total_reports,'imposter_pct':imposter_pct,'pct_from_table':float(row['Percentage'].iloc[0])}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "From general population categories table, extract Imposter Scams reports and compute % of total 2024 Sentinel reports (6,471,708), also retain the published percentage column for cross-check.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "military_imposter_pct",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(military) -> pd.DataFrame:\n    import pandas as pd\n    df = military.copy()\n    # total reports for the demographic = sum of category reports in this table\n    total = pd.to_numeric(df['Reports'], errors='coerce').sum(min_count=1)\n    imp = df.loc[df['Category'].str.strip().str.lower().eq('imposter scams'), 'Reports']\n    imposter_reports = pd.to_numeric(imp, errors='coerce').iloc[0] if len(imp) else float('nan')\n    imposter_pct = (imposter_reports / total) * 100 if pd.notna(imposter_reports) and pd.notna(total) and total != 0 else float('nan')\n    return pd.DataFrame([{\n        'group': 'military',\n        'imposter_reports': imposter_reports,\n        'total_reports_sum_categories': total,\n        'imposter_pct': imposter_pct\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute military consumers' Imposter Scams percentage as imposter_reports / sum(Reports across all categories in military table) * 100.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "compare_pct",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(general_imposter_pct, military_imposter_pct):\n    import pandas as pd\n    g = float(general_imposter_pct['imposter_pct'].iloc[0])\n    m = float(military_imposter_pct['imposter_pct'].iloc[0])\n    return pd.DataFrame([{\n        'general_imposter_pct': g,\n        'military_imposter_pct': m,\n        'military_higher': 'Yes' if m > g else 'No'\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compare Imposter Scams percentage for military consumers vs general population; output Yes if military percentage is higher.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_categories": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_military": {
+      "x": 100,
+      "y": 220
+    },
+    "categories": {
+      "x": 100,
+      "y": 400
+    },
+    "military": {
+      "x": 100,
+      "y": 580
+    },
+    "general_imposter_pct": {
+      "x": 430,
+      "y": 400
+    },
+    "military_imposter_pct": {
+      "x": 430,
+      "y": 580
+    },
+    "compare_pct": {
+      "x": 760,
+      "y": 490
+    }
+  },
+  "links": [
+    {
+      "linkID": "categories-->general_imposter_pct",
+      "source": {
+        "operatorID": "categories",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "general_imposter_pct",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "military-->military_imposter_pct",
+      "source": {
+        "operatorID": "military",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "military_imposter_pct",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "general_imposter_pct-->compare_pct",
+      "source": {
+        "operatorID": "general_imposter_pct",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "compare_pct",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "military_imposter_pct-->compare_pct",
+      "source": {
+        "operatorID": "military_imposter_pct",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "compare_pct",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-551-7-1779123766744",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "acetylProteomicsXlsx",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    # Load all sheets to allow us to identify the acetylproteomics table and its significance column\n    xls = pd.ExcelFile(path)\n    frames = []\n    for sheet in xls.sheet_names:\n        df = pd.read_excel(path, sheet_name=sheet, dtype=str)\n        df.insert(0, 'sheet', sheet)\n        frames.append(df)\n    out = pd.concat(frames, ignore_index=True, sort=False)\n    # Keep also a small helper row count per sheet via metadata columns\n    return out\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Excel file 1-s2.0-S0092867420301070-mmc3.xlsx by reading ALL sheets (pd.ExcelFile + pd.read_excel, dtype=str), adding a 'sheet' column to preserve sheet provenance, and concatenating into one DataFrame for downstream identification of the acetylproteomics significance criteria/columns.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "significantGenesAcetylCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(acetylSigGenesFromExcel) -> pd.DataFrame:\n    import pandas as pd\n\n    df = acetylSigGenesFromExcel.copy()\n\n    # The sheet appears to contain a single column of gene symbols, but the column\n    # header is not necessarily 'Gene' (in the current file it is 'BRD8').\n    # Take the first column and count unique non-empty values.\n    if df.shape[1] == 0:\n        cnt = 0\n    else:\n        col = df.columns[0]\n        genes = (\n            df[col]\n            .astype(str)\n            .str.strip()\n            .replace({'nan': pd.NA, 'None': pd.NA, '': pd.NA})\n            .dropna()\n        )\n        cnt = int(genes.nunique())\n\n    return pd.DataFrame([{\n        'significant_gene_count': cnt,\n        'rows_in_sheet': int(df.shape[0]),\n        'gene_column_used': df.columns[0] if df.shape[1] else None\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute count of significant genes by acetylproteomics from sheet 'D-SE-acetyl' (operator acetylSigGenesFromExcel): use the first column (gene symbol list; header may not be 'Gene'), strip whitespace, drop empty/'nan' values, and return nunique as significant_gene_count along with diagnostics [rows_in_sheet, gene_column_used].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "acetylSigGenesFromExcel",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx\"\n\n    # Read the acetylproteomics significant genes sheet directly to avoid\n    # column misalignment from concatenating heterogeneous sheets.\n    df = pd.read_excel(path, sheet_name=\"D-SE-acetyl\", dtype=str)\n\n    # Standardize column names (strip whitespace)\n    df.columns = [str(c).strip() for c in df.columns]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Excel file 1-s2.0-S0092867420301070-mmc3.xlsx \u2014 read sheet 'D-SE-acetyl' (significant genes by acetylproteomics in Figure 1) via pd.read_excel(sheet_name='D-SE-acetyl', dtype=str); strip whitespace from column names to standardize schema.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "acetylProteomicsXlsx": {
+        "x": 100,
+        "y": 40
+      },
+      "significantGenesAcetylCount": {
+        "x": 400,
+        "y": 40
+      },
+      "acetylSigGenesFromExcel": {
+        "x": 100,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "acetylSigGenesFromExcel-->significantGenesAcetylCount",
+        "source": {
+          "operatorID": "acetylSigGenesFromExcel",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "significantGenesAcetylCount",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "operators": [
+    {
+      "operatorID": "noaa",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load NOAA wildfire dataset from data/wildfire/input/noaa_wildfires.csv",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "raws",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/wildfire/input/PublicView_RAWS_-3515561676727363726.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load RAWS weather station metadata from data/wildfire/input/PublicView_RAWS_-3515561676727363726.csv (contains station id and elevation fields).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "station_elev_avg",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(noaa, raws) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    # Station IDs in NOAA appear to be NWS/WRH timeseries site ids (often 5-6 char), not numeric RAWS ids.\n    # Use RAWS 'MesoWest Station ID' (string) which matches NWS timeseries site parameter.\n    def norm_site(s):\n        if pd.isna(s):\n            return np.nan\n        s = str(s).strip()\n        if s.lower() in {'nan','null','none',''}:\n            return np.nan\n        # NOAA column is numeric in file; treat as integer-like then to string\n        return s\n\n    # NOAA station ids are numeric; convert to int-string without decimals\n    st = noaa['station_verified_in_psa']\n    st_norm = pd.to_numeric(st, errors='coerce')\n    st_norm = st_norm.dropna().astype('int64').astype(str)\n    noaa_stations = pd.DataFrame({'station_id_str': st_norm}).drop_duplicates()\n\n    # RAWS: build join keys from multiple potential id columns\n    raws2 = raws.copy()\n    # MesoWest Station ID is the best candidate (string like YNWC1)\n    raws2['mesowest_id'] = raws2['MesoWest Station ID'].astype(str).str.strip()\n    raws2.loc[raws2['mesowest_id'].str.lower().isin(['nan','null','none','']), 'mesowest_id'] = np.nan\n\n    # Also keep numeric ids as strings for fallback\n    for col in ['Station ID', 'WX ID', 'NWS ID']:\n        if col in raws2.columns:\n            raws2[col + '_str'] = pd.to_numeric(raws2[col], errors='coerce')\n            raws2[col + '_str'] = raws2[col + '_str'].dropna().astype('int64').astype(str).reindex(raws2.index)\n\n    # Attempt matches in priority order: Station ID -> WX ID -> NWS ID\n    elevs = []\n    matched = set()\n\n    def collect_matches(keycol):\n        nonlocal elevs, matched\n        tmp = noaa_stations.merge(raws2[[keycol, 'Elevation']].dropna(subset=[keycol]), left_on='station_id_str', right_on=keycol, how='inner')\n        # keep only stations not already matched\n        tmp = tmp[~tmp['station_id_str'].isin(matched)]\n        matched.update(tmp['station_id_str'].tolist())\n        elevs.append(tmp[['station_id_str','Elevation']])\n\n    for keycol in ['Station ID_str','WX ID_str','NWS ID_str']:\n        if keycol in raws2.columns:\n            collect_matches(keycol)\n\n    if elevs:\n        matched_df = pd.concat(elevs, ignore_index=True)\n    else:\n        matched_df = pd.DataFrame(columns=['station_id_str','Elevation'])\n\n    avg_elev = matched_df['Elevation'].mean() if len(matched_df) else np.nan\n\n    return pd.DataFrame([{\n        'avg_elevation_ft': avg_elev,\n        'n_stations_total': int(noaa_stations.shape[0]),\n        'n_stations_matched': int(matched_df['station_id_str'].nunique())\n    }])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Fix station id mapping: NOAA station_verified_in_psa is numeric; attempt join to RAWS metadata via numeric Station ID / WX ID / NWS ID (as int->str). Compute mean Elevation (ft) over matched unique stations with non-null elevation.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "noaa": {
+      "x": 100,
+      "y": 40
+    },
+    "raws": {
+      "x": 100,
+      "y": 220
+    },
+    "station_elev_avg": {
+      "x": 430,
+      "y": 130
+    }
+  },
+  "links": [
+    {
+      "linkID": "noaa-->station_elev_avg",
+      "source": {
+        "operatorID": "noaa",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "station_elev_avg",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "raws-->station_elev_avg",
+      "source": {
+        "operatorID": "raws",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "station_elev_avg",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

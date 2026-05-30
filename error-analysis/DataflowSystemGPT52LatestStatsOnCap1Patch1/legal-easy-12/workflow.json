@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-35-8-1779139308614",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCategories2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv\"\n    # The file contains a blank row then a header row: [Rank, Category, # of Reports, Percentage]\n    return pd.read_csv(path, encoding=\"cp1252\", skiprows=1)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv via pd.read_csv with encoding='cp1252' and skiprows=1 to use the true header row (Rank, Category, # of Reports, Percentage); comma delimiter",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanCategories2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCategories2024.copy()\n    # First row contains the header names.\n    df.columns = df.iloc[0].astype(str).str.strip()\n    df = df.iloc[1:].copy()\n\n    # Drop blank/footer rows\n    df = df[df['Rank'].notna()].copy()\n\n    # Clean numeric columns\n    df['Rank'] = pd.to_numeric(df['Rank'], errors='coerce')\n    df['# of Reports'] = (\n        df['# of Reports'].astype(str).str.replace(',', '', regex=False).str.strip()\n    )\n    df['# of Reports'] = pd.to_numeric(df['# of Reports'], errors='coerce')\n\n    # Parse Percentage like '20.91%'\n    df['Percentage'] = df['Percentage'].astype(str).str.replace('%', '', regex=False).str.strip()\n    df['Percentage'] = pd.to_numeric(df['Percentage'], errors='coerce') / 100.0\n\n    # Keep only valid rows\n    df = df.dropna(subset=['Rank', 'Category', '# of Reports', 'Percentage']).copy()\n    df = df.sort_values('Rank')\n    return df[['Rank', 'Category', '# of Reports', 'Percentage']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean reportCategories2024 table by promoting first data row to header (Rank, Category, # of Reports, Percentage), dropping blank/footer rows where Rank is null, converting Rank to numeric, parsing '# of Reports' by removing commas and casting to numeric, parsing Percentage by stripping '%' and converting to fraction; return sorted cleaned columns",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "minCategories50pct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanCategories2024) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanCategories2024.copy().sort_values('Rank')\n    df['cum_pct'] = df['Percentage'].cumsum()\n\n    # Minimum number of categories needed to reach at least 50%\n    n = int((df['cum_pct'] >= 0.5).idxmax() + 1)\n    return pd.DataFrame([{'min_categories_50pct': n}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute cumulative sum of 'Percentage' over report categories sorted by Rank; find first row where cumulative percentage >= 0.50 and return the corresponding count (row position + 1) as single value 'min_categories_50pct'",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCategories2024": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanCategories2024": {
+        "x": 400,
+        "y": 40
+      },
+      "minCategories50pct": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCategories2024-->cleanCategories2024",
+        "source": {
+          "operatorID": "reportCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanCategories2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanCategories2024-->minCategories50pct",
+        "source": {
+          "operatorID": "cleanCategories2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "minCategories50pct",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

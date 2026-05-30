@@ -1,0 +1,346 @@
+{
+  "headId": "step-agent-646-11-1779125773436",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "weatherEvents",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Fire_Weather_Data_2002-2014_2016.csv (the available weather-events-like file under data/wildfire/input) via pd.read_csv with default parameters (comma delimiter, header in first row, default encoding)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires.csv'\n    return pd.read_csv(path)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfiresVarDesc",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/noaa_wildfires_variabledescrip.csv'\n    # file appears to be in a Windows-1252 compatible encoding\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires_variabledescrip.csv via pd.read_csv with encoding='cp1252' (Windows-1252) to avoid UTF-8 decode errors; comma delimiter, header in first row",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fireRain2016",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires, weatherEvents) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    # --- Fires (2016, controlled) ---\n    wf = wildfires.copy()\n    wf['controlled_date_dt'] = pd.to_datetime(wf['controlled_date'], errors='coerce')\n    wf = wf[(wf['control_year'] == 2016) & wf['controlled_date_dt'].notna()].copy()\n    wf['fire_lat'] = pd.to_numeric(wf['latitude'], errors='coerce')\n    wf['fire_lon'] = pd.to_numeric(wf['longitude'], errors='coerce')\n    wf = wf[wf['fire_lat'].notna() & wf['fire_lon'].notna()].copy()\n\n    # unique fires by incident_number (avoid duplicates if any)\n    wf = wf.drop_duplicates(subset=['incident_number']).copy()\n\n    # two dates to check: control day and previous day\n    wf1 = wf[['incident_number', 'fire_lat', 'fire_lon', 'controlled_date_dt']].copy()\n    wf1['check_date'] = wf1['controlled_date_dt'].dt.normalize()\n    wf0 = wf1.copy()\n    wf0['check_date'] = wf0['check_date'] - pd.Timedelta(days=1)\n    wfCheck = pd.concat([wf1, wf0], ignore_index=True)\n\n    totalFires = wf['incident_number'].nunique()\n\n    # --- Weather events: use rain_sum as precipitation (inches) ---\n    we = weatherEvents.copy()\n\n    # The only precipitation-like field in this dataset is rain_sum (numeric; inches)\n    if 'rain_sum' not in we.columns:\n        raise ValueError(\"Expected 'rain_sum' column in weatherEvents but not found\")\n\n    we['prcp_in'] = pd.to_numeric(we['rain_sum'], errors='coerce')\n    we = we[we['prcp_in'].notna() & (we['prcp_in'] > 0.05)].copy()\n\n    # date alignment: use controlled_date within weatherEvents as the day of observation for rain_sum\n    if 'controlled_date' not in we.columns:\n        raise ValueError(\"Expected 'controlled_date' column in weatherEvents but not found\")\n    we['obs_date'] = pd.to_datetime(we['controlled_date'], errors='coerce').dt.normalize()\n    we = we[we['obs_date'].notna()].copy()\n\n    # station location: fall back to weatherEvents latitude/longitude fields\n    we['st_lat'] = pd.to_numeric(we['latitude'], errors='coerce')\n    we['st_lon'] = pd.to_numeric(we['longitude'], errors='coerce')\n    we = we[we['st_lat'].notna() & we['st_lon'].notna()].copy()\n\n    # --- Spatial match within 1km narrowest diameter => radius 0.5km ---\n    # Use equirectangular approximation (good for small distances)\n    R = 6371.0  # km\n    radius_km = 0.5\n\n    # Pre-filter by date equality\n    m = wfCheck.merge(we[['obs_date', 'st_lat', 'st_lon', 'incident_number']].rename(columns={'incident_number': 'we_incident_number'}),\n                      left_on='check_date', right_on='obs_date', how='inner')\n\n    # distance from fire center to station (both taken from this dataset's lat/lon)\n    lat1 = np.radians(m['fire_lat'].to_numpy())\n    lat2 = np.radians(m['st_lat'].to_numpy())\n    lon1 = np.radians(m['fire_lon'].to_numpy())\n    lon2 = np.radians(m['st_lon'].to_numpy())\n\n    x = (lon2 - lon1) * np.cos((lat1 + lat2) / 2.0)\n    y = (lat2 - lat1)\n    dist_km = R * np.sqrt(x * x + y * y)\n    m = m.assign(dist_km=dist_km)\n\n    # station falls into fire area\n    m = m[m['dist_km'] <= radius_km]\n\n    firesWithRain = m['incident_number'].nunique()\n    pct = (firesWithRain / totalFires * 100.0) if totalFires else np.nan\n\n    return pd.DataFrame([{\n        'totalControlledFires2016': int(totalFires),\n        'firesWithRainSameOrPrevDay': int(firesWithRain),\n        'percentage': round(pct, 4)\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute % of 2016-controlled wildfires with moderate/heavy rain (>0.05 in) in assumed fire area on control day or previous day: filter wildfires to control_year=2016, parse controlled_date, keep unique incident_number with valid fire latitude/longitude; create check dates = control day and day-1. In weatherEvents, treat rain_sum as precipitation in inches; filter rain_sum>0.05; parse controlled_date as obs_date (normalized). Spatially match stations to fires within radius 0.5 km (1 km narrowest diameter assumption) using equirectangular distance; count distinct fires with \u22651 matching station on either date; output total fires, rainy fires, and percentage.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectWeatherEventsPath",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    pattern = 'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv'\n    matches = glob.glob(pattern)\n    # Avoid returning Python lists directly (can break serialization); join into a single string.\n    return pd.DataFrame({\n        'pattern': [pattern],\n        'n_matches': [len(matches)],\n        'matches': ['|'.join(matches)]\n    })\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: glob for exact provided WeatherEvents_Jan2016-Dec2022.csv path; return pattern, count of matches, and matched paths concatenated with '|' (avoid list serialization issues)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectWildfireInputDir",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    files = sorted(glob.glob('data/wildfire/input/*'))\n    return pd.DataFrame({'path': files})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: list all files directly under data/wildfire/input/ (via glob 'data/wildfire/input/*') to locate the actual WeatherEvents filename/path",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectWeatherEventsGlob",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    patterns = [\n        'data/wildfire/input/*Weather*Events*.csv',\n        'data/wildfire/input/*Weather*.csv',\n        'data/wildfire/input/*Events*.csv',\n        'data/wildfire/input/*2016*2022*.csv',\n        'data/wildfire/input/*.csv'\n    ]\n    rows = []\n    for pat in patterns:\n        m = sorted(glob.glob(pat))\n        rows.append({'pattern': pat, 'n_matches': len(m), 'first10': '|'.join(m[:10])})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: glob multiple filename patterns under data/wildfire/input to locate the WeatherEvents (or similar) CSV; return match counts and first 10 matches per pattern",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectWildfireInputDirAll",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd, os\n    base = 'data/wildfire/input'\n    rows = []\n    for fn in sorted(os.listdir(base)):\n        p = os.path.join(base, fn)\n        if os.path.isfile(p):\n            rows.append({'filename': fn, 'lower': fn.lower()})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Diagnostic: list all filenames (and lowercase) in data/wildfire/input to help spot WeatherEvents file with different spelling/case/extension",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectWeatherSchema",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(weatherEvents) -> pd.DataFrame:\n    import pandas as pd\n    cols = list(weatherEvents.columns)\n    def looks_like_date(col):\n        s = col.lower()\n        return any(k in s for k in ['date', 'day', 'time', 'timestamp'])\n\n    out = []\n    for c in cols:\n        lc = c.lower()\n        out.append({\n            'column': c,\n            'lower': lc,\n            'dtype': str(weatherEvents[c].dtype),\n            'n_null': int(weatherEvents[c].isna().sum()),\n            'example1': str(weatherEvents[c].dropna().iloc[0]) if weatherEvents[c].notna().any() else None,\n            'is_date_name': looks_like_date(c),\n            'is_lat_name': 'lat' in lc,\n            'is_lon_name': 'lon' in lc or 'lng' in lc,\n            'is_precip_name': any(k in lc for k in ['prcp','precip','ppt','rain'])\n        })\n    return pd.DataFrame(out).sort_values(['is_precip_name','is_date_name','is_lat_name','is_lon_name'], ascending=False).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect schema of weatherEvents: return one row per column including lowercase name, dtype, null count, first non-null example value, and flags for likely date/lat/lon/precipitation-related columns to identify the correct precipitation (>0.05 in) and station coordinate fields.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectWeatherPreview",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(weatherEvents) -> pd.DataFrame:\n    import pandas as pd\n    # show a focused set of potentially relevant columns if present\n    cols = list(weatherEvents.columns)\n    key_like = []\n    for c in cols:\n        lc = c.lower()\n        if any(k in lc for k in ['station','stid','id','name','date','day','time','lat','lon','lng','prcp','precip','ppt','rain']):\n            key_like.append(c)\n    # keep order, unique\n    seen = set(); key_like2=[]\n    for c in key_like:\n        if c not in seen:\n            seen.add(c); key_like2.append(c)\n    show = key_like2[:25] if key_like2 else cols[:25]\n    return weatherEvents[show].head(30)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Preview first 30 rows of weatherEvents focusing on columns whose names suggest station identifier, observation date/time, latitude/longitude, and precipitation/rain fields; limit to first ~25 such columns for readability.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "weatherEvents": {
+        "x": 100,
+        "y": 295
+      },
+      "wildfires": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfiresVarDesc": {
+        "x": 100,
+        "y": 475
+      },
+      "fireRain2016": {
+        "x": 400,
+        "y": 115
+      },
+      "inspectWeatherEventsPath": {
+        "x": 100,
+        "y": 655
+      },
+      "inspectWildfireInputDir": {
+        "x": 100,
+        "y": 835
+      },
+      "inspectWeatherEventsGlob": {
+        "x": 100,
+        "y": 1015
+      },
+      "inspectWildfireInputDirAll": {
+        "x": 100,
+        "y": 1195
+      },
+      "inspectWeatherSchema": {
+        "x": 400,
+        "y": 355
+      },
+      "inspectWeatherPreview": {
+        "x": 400,
+        "y": 535
+      }
+    },
+    "links": [
+      {
+        "linkID": "weatherEvents-->inspectWeatherSchema",
+        "source": {
+          "operatorID": "weatherEvents",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectWeatherSchema",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "weatherEvents-->inspectWeatherPreview",
+        "source": {
+          "operatorID": "weatherEvents",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspectWeatherPreview",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfires-->fireRain2016",
+        "source": {
+          "operatorID": "wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fireRain2016",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "weatherEvents-->fireRain2016",
+        "source": {
+          "operatorID": "weatherEvents",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fireRain2016",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

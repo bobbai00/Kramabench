@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-172-6-1779102497599",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "usaStates",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n\n    path = 'data/wildfire/input/usa.gpkg'\n    gdf = gpd.read_file(path)\n    # Texera table serializer expects scalar types; convert geometries to WKT strings.\n    gdf = gdf.copy()\n    gdf['geometry_wkt'] = gdf.geometry.to_wkt()\n    gdf = gdf.drop(columns=['geometry'])\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load US states boundaries from usa.gpkg with geopandas.read_file; convert geometry to WKT string column 'geometry_wkt' and drop the original geometry column to avoid non-scalar geometry serialization errors",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifcAreas",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n\n    path = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n    gdf = gpd.read_file(path)\n    # Texera table serializer expects scalar types; convert geometries to WKT strings.\n    gdf = gdf.copy()\n    gdf['geometry_wkt'] = gdf.geometry.to_wkt()\n    gdf = gdf.drop(columns=['geometry'])\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NIFC geographic areas polygons from nifc_geographic_areas.gpkg with geopandas.read_file; convert geometry to WKT string column 'geometry_wkt' and drop the original geometry column to avoid non-scalar geometry serialization errors",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "gaccStateIntersections",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(usaStates, nifcAreas) -> pd.DataFrame:\n    import pandas as pd\n    import geopandas as gpd\n    from shapely import wkt\n\n    # Rehydrate geometries\n    states = gpd.GeoDataFrame(\n        usaStates.copy(),\n        geometry=usaStates['geometry_wkt'].apply(wkt.loads),\n        crs=\"EPSG:4326\",\n    )\n    gacc = gpd.GeoDataFrame(\n        nifcAreas.copy(),\n        geometry=nifcAreas['geometry_wkt'].apply(wkt.loads),\n        crs=\"EPSG:4326\",\n    )\n\n    # Use state-level polygons (adm1) instead of counties (adm2)\n    statePolys = (\n        states[['adm1_id', 'adm1_name', 'geometry']]\n        .drop_duplicates(subset=['adm1_id'])\n        .reset_index(drop=True)\n    )\n\n    # Spatial join: which GACC polygons intersect which states\n    joined = gpd.sjoin(\n        gacc[['GACCAbbreviation', 'GACCName', 'geometry']],\n        statePolys[['adm1_id', 'adm1_name', 'geometry']],\n        how='inner',\n        predicate='intersects',\n    )\n\n    counts = (\n        joined.groupby(['GACCAbbreviation', 'GACCName'])\n        .agg(n_states=('adm1_id', 'nunique'))\n        .reset_index()\n        .sort_values(['n_states', 'GACCAbbreviation'], ascending=[False, True])\n    )\n\n    # Return the winner only (plus count for traceability)\n    top1 = counts.head(1).reset_index(drop=True)\n    return top1\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute which NIFC geographic area (GACC) intersects the most US states: parse WKT back to shapely geometries (EPSG:4326); de-duplicate usaStates to state-level polygons by adm1_id; spatially join nifcAreas to states using predicate='intersects'; group by [GACCAbbreviation, GACCName] and count distinct states (nunique adm1_id) as n_states; sort descending by n_states and return the top 1 row",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "usaStates": {
+        "x": 100,
+        "y": 40
+      },
+      "nifcAreas": {
+        "x": 100,
+        "y": 220
+      },
+      "gaccStateIntersections": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "usaStates-->gaccStateIntersections",
+        "source": {
+          "operatorID": "usaStates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "gaccStateIntersections",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifcAreas-->gaccStateIntersections",
+        "source": {
+          "operatorID": "nifcAreas",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "gaccStateIntersections",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

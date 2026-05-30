@@ -1,0 +1,178 @@
+{
+  "headId": "step-agent-213-10-1779103257399",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "humanCausedAcres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_human_caused_acres.csv'\n    # File is tab-delimited with commas in numbers and some 'N/A' cells.\n    return pd.read_csv(path, sep='\\t')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_human_caused_acres.csv from data/wildfire/input/nifc_human_caused_acres.csv using pd.read_csv with sep='\\t' (tab-delimited); keep default header row; values include comma-formatted numbers and some 'N/A' strings to be cleaned downstream",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "suppressionCosts",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/wildfire/input/nifc_suppression_costs.csv'\n    # File is tab-delimited with clean header (confirmed via raw inspection).\n    # Read as strings first; we'll parse numeric fields downstream.\n    return pd.read_csv(path, sep='\\t', dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_suppression_costs.csv from data/wildfire/input/nifc_suppression_costs.csv using pd.read_csv with sep='\\t' (tab-delimited) and dtype=str for all columns (preserve $ and comma formatting for downstream numeric parsing)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "costPerAcre",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(humanCausedAcres, suppressionCosts) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    acres = humanCausedAcres.copy()\n    costs = suppressionCosts.copy()\n\n    # --- Acres (human-caused) ---\n    # Expect columns: Year + regions + Total (human-caused acres). Use 'Total' explicitly.\n    if 'Year' not in acres.columns:\n        raise ValueError(f\"Expected 'Year' in humanCausedAcres, got {list(acres.columns)}\")\n    if 'Total' not in acres.columns:\n        raise ValueError(\"Expected 'Total' column (human-caused acres total) in humanCausedAcres\")\n\n    acres['year'] = pd.to_numeric(acres['Year'], errors='coerce')\n    acres['human_caused_acres'] = (\n        acres['Total']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.replace('N/A', '', regex=False)\n        .str.strip()\n    )\n    acres['human_caused_acres'] = pd.to_numeric(acres['human_caused_acres'], errors='coerce')\n    acresY = acres[['year', 'human_caused_acres']].dropna(subset=['year'])\n\n    # --- Suppression costs ---\n    # Use 'Total' suppression cost explicitly.\n    if 'Year' not in costs.columns or 'Total' not in costs.columns:\n        raise ValueError(f\"Expected columns ['Year','Total'] in suppressionCosts, got {list(costs.columns)}\")\n\n    costs['year'] = pd.to_numeric(costs['Year'].astype(str).str.strip(), errors='coerce')\n    costs['suppression_cost'] = (\n        costs['Total']\n        .astype(str)\n        .str.replace('$', '', regex=False)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    costs['suppression_cost'] = pd.to_numeric(costs['suppression_cost'], errors='coerce')\n    costsY = costs[['year', 'suppression_cost']].dropna(subset=['year'])\n\n    merged = acresY.merge(costsY, on='year', how='inner')\n    merged = merged.dropna(subset=['human_caused_acres', 'suppression_cost'])\n    merged = merged[merged['human_caused_acres'] > 0]\n\n    merged['cost_per_acre'] = merged['suppression_cost'] / merged['human_caused_acres']\n\n    out = merged.sort_values('cost_per_acre', ascending=False).head(1)\n    return out[['year', 'cost_per_acre']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute suppression cost per acre of human-caused fire by year: from humanCausedAcres use ['Year','Total'] (Total human-caused acres) with numeric coercion (strip commas, treat 'N/A' as missing); from suppressionCosts use ['Year','Total'] (total suppression cost) with numeric coercion (strip '$' and commas); inner join on numeric year; compute cost_per_acre = suppression_cost / human_caused_acres; return highest cost_per_acre year with columns [year, cost_per_acre].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectHumanAcresRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_human_caused_acres.csv'\n    # Read as raw text lines to identify delimiter/header and ragged rows\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:40]\n    return pd.DataFrame({'line_no': list(range(1, len(lines)+1)), 'line': [l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first ~40 raw text lines of nifc_human_caused_acres.csv (data/wildfire/input/nifc_human_caused_acres.csv) by reading file directly; return DataFrame with [line_no, line] to diagnose delimiter, header row, and malformed/ragged records",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspectSuppressionRaw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/nifc_suppression_costs.csv'\n    with open(path, 'r', encoding='utf-8', errors='replace') as f:\n        lines = f.readlines()[:40]\n    return pd.DataFrame({'line_no': list(range(1, len(lines)+1)), 'line': [l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first ~40 raw text lines of nifc_suppression_costs.csv (data/wildfire/input/nifc_suppression_costs.csv) by reading file directly; return DataFrame with [line_no, line] to diagnose delimiter, header, and any metadata rows causing parsing issues",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "humanCausedAcres": {
+        "x": 100,
+        "y": 40
+      },
+      "suppressionCosts": {
+        "x": 100,
+        "y": 220
+      },
+      "costPerAcre": {
+        "x": 400,
+        "y": 130
+      },
+      "inspectHumanAcresRaw": {
+        "x": 100,
+        "y": 400
+      },
+      "inspectSuppressionRaw": {
+        "x": 100,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "humanCausedAcres-->costPerAcre",
+        "source": {
+          "operatorID": "humanCausedAcres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "costPerAcre",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "suppressionCosts-->costPerAcre",
+        "source": {
+          "operatorID": "suppressionCosts",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "costPerAcre",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

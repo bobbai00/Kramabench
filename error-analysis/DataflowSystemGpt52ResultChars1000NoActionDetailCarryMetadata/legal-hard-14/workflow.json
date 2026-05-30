@@ -1,0 +1,336 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_new_england",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    df = pd.read_csv('data/legal/input/new_england_states.csv')\n    return pd.concat([df.head(3), df.tail(3)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample new_england_states.csv to inspect columns and state list for New England",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_msa_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    paths = sorted(glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'))\n    return pd.DataFrame({'path': paths}).head(10)"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List and sample the available CSV files under State MSA Identity Theft data/ to see what files exist",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "new_england",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    return pd.read_csv('data/legal/input/new_england_states.csv')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full data/legal/input/new_england_states.csv containing New England state names",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_one_state_msa",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob\n    path = sorted(glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'))[0]\n    df = pd.read_csv(path)\n    return pd.concat([df.head(3), df.tail(3)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first and last 3 rows from one State MSA Identity Theft data CSV to inspect schema (columns, year fields, report counts)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "msa_all_states",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    import os\n\n    paths = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    rows = []\n    for p in paths:\n        state = os.path.splitext(os.path.basename(p))[0]\n        df = pd.read_csv(p, header=None)\n        # Find header row containing 'Metropolitan Area' and '# of Reports'\n        header_idx = None\n        for i in range(min(len(df), 50)):\n            a = str(df.iloc[i, 0]) if df.shape[1] > 0 else ''\n            b = str(df.iloc[i, 1]) if df.shape[1] > 1 else ''\n            if 'Metropolitan Area' in a and ('# of Reports' in b or 'Reports' in b):\n                header_idx = i\n                break\n        if header_idx is None:\n            continue\n        df2 = pd.read_csv(p, skiprows=header_idx+1, header=None, names=['metropolitan_area','reports'])\n        # Drop blank rows and source/footer\n        df2 = df2.dropna(subset=['metropolitan_area'])\n        df2 = df2[~df2['metropolitan_area'].astype(str).str.startswith('Source:', na=False)]\n        df2['state_file'] = state\n        rows.append(df2)\n\n    out = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame(columns=['metropolitan_area','reports','state_file'])\n    return out"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and concatenate all State MSA Identity Theft data CSVs; detect header row, extract rows of (metropolitan_area, reports) and add state_file from filename (FTC CSN Data Book 2024 MSA identity theft reports).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "new_england_states",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(new_england):\n    import pandas as pd\n    s = new_england.copy()\n    # normalize\n    col = s.columns[0]\n    s['state'] = s[col].astype(str).str.strip()\n    return s[['state']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Normalize New England state names into a single column 'state'.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "msa_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(msa_all_states):\n    import pandas as pd\n    df = msa_all_states.copy()\n    # keep only rows with a numeric-ish reports value\n    df['reports_num'] = (\n        df['reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df.loc[df['reports_num'].isin(['nan', 'None', '']), 'reports_num'] = pd.NA\n    df['reports_num'] = pd.to_numeric(df['reports_num'], errors='coerce')\n\n    # clean metro area label (drop possible header/footer rows by requiring reports_num)\n    df = df[df['reports_num'].notna()].copy()\n    df['metropolitan_area'] = df['metropolitan_area'].astype(str).str.strip()\n\n    # normalize state_file to match state names\n    df['state'] = (\n        df['state_file']\n        .astype(str)\n        .str.replace(r'(?i)districtofcolumbia', 'District of Columbia', regex=True)\n        .str.replace(r'(?i)\\s+', ' ', regex=True)\n        .str.strip()\n    )\n    return df[['state', 'metropolitan_area', 'reports_num']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean concatenated MSA identity theft table: parse reports to numeric, drop non-data rows, and normalize state name from filename into 'state'.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "msa_new_england",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(msa_clean, new_england_states):\n    import pandas as pd\n    ne = set(new_england_states['state'].astype(str).str.strip())\n    out = msa_clean[msa_clean['state'].isin(ne)].copy()\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter cleaned MSA identity theft reports to only New England states (CT, ME, MA, NH, RI, VT).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "top5_new_england_msa",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(msa_new_england):\n    import pandas as pd\n    out = msa_new_england.copy()\n    out = out.sort_values(['reports_num','metropolitan_area'], ascending=[False, True]).head(5)\n    return out[['metropolitan_area']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sort New England MSA identity theft reports by reports_num desc and return the top 5 distinct metropolitan_area names (as a single-column table).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_new_england": {
+      "x": 100,
+      "y": 40
+    },
+    "sample_msa_files": {
+      "x": 100,
+      "y": 220
+    },
+    "new_england": {
+      "x": 100,
+      "y": 760
+    },
+    "sample_one_state_msa": {
+      "x": 100,
+      "y": 580
+    },
+    "msa_all_states": {
+      "x": 100,
+      "y": 400
+    },
+    "new_england_states": {
+      "x": 430,
+      "y": 760
+    },
+    "msa_clean": {
+      "x": 430,
+      "y": 400
+    },
+    "msa_new_england": {
+      "x": 760,
+      "y": 580
+    },
+    "top5_new_england_msa": {
+      "x": 1090,
+      "y": 580
+    }
+  },
+  "links": [
+    {
+      "linkID": "new_england-->new_england_states",
+      "source": {
+        "operatorID": "new_england",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "new_england_states",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "msa_all_states-->msa_clean",
+      "source": {
+        "operatorID": "msa_all_states",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "msa_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "msa_clean-->msa_new_england",
+      "source": {
+        "operatorID": "msa_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "msa_new_england",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "new_england_states-->msa_new_england",
+      "source": {
+        "operatorID": "new_england_states",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "msa_new_england",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "msa_new_england-->top5_new_england_msa",
+      "source": {
+        "operatorID": "msa_new_england",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "top5_new_england_msa",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

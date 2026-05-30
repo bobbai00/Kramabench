@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-69-7-1779139902964",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv'\n    # File has a title row and other footer rows; the real header starts on the row with: Year, # of Reports\n    df = pd.read_csv(path, skiprows=1)\n    # Drop empty/footer rows and normalize numeric\n    df = df.rename(columns={df.columns[0]: 'year', df.columns[1]: 'reports'})\n    df = df[df['year'].notna()]\n    df = df[df['year'].astype(str).str.fullmatch(r'\\d{4}')]\n    df['year'] = df['year'].astype(int)\n    df['reports'] = (df['reports'].astype(str)\n                    .str.replace(',', '', regex=False)\n                    .str.strip())\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df.dropna(subset=['reports'])\n    return df[['year', 'reports']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv via pd.read_csv with skiprows=1 to use the 'Year' / '# of Reports' header row; drop non-year/footer rows (keep year matching 4 digits), rename to [year, reports], parse reports as numeric by removing thousands separators.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "reportCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # File appears to be Windows-1252 encoded (smart quotes etc.), so use cp1252.\n    return pd.read_csv(path, encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Categories.csv via pd.read_csv with encoding='cp1252' (Windows-1252) to handle smart-quote bytes that break UTF-8; keep first row as header, comma delimiter.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "autoRelated2007Hypothetical",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCount, reportCategories):\n    import pandas as pd\n    import numpy as np\n\n    # 2007 total reports\n    total2007 = reportCount.loc[reportCount['year'] == 2007, 'reports']\n    if total2007.empty:\n        raise ValueError('Year 2007 not found in reportCount')\n    total2007 = float(total2007.iloc[0])\n\n    # Clean categories table: find header row containing Rank/Category/# of Reports/Percentage\n    rc = reportCategories.copy()\n    header_row_idx = None\n    for i in range(min(len(rc), 10)):\n        row = rc.iloc[i].astype(str).str.strip().str.lower().tolist()\n        if ('rank' in row[0]) and ('category' in row[1]) and ('percentage' in row[3]):\n            header_row_idx = i\n            break\n    if header_row_idx is None:\n        raise ValueError('Could not locate header row in reportCategories')\n\n    # Re-read using the detected header row by reconstructing dataframe\n    # (we already have the data loaded; just set columns and slice below)\n    data = rc.iloc[header_row_idx + 1:].copy()\n    data.columns = ['rank', 'category', 'numReports2024', 'percentage2024']\n\n    # Drop blank/footer rows\n    data = data.dropna(subset=['rank', 'category', 'percentage2024'], how='any')\n    data = data[~data['rank'].astype(str).str.contains('source', case=False, na=False)]\n\n    # Parse percentage\n    data['percentage2024'] = (\n        data['percentage2024']\n        .astype(str)\n        .str.replace('%', '', regex=False)\n        .str.strip()\n    )\n    data['percentage2024'] = pd.to_numeric(data['percentage2024'], errors='coerce') / 100.0\n\n    # Locate Auto Related category (case-insensitive exact match after stripping)\n    target = data[data['category'].astype(str).str.strip().str.lower() == 'auto related']\n    if target.empty:\n        # fallback: contains match\n        target = data[data['category'].astype(str).str.lower().str.contains('auto related', na=False)]\n    if target.empty:\n        raise ValueError('Auto Related category not found in reportCategories')\n\n    pct = float(target['percentage2024'].iloc[0])\n    auto2007 = int(np.rint(total2007 * pct))\n\n    return pd.DataFrame([{\n        'year': 2007,\n        'totalReports2007': total2007,\n        'autoRelatedPct2024': pct,\n        'autoRelatedReports2007Hypothetical': auto2007\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute hypothetical 2007 Auto Related report count assuming 2007 category distribution equals 2024: take total 2007 reports from reportCount where year=2007; clean reportCategories by detecting the true header row (Rank/Category/# of Reports/Percentage), renaming columns to [rank, category, numReports2024, percentage2024], dropping blanks/footer; parse percentage2024 to numeric fraction; extract 'Auto Related' percentage and multiply by total2007, rounding to nearest integer (np.rint).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCount": {
+        "x": 100,
+        "y": 40
+      },
+      "reportCategories": {
+        "x": 100,
+        "y": 220
+      },
+      "autoRelated2007Hypothetical": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCount-->autoRelated2007Hypothetical",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "autoRelated2007Hypothetical",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "reportCategories-->autoRelated2007Hypothetical",
+        "source": {
+          "operatorID": "reportCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "autoRelated2007Hypothetical",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

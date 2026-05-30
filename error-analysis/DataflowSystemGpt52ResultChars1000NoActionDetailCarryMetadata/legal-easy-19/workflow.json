@@ -1,0 +1,126 @@
+{
+  "operators": [
+    {
+      "operatorID": "fraud_2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Amount_Lost.csv'\n    df = pd.read_csv(path)\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load 2024_CSN_Fraud_Reports_by_Amount_Lost.csv from data/legal/input/csn-data-book-2024-csv/CSVs",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "clean_fraud_2024",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(fraud_2024):\n    import pandas as pd\n    df = fraud_2024.copy()\n    df = df.rename(columns={df.columns[0]:'category', df.columns[1]:'value', df.columns[2]:'note'})\n    # keep rows with a category and a value that looks numeric\n    df = df[df['category'].notna() & df['value'].notna()]\n    # strip spaces\n    df['category'] = df['category'].astype(str).str.strip()\n    df['value_raw'] = df['value'].astype(str).str.strip()\n    # parse integer counts (remove commas and non-digits)\n    df['reports'] = pd.to_numeric(df['value_raw'].str.replace(r'[^0-9]', '', regex=True), errors='coerce')\n    return df[['category','reports']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Rename columns, drop blank rows, parse report counts as integers from the value column; output category and reports",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "prop_1_500",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef process(clean_fraud_2024) -> pd.DataFrame:\n    df = clean_fraud_2024.copy()\n    # total reporters with $ loss\n    total = df.loc[df['category'].eq('Reports with $ Loss'), 'reports'].iloc[0]\n    # sum buckets $1-$100, $101-$200, $201-$300, $301-$400, $401-$500\n    buckets = ['$1 - $100', '$101 - $200', '$201 - $300', '$301 - $400', '$401 - $500']\n    lost_1_500 = df.loc[df['category'].isin(buckets), 'reports'].sum()\n    prop = lost_1_500 / total\n    return pd.DataFrame({'proportion':[prop]})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute proportion of reporters with $ loss who lost between $1-$500: sum report counts for $1-$100, $101-$200, $201-$300, $301-$400, $401-$500 and divide by 'Reports with $ Loss'.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "fraud_2024": {
+      "x": 100,
+      "y": 40
+    },
+    "clean_fraud_2024": {
+      "x": 430,
+      "y": 40
+    },
+    "prop_1_500": {
+      "x": 760,
+      "y": 40
+    }
+  },
+  "links": [
+    {
+      "linkID": "fraud_2024-->clean_fraud_2024",
+      "source": {
+        "operatorID": "fraud_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "clean_fraud_2024",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "clean_fraud_2024-->prop_1_500",
+      "source": {
+        "operatorID": "clean_fraud_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "prop_1_500",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

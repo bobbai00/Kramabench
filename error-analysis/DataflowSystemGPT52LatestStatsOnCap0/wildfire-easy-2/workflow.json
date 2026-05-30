@@ -1,0 +1,223 @@
+{
+  "headId": "step-agent-207-9-1779103061917",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "usaGpkg",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    path = 'data/wildfire/input/usa.gpkg'\n    layers = gpd.list_layers(path)\n    # Return layer list for inspection\n    return layers"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect usa.gpkg layers via geopandas.list_layers; return a DataFrame of available layer names and geometry types to identify the US states layer to use",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifcAreasGpkg",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    path = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n    layers = gpd.list_layers(path)\n    return layers"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect nifc_geographic_areas.gpkg layers via geopandas.list_layers; return a DataFrame of available layer names and geometry types to identify the NIFC geographic areas layer and its abbreviation field",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadUsaAdm2",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    import pandas as pd\n\n    path = 'data/wildfire/input/usa.gpkg'\n    layer = 'usa_adm2'\n\n    gdf = gpd.read_file(path, layer=layer)\n\n    # Identify a state-level grouping key\n    if 'adm1_code' in gdf.columns:\n        by = 'adm1_code'\n    elif 'adm1_name' in gdf.columns:\n        by = 'adm1_name'\n    elif 'name_1' in gdf.columns:\n        by = 'name_1'\n    elif 'NAME_1' in gdf.columns:\n        by = 'NAME_1'\n    elif 'state' in gdf.columns:\n        by = 'state'\n    else:\n        by = None\n\n    if by is None:\n        raise ValueError(f\"Could not find a state-level key in columns: {list(gdf.columns)[:50]}\")\n\n    # GeoPandas dissolve returns a GeoDataFrame; keep it that way\n    statesGdf = gdf[[by, 'geometry']].dissolve(by=by).reset_index()\n\n    # Ensure CRS is set (assume WGS84 if missing)\n    if statesGdf.crs is None:\n        statesGdf = statesGdf.set_crs('EPSG:4326')\n\n    # Serialize geometry to WKT and return a plain pandas DataFrame\n    out = pd.DataFrame({\n        'stateKey': statesGdf[by].astype(str),\n        'geometryWkt': statesGdf.geometry.to_wkt()\n    })\n    return out"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load usa.gpkg (usa_adm2) via geopandas.read_file; dissolve county-level geometries to state-level by detected key (prefers adm1_code, else adm1_name/name_1/NAME_1/state); assume EPSG:4326 if CRS missing; return pandas DataFrame with ['stateKey','geometryWkt'] (WKT-serialized state geometries).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadNifcAreas",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import geopandas as gpd\n    import pandas as pd\n\n    path = 'data/wildfire/input/nifc_geographic_areas.gpkg'\n    layer = 'National_GACC_Final_20250113'\n    gdf = gpd.read_file(path, layer=layer)\n\n    # Find abbreviation column\n    cand_cols = [c for c in gdf.columns if c.lower() in {\n        'abbr','abbrev','abbreviation','gacc_abbr','gaccabbr','shortname','short_name','gacc'\n    }]\n    if len(cand_cols) == 0:\n        cand_cols = [c for c in gdf.columns if 'abbr' in c.lower()]\n\n    abbr_col = cand_cols[0] if len(cand_cols) else None\n\n    # Find a human-readable name column\n    name_cols = [c for c in gdf.columns if c.lower() in {'name','gaccname','gacc_name','area_name','areaname','geo_area','geographic_area'}]\n    keep = []\n    if abbr_col:\n        keep.append(abbr_col)\n    if name_cols:\n        keep.append(name_cols[0])\n    keep.append('geometry')\n\n    out = gdf[keep].copy()\n    if abbr_col and abbr_col != 'abbr':\n        out = out.rename(columns={abbr_col: 'abbr'})\n    if name_cols and name_cols[0] != 'areaName':\n        out = out.rename(columns={name_cols[0]: 'areaName'})\n\n    if out.crs is None:\n        out = out.set_crs('EPSG:4326')\n\n    # Ensure we return a plain DataFrame with WKT geometry to satisfy downstream typing constraints\n    out_df = pd.DataFrame(out.drop(columns=['geometry']))\n    out_df['geometryWkt'] = out.geometry.to_wkt()\n\n    return out_df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load nifc_geographic_areas.gpkg layer=National_GACC_Final_20250113 via geopandas.read_file; detect abbreviation column (rename to 'abbr') and optional name column (rename to 'areaName'); set CRS to EPSG:4326 if missing; return a pandas DataFrame with non-geometry columns plus geometry serialized to WKT in 'geometryWkt' (avoids geometry type mismatch errors)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "areaStateIntersections",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadUsaAdm2, loadNifcAreas) -> pd.DataFrame:\n    import geopandas as gpd\n    import pandas as pd\n    from shapely import wkt\n\n    states_df = loadUsaAdm2.copy()\n    areas_df = loadNifcAreas.copy()\n\n    # Expect WKT-serialized geometries\n    if 'geometryWkt' not in states_df.columns or 'geometryWkt' not in areas_df.columns:\n        raise ValueError(\"Expected 'geometryWkt' column in both inputs (WKT-serialized geometries).\")\n\n    states_gdf = gpd.GeoDataFrame(\n        states_df.drop(columns=['geometryWkt']),\n        geometry=states_df['geometryWkt'].map(wkt.loads),\n        crs='EPSG:4326',\n    )\n    areas_gdf = gpd.GeoDataFrame(\n        areas_df.drop(columns=['geometryWkt']),\n        geometry=areas_df['geometryWkt'].map(wkt.loads),\n        crs='EPSG:4326',\n    )\n\n    # Harmonize CRS (both set to EPSG:4326 above; keep logic in case of future changes)\n    if states_gdf.crs is not None and areas_gdf.crs is not None and states_gdf.crs != areas_gdf.crs:\n        areas_gdf = areas_gdf.to_crs(states_gdf.crs)\n\n    # Identify state identifier column\n    state_cols = [c for c in ['stateKey', 'adm1_name', 'name_1', 'NAME_1', 'state', 'NAME', 'name'] if c in states_gdf.columns]\n    if not state_cols:\n        # Fallback: first non-geometry column\n        state_cols = [c for c in states_gdf.columns if c != 'geometry']\n    state_id = state_cols[0]\n\n    # Spatial join areas->states\n    joined = gpd.sjoin(\n        areas_gdf[['abbr', 'geometry']],\n        states_gdf[[state_id, 'geometry']],\n        how='inner',\n        predicate='intersects',\n    )\n\n    counts = (\n        joined.drop_duplicates(subset=['abbr', state_id])\n        .groupby('abbr')[state_id]\n        .nunique()\n        .reset_index(name='nStates')\n        .sort_values(['nStates', 'abbr'], ascending=[False, True])\n    )\n\n    return counts.head(1)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert state and NIFC area WKT geometries ('geometryWkt') to GeoDataFrames in EPSG:4326; spatially join NIFC areas to states with predicate='intersects'; count distinct states intersected per area (drop duplicate area-state pairs); sort by nStates desc then abbr asc; return top 1 row [abbr, nStates].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "finalAbbreviation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(areaStateIntersections) -> pd.DataFrame:\n    import pandas as pd\n    if areaStateIntersections.shape[0] == 0:\n        return pd.DataFrame([{'abbr': None}])\n    return pd.DataFrame([{'abbr': str(areaStateIntersections.iloc[0]['abbr'])}])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Select the top-intersecting NIFC geographic area's abbreviation from areaStateIntersections; output a single-row DataFrame with column 'abbr' as string",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "usaGpkg": {
+        "x": 100,
+        "y": 40
+      },
+      "nifcAreasGpkg": {
+        "x": 100,
+        "y": 220
+      },
+      "loadUsaAdm2": {
+        "x": 100,
+        "y": 400
+      },
+      "loadNifcAreas": {
+        "x": 100,
+        "y": 580
+      },
+      "areaStateIntersections": {
+        "x": 400,
+        "y": 490
+      },
+      "finalAbbreviation": {
+        "x": 700,
+        "y": 490
+      }
+    },
+    "links": [
+      {
+        "linkID": "areaStateIntersections-->finalAbbreviation",
+        "source": {
+          "operatorID": "areaStateIntersections",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "finalAbbreviation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadUsaAdm2-->areaStateIntersections",
+        "source": {
+          "operatorID": "loadUsaAdm2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "areaStateIntersections",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "loadNifcAreas-->areaStateIntersections",
+        "source": {
+          "operatorID": "loadNifcAreas",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "areaStateIntersections",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

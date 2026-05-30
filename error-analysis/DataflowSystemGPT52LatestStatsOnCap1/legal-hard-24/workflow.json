@@ -1,0 +1,284 @@
+{
+  "headId": "step-agent-619-10-1779125400997",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "stateRankingsFraudOther",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv'\n    # File contains non-UTF8 bytes (e.g., NBSP 0xA0). Use latin-1 and strip NBSP.\n    df = pd.read_csv(path, encoding='latin-1')\n    df.columns = [c.replace('\\xa0', ' ').strip() for c in df.columns]\n    for col in df.select_dtypes(include='object').columns:\n        df[col] = df[col].astype(str).str.replace('\\xa0', ' ', regex=False).str.strip()\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv with encoding='latin-1' to avoid UnicodeDecodeError; normalize headers and string cells by replacing NBSP (\\xa0) with space and stripping whitespace",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "stateRankingsIdentityTheft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv'\n    # File contains non-UTF8 bytes (e.g., NBSP 0xA0). Use latin-1 and strip NBSP.\n    df = pd.read_csv(path, encoding='latin-1')\n    df.columns = [c.replace('\\xa0', ' ').strip() for c in df.columns]\n    for col in df.select_dtypes(include='object').columns:\n        df[col] = df[col].astype(str).str.replace('\\xa0', ' ', regex=False).str.strip()\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Identity_Theft_Reports.csv with encoding='latin-1' to avoid UnicodeDecodeError; normalize headers and string cells by replacing NBSP (\\xa0) with space and stripping whitespace",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msaIdentityTheftFiles",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    import glob\n    paths = sorted(glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'))\n    if not paths:\n        raise FileNotFoundError('No files matched glob for State MSA Identity Theft data')\n    return pd.DataFrame({'path': paths})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all CSV paths matching glob data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv into a single-column DataFrame ['path'] (sorted); used to drive subsequent multi-file load",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "totalReportsByState",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(stateRankingsFraudOther, stateRankingsIdentityTheft) -> pd.DataFrame:\n    import pandas as pd\n\n    def _prep(df: pd.DataFrame) -> pd.DataFrame:\n        # Real header is on row where first column equals 'Rank'\n        d = df.copy()\n        first_col = d.columns[0]\n        header_idx = d.index[d[first_col].astype(str).str.strip().eq('Rank')]\n        if len(header_idx) == 0:\n            raise ValueError('Could not find header row containing Rank')\n        h = int(header_idx[0])\n        new_cols = d.loc[h].tolist()\n        d = d.loc[h + 1:].copy()\n        d.columns = new_cols\n        d = d[['State', '# of Reports']].copy()\n        d['# of Reports'] = (\n            d['# of Reports']\n            .astype(str)\n            .str.replace(',', '', regex=False)\n            .str.strip()\n        )\n        d['# of Reports'] = pd.to_numeric(d['# of Reports'], errors='coerce')\n        d = d.dropna(subset=['State', '# of Reports'])\n        d['State'] = d['State'].astype(str).str.strip()\n        return d\n\n    fraud = _prep(stateRankingsFraudOther).rename(columns={'# of Reports': 'fraudOtherReports'})\n    it = _prep(stateRankingsIdentityTheft).rename(columns={'# of Reports': 'identityTheftReports'})\n\n    merged = fraud.merge(it, on='State', how='outer')\n    merged['fraudOtherReports'] = merged['fraudOtherReports'].fillna(0)\n    merged['identityTheftReports'] = merged['identityTheftReports'].fillna(0)\n    merged['totalReportsAllTypes'] = merged['fraudOtherReports'] + merged['identityTheftReports']\n\n    # Include DC and PR if present (they are treated as 'State' rows in rankings files)\n    out = merged.sort_values('totalReportsAllTypes', ascending=False).reset_index(drop=True)\n    return out[['State', 'fraudOtherReports', 'identityTheftReports', 'totalReportsAllTypes']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse both state rankings CSV tables by locating the in-file header row where first column equals 'Rank' (skipping title/source rows), then select ['State', '# of Reports']; convert '# of Reports' from comma-formatted strings to numeric; outer-join on State; compute totalReportsAllTypes = fraudOtherReports + identityTheftReports; return states sorted descending by totalReportsAllTypes with columns [State, fraudOtherReports, identityTheftReports, totalReportsAllTypes]",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "topStateAllReports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(totalReportsByState) -> pd.DataFrame:\n    import pandas as pd\n\n    d = totalReportsByState.copy()\n    d = d.dropna(subset=['State', 'totalReportsAllTypes'])\n    d = d.sort_values('totalReportsAllTypes', ascending=False)\n    top = d.head(1).copy()\n    # Ensure string normalization for matching to MSA filenames\n    top['State'] = top['State'].astype(str).str.strip()\n    return top[['State', 'totalReportsAllTypes', 'fraudOtherReports', 'identityTheftReports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Select the single state/territory row with the maximum totalReportsAllTypes from totalReportsByState (already computed as fraudOtherReports + identityTheftReports); return top 1 with columns [State, totalReportsAllTypes, fraudOtherReports, identityTheftReports] for downstream MSA lookup",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "topMsaIdentityTheftInTopState",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topStateAllReports, msaIdentityTheftFiles) -> pd.DataFrame:\n    import pandas as pd\n    import re\n\n    top_state = topStateAllReports.iloc[0]['State']\n\n    def normalize_for_filename(s: str) -> str:\n        return re.sub(r\"[^A-Za-z0-9]\", \"\", str(s))\n\n    target_norm = normalize_for_filename(top_state)\n    paths = msaIdentityTheftFiles.copy()\n    paths['file'] = paths['path'].str.split('/').str[-1].str.replace('.csv', '', regex=False)\n    paths['fileNorm'] = paths['file'].apply(normalize_for_filename)\n\n    match = paths.loc[paths['fileNorm'].eq(target_norm)]\n    if match.empty:\n        return pd.DataFrame([{\n            'State': top_state,\n            'error': f\"No per-state MSA identity theft CSV found for normalized state '{target_norm}'\"\n        }])\n\n    path = match.iloc[0]['path']\n\n    # California.csv structure (inspected):\n    # row0: title, row1 blank, row2 header ['Metropolitan Area', '# of Reports'], then data rows, then blanks/source.\n    raw = pd.read_csv(path, header=None, dtype=str, encoding='latin-1')\n    raw = raw.applymap(lambda x: x.replace('\\xa0', ' ').strip() if isinstance(x, str) else x)\n\n    # find header row that contains 'Metropolitan Area' and '# of Reports'\n    def is_header_row(row) -> bool:\n        vals = [str(v).strip() if v is not None else '' for v in row.tolist()]\n        return (len(vals) >= 2 and vals[0].lower() == 'metropolitan area' and '# of reports' in vals[1].lower())\n\n    header_idx = None\n    for i in range(len(raw)):\n        if is_header_row(raw.iloc[i]):\n            header_idx = i\n            break\n\n    if header_idx is None:\n        return pd.DataFrame([{'State': top_state, 'path': path, 'error': \"Could not locate header row (Metropolitan Area / # of Reports) in MSA file\"}])\n\n    df = raw.iloc[header_idx + 1:].copy()\n    df = df.rename(columns={0: 'Metropolitan Area', 1: '# of Reports'})\n    df = df[['Metropolitan Area', '# of Reports']]\n\n    # drop footers/blanks\n    df = df[df['Metropolitan Area'].notna()]\n    df['Metropolitan Area'] = df['Metropolitan Area'].astype(str).str.strip()\n    df = df[df['Metropolitan Area'].ne('')]\n    df = df[~df['Metropolitan Area'].str.lower().str.startswith('source:')]\n    df = df[~df['Metropolitan Area'].str.lower().str.startswith('metropolitan areas are defined')]\n\n    df['reports'] = pd.to_numeric(df['# of Reports'].astype(str).str.replace(',', '', regex=False), errors='coerce')\n    df = df.dropna(subset=['reports'])\n\n    top_msa = df.sort_values(['reports', 'Metropolitan Area'], ascending=[False, True]).head(1)\n    out = pd.DataFrame([{\n        'State': top_state,\n        'metropolitanArea': top_msa.iloc[0]['Metropolitan Area'],\n        'identityTheftReports': int(top_msa.iloc[0]['reports']),\n    }])\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For the state with maximum totalReportsAllTypes (from topStateAllReports), locate its matching per-state MSA identity theft CSV by normalizing state name to filename; read the CSV with header=None, encoding='latin-1', strip NBSP/whitespace; detect the in-file header row where col0 == 'Metropolitan Area' and col1 contains '# of Reports'; parse subsequent rows as ['Metropolitan Area', '# of Reports'], drop blank/footer rows, coerce '# of Reports' to numeric; select the metro with the maximum identity theft reports and return [State, metropolitanArea, identityTheftReports].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspectCaliforniaMsaFile",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/California.csv\"\n    # Read without header inference so we can see how the file is structured.\n    df = pd.read_csv(path, header=None, dtype=str, encoding='latin-1', nrows=40)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect raw structure of California.csv (State MSA Identity Theft data) by reading first 40 rows with header=None, dtype=str, encoding='latin-1'; used to identify true header row / delimiter issues",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "stateRankingsFraudOther": {
+        "x": 100,
+        "y": 40
+      },
+      "stateRankingsIdentityTheft": {
+        "x": 100,
+        "y": 220
+      },
+      "msaIdentityTheftFiles": {
+        "x": 700,
+        "y": 310
+      },
+      "totalReportsByState": {
+        "x": 400,
+        "y": 130
+      },
+      "topStateAllReports": {
+        "x": 700,
+        "y": 130
+      },
+      "topMsaIdentityTheftInTopState": {
+        "x": 1000,
+        "y": 220
+      },
+      "inspectCaliforniaMsaFile": {
+        "x": 100,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "stateRankingsFraudOther-->totalReportsByState",
+        "source": {
+          "operatorID": "stateRankingsFraudOther",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "totalReportsByState",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "stateRankingsIdentityTheft-->totalReportsByState",
+        "source": {
+          "operatorID": "stateRankingsIdentityTheft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "totalReportsByState",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "totalReportsByState-->topStateAllReports",
+        "source": {
+          "operatorID": "totalReportsByState",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topStateAllReports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "topStateAllReports-->topMsaIdentityTheftInTopState",
+        "source": {
+          "operatorID": "topStateAllReports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topMsaIdentityTheftInTopState",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "msaIdentityTheftFiles-->topMsaIdentityTheftInTopState",
+        "source": {
+          "operatorID": "msaIdentityTheftFiles",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "topMsaIdentityTheftInTopState",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    # Try common encodings for CSVs exported from Excel/Windows\n    for enc in ['utf-8-sig', 'cp1252', 'latin1']:\n        try:\n            df = pd.read_csv(path, encoding=enc)\n            df['_encoding_used'] = enc\n            return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n        except UnicodeDecodeError:\n            continue\n    # Fallback with replacement to at least inspect structure\n    df = pd.read_csv(path, encoding='latin1')\n    df['_encoding_used'] = 'latin1'\n    return pd.concat([df.head(5), df.tail(5)], ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows from 2024_CSN_Report_Categories.csv, trying common encodings (utf-8-sig/cp1252/latin1) to fix UnicodeDecodeError",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "categories",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    encodings = ['utf-8-sig','cp1252','latin1']\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv'\n    last_err=None\n    for enc in encodings:\n        try:\n            df = pd.read_csv(path, encoding=enc)\n            df['_encoding_used']=enc\n            return df\n        except Exception as e:\n            last_err=e\n    raise last_err\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Report_Categories.csv (try utf-8-sig/cp1252/latin1 encodings)",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "clean_categories",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(categories):\n    import pandas as pd\n    df = categories.copy()\n\n    # Keep rows that look like data rows: rank is numeric\n    df = df.rename(columns={\n        'Report Categories': 'rank_raw',\n        'Unnamed: 1': 'category',\n        'Unnamed: 2': 'reports_raw',\n        'Unnamed: 3': 'pct_raw'\n    })\n\n    df['rank'] = pd.to_numeric(df['rank_raw'], errors='coerce')\n    df = df[df['rank'].notna()].copy()\n\n    # Parse reports and percentage\n    df['reports'] = (df['reports_raw']\n                    .astype(str)\n                    .str.replace(',', '', regex=False)\n                    .str.strip())\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n\n    df['pct'] = (df['pct_raw']\n                 .astype(str)\n                 .str.replace('%', '', regex=False)\n                 .str.strip())\n    df['pct'] = pd.to_numeric(df['pct'], errors='coerce') / 100.0\n\n    # Basic cleanup\n    df['category'] = df['category'].astype(str).str.strip()\n\n    out = df[['rank','category','reports','pct']].sort_values('rank')\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean 2024 report categories table: rename columns, keep numeric Rank rows, parse # of Reports (remove commas) and Percentage (as proportion), output rank/category/reports/pct sorted by rank",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "min_categories_50pct",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(clean_categories):\n    import pandas as pd\n\n    df = clean_categories.copy()\n    # Sort by share descending (or reports descending) to accumulate fastest to 50%\n    df = df.sort_values(['pct','reports'], ascending=[False, False]).reset_index(drop=True)\n    df['cum_pct'] = df['pct'].cumsum()\n    # minimum k such that cumulative >= 0.5\n    k = int((df['cum_pct'] >= 0.5).idxmax() + 1)\n    out = df.head(k).copy()\n    out['k'] = k\n    return out[['k','rank','category','reports','pct','cum_pct']]\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sort categories by pct descending, compute cumulative percentage, and return the first k categories whose cumulative pct reaches at least 50% (including k value).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_categories": {
+      "x": 100,
+      "y": 40
+    },
+    "categories": {
+      "x": 100,
+      "y": 220
+    },
+    "clean_categories": {
+      "x": 430,
+      "y": 220
+    },
+    "min_categories_50pct": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "categories-->clean_categories",
+      "source": {
+        "operatorID": "categories",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "clean_categories",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "clean_categories-->min_categories_50pct",
+      "source": {
+        "operatorID": "clean_categories",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "min_categories_50pct",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

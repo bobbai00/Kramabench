@@ -1,0 +1,239 @@
+{
+  "operators": [
+    {
+      "operatorID": "msa_html",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    path = 'data/legal/input/metropolitan_statistics.html'\n    # read all tables; keep table index and raw columns for inspection\n    tables = pd.read_html(path)\n    out = []\n    for i, t in enumerate(tables):\n        t = t.copy()\n        t.columns = [str(c) for c in t.columns]\n        t['__table_index'] = i\n        out.append(t)\n    return pd.concat(out, ignore_index=True, sort=False)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load all HTML tables from data/legal/input/metropolitan_statistics.html into one DataFrame with a __table_index column for selecting the correct population table.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "it_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load():\n    import pandas as pd, glob\n    paths = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*')\n    return pd.DataFrame({'path': sorted(paths)})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List identity theft CSV files available under data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "it_all",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd, glob, os\n    paths = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = []\n    for p in paths:\n        df = pd.read_csv(p)\n        df['__source'] = os.path.basename(p)\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load and concatenate all identity theft CSVs under data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv, adding __source filename column",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "msa_pop",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(msa_html):\n    import pandas as pd\n    import numpy as np\n    df = msa_html.copy()\n\n    # Identify rows that look like the metro population table: need name and both 2024 estimate and 2020 census\n    name_col = 'Metropolitan statistical area'\n    est_col = '2024 estimate'\n    cen_col = '2020 census'\n    if name_col not in df.columns:\n        # fallback: pick best matching column by case-insensitive contains\n        cols = {c.lower(): c for c in df.columns}\n        for key, target in [('metropolitan statistical area', name_col), ('2024 estimate', est_col), ('2020 census', cen_col)]:\n            if key in cols:\n                locals()[target.replace(' ', '_')] = cols[key]\n        name_col = cols.get('metropolitan statistical area', name_col)\n        est_col = cols.get('2024 estimate', est_col)\n        cen_col = cols.get('2020 census', cen_col)\n\n    pop = df[[name_col, est_col, cen_col]].copy()\n    pop = pop.rename(columns={name_col: 'msa_name_raw', est_col: 'pop_2024', cen_col: 'pop_2020'})\n\n    # Keep plausible rows\n    pop['msa_name_raw'] = pop['msa_name_raw'].astype('string')\n    pop = pop[pop['msa_name_raw'].notna()]\n\n    # Coerce numeric\n    for c in ['pop_2024', 'pop_2020']:\n        pop[c] = pd.to_numeric(pop[c], errors='coerce')\n\n    pop = pop.dropna(subset=['pop_2024', 'pop_2020'])\n\n    # Interpolate 2023 linearly between 2020 and 2024\n    pop['pop_2023'] = pop['pop_2020'] + (pop['pop_2024'] - pop['pop_2020']) * (3.0/4.0)\n\n    # Deduplicate by msa_name_raw keeping max pop_2023 (in case of duplicates)\n    pop = pop.sort_values('pop_2023', ascending=False).drop_duplicates(['msa_name_raw'])\n\n    return pop.reset_index(drop=True)\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Extract MSA population rows from msa_html using columns 'Metropolitan statistical area', '2024 estimate', '2020 census'; coerce to numeric; linearly interpolate pop_2023 between 2020 and 2024; deduplicate by msa_name_raw.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "it_2023",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(it_all):\n    import pandas as pd\n    df = it_all.copy()\n    df.columns = [c.strip() for c in df.columns]\n    name_col = [c for c in df.columns if 'Metropolitan Areas' in c][0]\n    val_col = 'Unnamed: 1'\n    df = df[[name_col, val_col, '__source']].rename(columns={name_col:'msa_name_raw', val_col:'reports_raw'})\n\n    # drop obvious header/footnote rows\n    bad = df['msa_name_raw'].isna() | df['msa_name_raw'].str.contains('Metropolitan Area', na=False) | df['msa_name_raw'].str.contains('Source:', na=False)\n    df = df[~bad].copy()\n\n    # parse numeric reports\n    df['reports_2023'] = (\n        df['reports_raw'].astype(str)\n        .str.replace(',', '', regex=False)\n        .str.extract(r'(\\d+(?:\\.\\d+)?)')[0]\n    )\n    df['reports_2023'] = pd.to_numeric(df['reports_2023'], errors='coerce')\n    df = df.dropna(subset=['reports_2023', 'msa_name_raw']).copy()\n\n    # Deduplicate in case MSAs appear in multiple state files (keep max, should be identical)\n    out = df.groupby('msa_name_raw', as_index=False)['reports_2023'].max()\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean concatenated identity theft CSVs: keep MSA name and 2023 # of reports, drop header/footnote rows, parse numeric reports_2023, and deduplicate by msa_name_raw (max).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "msa_match_avg",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(msa_pop, it_2023):\n    import pandas as pd\n    import numpy as np\n    import re\n    from difflib import SequenceMatcher\n\n    def normalize(s: str) -> str:\n        if pd.isna(s):\n            return ''\n        s = str(s)\n        # keep only city + state portion by removing suffixes and anything after them\n        s = re.sub(r\"\\b(Metropolitan Statistical Area|Metropolitan Area|MSA)\\b\", \"\", s, flags=re.I)\n        s = re.sub(r\"\\(.*?\\)\", \"\", s)\n        s = s.replace('\u2013', '-').replace('\u2014', '-').replace('\u2212', '-')\n        s = s.replace('\u2019', \"'\")\n        # collapse multiple spaces\n        s = re.sub(r\"\\s+\", \" \", s).strip()\n        # normalize punctuation: remove periods and extra commas spacing\n        s = s.replace('.', '')\n        s = re.sub(r\"\\s*,\\s*\", \", \", s)\n        # lower\n        return s.lower()\n\n    pop = msa_pop.copy()\n    it = it_2023.copy()\n    pop['key'] = pop['msa_name_raw'].map(normalize)\n    it['key'] = it['msa_name_raw'].map(normalize)\n\n    # exact match first\n    merged = it.merge(pop[['key','pop_2023']], on='key', how='left', validate='many_to_one')\n\n    # fuzzy match for remaining (robust name matching)\n    pop_keys = pop['key'].dropna().unique().tolist()\n\n    def best_match(k):\n        if not k:\n            return None\n        best = None\n        best_score = 0.0\n        for pk in pop_keys:\n            # quick pruning by first letter\n            if pk and pk[0] != k[0]:\n                continue\n            score = SequenceMatcher(None, k, pk).ratio()\n            if score > best_score:\n                best_score = score\n                best = pk\n        if best_score >= 0.92:\n            return best\n        return None\n\n    need = merged['pop_2023'].isna()\n    if need.any():\n        mapped = merged.loc[need, 'key'].map(best_match)\n        merged.loc[need, 'key2'] = mapped\n        merged = merged.merge(pop[['key','pop_2023']].rename(columns={'key':'key2','pop_2023':'pop_2023_2'}), on='key2', how='left')\n        merged['pop_2023'] = merged['pop_2023'].fillna(merged['pop_2023_2'])\n        merged = merged.drop(columns=['pop_2023_2'])\n\n    # drop entries where there's no match in the html\n    merged = merged.dropna(subset=['pop_2023']).copy()\n\n    # filter pop > 1,000,000 in 2023\n    merged_big = merged[merged['pop_2023'] > 1_000_000]\n\n    avg_reports = merged_big['reports_2023'].mean()\n    return pd.DataFrame([{'avg_reports': float(avg_reports),\n                          'n_metro': int(len(merged_big)),\n                          'n_total_matched': int(len(merged))}])\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Robustly normalize and match MSA names between identity-theft reports and HTML population table (city+state only, ignore MSA suffixes; fuzzy match for remaining). Drop unmatched, filter estimated 2023 population >1,000,000, compute average reports_2023.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "msa_html": {
+      "x": 100,
+      "y": 40
+    },
+    "it_files": {
+      "x": 100,
+      "y": 220
+    },
+    "it_all": {
+      "x": 100,
+      "y": 400
+    },
+    "msa_pop": {
+      "x": 430,
+      "y": 40
+    },
+    "it_2023": {
+      "x": 430,
+      "y": 400
+    },
+    "msa_match_avg": {
+      "x": 760,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "msa_html-->msa_pop",
+      "source": {
+        "operatorID": "msa_html",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "msa_pop",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "it_all-->it_2023",
+      "source": {
+        "operatorID": "it_all",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "it_2023",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "msa_pop-->msa_match_avg",
+      "source": {
+        "operatorID": "msa_pop",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "msa_match_avg",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "it_2023-->msa_match_avg",
+      "source": {
+        "operatorID": "it_2023",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "msa_match_avg",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

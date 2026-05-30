@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-636-5-1779125526443",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fireWeather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Fire_Weather_Data_2002-2014_2016.csv via pd.read_csv with default parameters (comma delimiter, header in first row, UTF-8) from data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fatalitiesHumidityDiff",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fireWeather):\n    import pandas as pd\n\n    # Ensure numeric\n    df = fireWeather.copy()\n    df['avrh_mean'] = pd.to_numeric(df['avrh_mean'], errors='coerce')\n    df['fatalities_last'] = pd.to_numeric(df['fatalities_last'], errors='coerce')\n\n    overall_avg = df['fatalities_last'].mean()\n    low_hum_avg = df.loc[df['avrh_mean'] < 30, 'fatalities_last'].mean()\n\n    diff = low_hum_avg - overall_avg\n    return pd.DataFrame({'diff': [diff]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute overall mean fatalities (fatalities_last) across all records; compute mean fatalities for subset with avrh_mean < 30 (humidity <30%); return difference (low-humidity mean minus overall mean) as single-row DataFrame column 'diff'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fireWeather": {
+        "x": 100,
+        "y": 40
+      },
+      "fatalitiesHumidityDiff": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "fireWeather-->fatalitiesHumidityDiff",
+        "source": {
+          "operatorID": "fireWeather",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fatalitiesHumidityDiff",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

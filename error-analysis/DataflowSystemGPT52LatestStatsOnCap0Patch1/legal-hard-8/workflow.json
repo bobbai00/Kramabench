@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-36-7-1779139316026",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "metroFraudReports2024",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv\"\n\n    encodings = [\"utf-8\", \"cp1252\", \"latin-1\"]\n    last_err = None\n    for enc in encodings:\n        try:\n            # The file contains a title row and/or blank rows before the real header.\n            # Load with no header first to locate the header row that contains\n            # 'Metropolitan Area' and '# of Reports'.\n            raw = pd.read_csv(path, header=None, encoding=enc)\n            break\n        except Exception as e:\n            last_err = e\n            raw = None\n    if raw is None:\n        raise last_err\n\n    # Find header row index\n    header_idx = None\n    for i in range(min(len(raw), 20)):\n        row = raw.iloc[i].astype(str).str.lower().tolist()\n        if any(\"metropolitan\" in x and \"area\" in x for x in row) and any(\"#\" in x and \"report\" in x for x in row):\n            header_idx = i\n            break\n        # sometimes header is: Rank, Metropolitan Area, Reports per 100K Population, # of Reports\n        if any(x.strip() == \"metropolitan area\" for x in row) and any(\"# of reports\" in x for x in row):\n            header_idx = i\n            break\n    if header_idx is None:\n        # fallback: use row containing 'Rank' and 'Metropolitan Area'\n        for i in range(min(len(raw), 30)):\n            row = raw.iloc[i].astype(str).str.lower().tolist()\n            if any(x.strip() == \"rank\" for x in row) and any(x.strip() == \"metropolitan area\" for x in row):\n                header_idx = i\n                break\n\n    if header_idx is None:\n        # give up: return raw\n        return raw\n\n    df = pd.read_csv(path, header=header_idx, encoding=enc)\n\n    # Drop fully empty rows and footnote/source rows\n    df = df.dropna(how=\"all\")\n    for col in df.columns:\n        if df[col].dtype == object:\n            df[col] = df[col].astype(str).str.strip()\n    # Remove rows where Metropolitan Area looks like 'Source:' or 'Metropolitan Areas:' etc.\n    msa_col_candidates = [c for c in df.columns if \"metropolitan\" in str(c).lower() and \"area\" in str(c).lower()]\n    if msa_col_candidates:\n        msa_col = msa_col_candidates[0]\n        bad = df[msa_col].str.lower().str.startswith(\"source\") | df[msa_col].str.lower().str.startswith(\"metropolitan areas\")\n        df = df[~bad]\n\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv with robust header detection: read with header=None to find the real header row containing 'Metropolitan Area' and '# of Reports', then re-read with header=that row; try encodings utf-8 then cp1252 then latin-1; drop fully empty rows and remove footnote/source/title rows based on Metropolitan Area column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "floridaMsaFraudOther",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Florida.csv from 'State MSA Fraud and Other data' via pd.read_csv with default parameters (comma delimiter, header=0, UTF-8)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "miamiConsistencyCheck",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metroFraudReports2024, floridaMsaFraudOther):\n    import pandas as pd\n    import numpy as np\n    import re\n\n    def norm(s):\n        return re.sub(r\"\\s+\", \" \", str(s)).strip().lower()\n\n    # --- metro: clean footer rows and extract miami row ---\n    metro = metroFraudReports2024.copy()\n    msa_col_metro = 'Metropolitan Area' if 'Metropolitan Area' in metro.columns else metro.columns[0]\n    metro = metro[~metro[msa_col_metro].astype(str).str.contains(r\"Source:|Metropolitan Areas are defined\", case=False, na=False)].copy()\n\n    metro_mask = metro[msa_col_metro].astype(str).str.contains(r\"Miami-Fort Lauderdale-West Palm Beach\", case=False, na=False)\n    metro_matches = int(metro_mask.sum())\n    metro_row = metro.loc[metro_mask].head(1)\n    metro_count = None\n    if len(metro_row) == 1:\n        # prefer explicit column\n        count_col = '# of Reports' if '# of Reports' in metro_row.columns else None\n        if count_col is None:\n            # fall back to any column containing 'Reports'\n            for c in metro_row.columns:\n                if 'report' in c.lower() and c != msa_col_metro:\n                    count_col = c\n                    break\n        val = metro_row.iloc[0][count_col] if count_col is not None else None\n        metro_count = int(re.sub(r\"[^0-9]\", \"\", str(val))) if val is not None and re.sub(r\"[^0-9]\", \"\", str(val)) != \"\" else None\n\n    # --- florida: fix header and extract miami row ---\n    fl = floridaMsaFraudOther.copy()\n    # The real header row is present as a data row: ['Metropolitan Area', '# of Reports']\n    header_idx = None\n    for i in range(min(len(fl), 10)):\n        row = fl.iloc[i].astype(str).tolist()\n        if any(norm(x) == 'metropolitan area' for x in row) and any('# of reports' in norm(x) for x in row):\n            header_idx = i\n            break\n    if header_idx is not None:\n        new_cols = fl.iloc[header_idx].tolist()\n        fl2 = fl.iloc[header_idx + 1:].copy()\n        fl2.columns = new_cols\n        fl = fl2\n\n    msa_col_fl = 'Metropolitan Area' if 'Metropolitan Area' in fl.columns else fl.columns[0]\n    count_col_fl = '# of Reports' if '# of Reports' in fl.columns else (fl.columns[1] if len(fl.columns) > 1 else None)\n\n    fl = fl[~fl[msa_col_fl].astype(str).str.contains(r\"Source:\", case=False, na=False)].copy()\n    fl_mask = fl[msa_col_fl].astype(str).str.contains(r\"Miami-Fort Lauderdale-West Palm Beach\", case=False, na=False)\n    fl_matches = int(fl_mask.sum())\n    fl_row = fl.loc[fl_mask].head(1)\n    florida_count = None\n    if len(fl_row) == 1 and count_col_fl is not None:\n        val = fl_row.iloc[0][count_col_fl]\n        florida_count = int(re.sub(r\"[^0-9]\", \"\", str(val))) if re.sub(r\"[^0-9]\", \"\", str(val)) != \"\" else None\n\n    consistent = (metro_count is not None) and (florida_count is not None) and (metro_count == florida_count)\n\n    return pd.DataFrame([{\n        'consistent': bool(consistent),\n        'metro_count': metro_count,\n        'florida_count': florida_count,\n        'metro_msa_matches': metro_matches,\n        'florida_msa_matches': fl_matches,\n        'metro_msa_col': msa_col_metro,\n        'florida_msa_col': msa_col_fl,\n        'florida_count_col': count_col_fl,\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check consistency of 2024 'Fraud and Other' report counts for MSA 'Miami-Fort Lauderdale-West Palm Beach' between metroFraudReports2024 and floridaMsaFraudOther: (1) remove footer/source rows; (2) extract Miami MSA row; (3) for Florida table, detect embedded header row containing ['Metropolitan Area', '# of Reports'] and re-header; (4) parse numeric counts from '# of Reports' columns by stripping commas; (5) output boolean 'consistent' plus extracted counts and match diagnostics.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "metroFraudReports2024": {
+        "x": 100,
+        "y": 40
+      },
+      "floridaMsaFraudOther": {
+        "x": 100,
+        "y": 220
+      },
+      "miamiConsistencyCheck": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "metroFraudReports2024-->miamiConsistencyCheck",
+        "source": {
+          "operatorID": "metroFraudReports2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "miamiConsistencyCheck",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "floridaMsaFraudOther-->miamiConsistencyCheck",
+        "source": {
+          "operatorID": "floridaMsaFraudOther",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "miamiConsistencyCheck",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

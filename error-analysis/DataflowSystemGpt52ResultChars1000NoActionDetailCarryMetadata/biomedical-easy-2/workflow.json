@@ -1,0 +1,107 @@
+{
+  "operators": [
+    {
+      "operatorID": "xls",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    from pathlib import Path\n    path = Path('data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx')\n    # Load all sheets to identify where sample/clinical annotations live\n    xls = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xls.sheet_names})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List sheet names in data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx to locate clinical metadata including age and tumor type",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "meta",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx'\n    return pd.read_excel(path, sheet_name='UCEC_CPTAC3_meta_table_V2.1')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load clinical/meta table from Excel sheet UCEC_CPTAC3_meta_table_V2.1 in data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "serous_age",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(meta):\n    import pandas as pd\n    df = meta.copy()\n    # normalize common missing markers\n    df['Histologic_type'] = df['Histologic_type'].astype(str)\n    # keep serous histology\n    ser = df[df['Histologic_type'].str.strip().str.lower().eq('serous')]\n    # Age to numeric\n    age = pd.to_numeric(ser['Age'], errors='coerce')\n    # If participants repeated (multiple aliquots), average within participant first\n    if 'Proteomics_Participant_ID' in ser.columns:\n        tmp = pd.DataFrame({'Proteomics_Participant_ID': ser['Proteomics_Participant_ID'], 'Age': age})\n        tmp = tmp.dropna(subset=['Proteomics_Participant_ID', 'Age'])\n        age_per_participant = tmp.groupby('Proteomics_Participant_ID', as_index=False)['Age'].mean()\n        out = pd.DataFrame({'average_age': [age_per_participant['Age'].mean()]})\n    else:\n        out = pd.DataFrame({'average_age': [age.mean()]})\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Filter meta to Histologic_type == 'Serous' (case/whitespace-insensitive), coerce Age to numeric, de-duplicate repeated samples by averaging Age per Proteomics_Participant_ID, then compute overall mean age",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "xls": {
+      "x": 100,
+      "y": 40
+    },
+    "meta": {
+      "x": 100,
+      "y": 220
+    },
+    "serous_age": {
+      "x": 430,
+      "y": 220
+    }
+  },
+  "links": [
+    {
+      "linkID": "meta-->serous_age",
+      "source": {
+        "operatorID": "meta",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "serous_age",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-598-6-1779125058619",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "reportCount",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv\"\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Report_Count.csv via pd.read_csv from data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv (comma delimiter, header inferred from first row, UTF-8/default encoding)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cleanReportCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    df = reportCount.copy()\n    df.columns = [\"year\", \"reports_raw\"]\n\n    # Keep only rows where year is a 4-digit year\n    df = df[df[\"year\"].astype(str).str.fullmatch(r\"\\d{4}\", na=False)].copy()\n\n    df[\"year\"] = df[\"year\"].astype(int)\n    df[\"reports\"] = (\n        df[\"reports_raw\"]\n        .astype(str)\n        .str.replace(\",\", \"\", regex=False)\n        .str.replace(\" \", \"\", regex=False)\n    )\n    df[\"reports\"] = pd.to_numeric(df[\"reports\"], errors=\"coerce\")\n\n    df = df.dropna(subset=[\"reports\"])\n    return df[[\"year\", \"reports\"]].sort_values(\"year\").reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean reportCount table into numeric time series: rename columns to [year, reports_raw]; filter rows where year matches 4-digit regex ^\\d{4}$; parse year as int; parse reports from reports_raw by removing commas/spaces and converting to numeric; drop rows with non-numeric reports; return [year, reports] sorted ascending by year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "maxRelativeIncreaseYear",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cleanReportCount) -> pd.DataFrame:\n    import pandas as pd\n\n    df = cleanReportCount.sort_values('year').copy()\n    df['prev_reports'] = df['reports'].shift(1)\n    df['rel_increase'] = (df['reports'] - df['prev_reports']) / df['prev_reports']\n\n    # Focus on 2002-2024 inclusive (needs previous year present to compute 2002)\n    df = df[(df['year'] >= 2002) & (df['year'] <= 2024)].copy()\n\n    # Exclude cases where prev_reports is missing or zero\n    df = df[(df['prev_reports'].notna()) & (df['prev_reports'] != 0)].copy()\n\n    best = df.loc[df['rel_increase'].idxmax(), ['year', 'rel_increase', 'reports', 'prev_reports']]\n    return pd.DataFrame([best.to_dict()])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute year-over-year relative increase in total reports: sort by year; create prev_reports=reports shifted by 1; compute rel_increase=(reports-prev_reports)/prev_reports; filter to years 2002-2024 inclusive; drop rows with missing/zero prev_reports; select the year with maximum rel_increase and return a 1-row table with [year, rel_increase, reports, prev_reports] for verification.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "reportCount": {
+        "x": 100,
+        "y": 40
+      },
+      "cleanReportCount": {
+        "x": 400,
+        "y": 40
+      },
+      "maxRelativeIncreaseYear": {
+        "x": 700,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "reportCount-->cleanReportCount",
+        "source": {
+          "operatorID": "reportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cleanReportCount",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cleanReportCount-->maxRelativeIncreaseYear",
+        "source": {
+          "operatorID": "cleanReportCount",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "maxRelativeIncreaseYear",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

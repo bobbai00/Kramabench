@@ -1,0 +1,175 @@
+{
+  "operators": [
+    {
+      "operatorID": "sample_msa_fraud_2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv'\n    # Try a more permissive encoding (common for gov CSVs)\n    df = pd.read_csv(path, encoding='latin-1')\n    return pd.concat([df.head(5), df.tail(5)])"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of 2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv using latin-1 encoding to avoid UTF-8 decode errors",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "msa_fraud_2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv'\n    df = pd.read_csv(path, encoding='latin-1')\n    return df"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full 2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv (latin-1).",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "sample_florida_msa_fraud",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv'\n    df = pd.read_csv(path, encoding='latin-1')\n    return pd.concat([df.head(5), df.tail(5)])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Sample first/last 5 rows of Florida state MSA Fraud and Other data (Florida.csv) using latin-1 to inspect structure and locate Miami-Fort Lauderdale-West Palm Beach row.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "florida_msa_fraud",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv'\n    return pd.read_csv(path, encoding='latin-1')\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load full Florida state MSA Fraud and Other data (Florida.csv) with latin-1 encoding.",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "miami_counts",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(msa_fraud_2024, florida_msa_fraud) -> pd.DataFrame:\n    import pandas as pd\n    def tidy_msa(df):\n        # first row with 'Rank' indicates header row\n        header_idx = df.index[df.iloc[:,0].astype(str).str.strip().eq('Rank')]\n        if len(header_idx)==0:\n            header_idx = df.index[df.iloc[:,0].astype(str).str.contains('Metropolitan Area', na=False)]\n        hi = int(header_idx[0])\n        cols = df.iloc[hi].tolist()\n        out = df.iloc[hi+1:].copy()\n        out.columns = cols\n        out = out.dropna(how='all')\n        return out\n\n    metro = tidy_msa(msa_fraud_2024)\n    # ensure expected columns\n    metro = metro.rename(columns={\n        '# of Reports':'reports',\n        'Metropolitan Area':'metro_area'\n    })\n    metro['metro_area'] = metro['metro_area'].astype(str).str.strip()\n    metro['reports'] = pd.to_numeric(metro['reports'].astype(str).str.replace(',','', regex=False), errors='coerce')\n\n    fl = florida_msa_fraud.copy()\n    # header row where first col == 'Metropolitan Area'\n    h2 = fl.index[fl.iloc[:,0].astype(str).str.strip().eq('Metropolitan Area')]\n    hi2 = int(h2[0])\n    fl2 = fl.iloc[hi2+1:].copy()\n    fl2.columns = ['metro_area','reports']\n    fl2 = fl2.dropna(how='all')\n    fl2['metro_area'] = fl2['metro_area'].astype(str).str.strip()\n    fl2['reports'] = pd.to_numeric(fl2['reports'].astype(str).str.replace(',','', regex=False), errors='coerce')\n\n    target = 'Miami-Fort Lauderdale-West Palm Beach, FL Metropolitan Statistical Area'\n    m1 = metro[metro['metro_area'].eq(target)][['metro_area','reports']].rename(columns={'reports':'reports_us_metro_file'})\n    m2 = fl2[fl2['metro_area'].eq(target)][['metro_area','reports']].rename(columns={'reports':'reports_florida_file'})\n    out = m1.merge(m2, on='metro_area', how='outer')\n    out['consistent'] = out['reports_us_metro_file'].fillna(-1).eq(out['reports_florida_file'].fillna(-2))\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Parse/clean the national metropolitan fraud 2024 table and Florida MSA fraud table; extract # of reports for 'Miami-Fort Lauderdale-West Palm Beach, FL Metropolitan Statistical Area' from each and flag whether counts match.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "sample_msa_fraud_2024": {
+      "x": 100,
+      "y": 40
+    },
+    "msa_fraud_2024": {
+      "x": 100,
+      "y": 220
+    },
+    "sample_florida_msa_fraud": {
+      "x": 100,
+      "y": 400
+    },
+    "florida_msa_fraud": {
+      "x": 100,
+      "y": 580
+    },
+    "miami_counts": {
+      "x": 430,
+      "y": 400
+    }
+  },
+  "links": [
+    {
+      "linkID": "msa_fraud_2024-->miami_counts",
+      "source": {
+        "operatorID": "msa_fraud_2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "miami_counts",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "florida_msa_fraud-->miami_counts",
+      "source": {
+        "operatorID": "florida_msa_fraud",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "miami_counts",
+        "portID": "input-1"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}

@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-463-5-1779120346593",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "worldcities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/worldcities.csv'\n    # worldcities.csv is commonly large; load needed columns as strings first for robustness\n    df = pd.read_csv(path)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/archeology/input/worldcities.csv via pd.read_csv (default comma delimiter, header=0, UTF-8) returning the full table for modern city attributes including coordinates and population.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "romanCities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/archeology/input/roman_cities.csv'\n    df = pd.read_csv(path)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data/archeology/input/roman_cities.csv via pd.read_csv (default comma delimiter, header=0, UTF-8) returning ancient Roman-era city attributes including coordinates.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nearbyModernCount",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(worldcities, romanCities) -> pd.DataFrame:\n    import pandas as pd\n    import numpy as np\n\n    wc = worldcities.copy()\n    rc = romanCities.copy()\n\n    # Ensure numeric\n    for c in ['lat', 'lng', 'population']:\n        wc[c] = pd.to_numeric(wc[c], errors='coerce')\n    rc['Latitude (Y)'] = pd.to_numeric(rc['Latitude (Y)'], errors='coerce')\n    rc['Longitude (X)'] = pd.to_numeric(rc['Longitude (X)'], errors='coerce')\n\n    # Filter to modern cities with population > 100k\n    wc = wc[wc['population'] > 100_000].dropna(subset=['lat', 'lng'])\n    rc = rc.dropna(subset=['Latitude (Y)', 'Longitude (X)'])\n\n    # Bounding-box join for candidates within 0.1 degrees in both lat and lng.\n    # Then exact check using Euclidean distance in degrees (per problem statement).\n    tol = 0.1\n    # Pre-bin roman cities by 0.1 deg grid to reduce pairwise comparisons\n    rc = rc.assign(\n        latBin=np.floor(rc['Latitude (Y)'] / tol).astype(int),\n        lngBin=np.floor(rc['Longitude (X)'] / tol).astype(int),\n    )\n\n    wc = wc.assign(\n        latBin=np.floor(wc['lat'] / tol).astype(int),\n        lngBin=np.floor(wc['lng'] / tol).astype(int),\n    )\n\n    # Expand bins to include neighbors (since within tol could cross bin boundary)\n    offsets = [-1, 0, 1]\n    expanded = []\n    for dlat in offsets:\n        for dlng in offsets:\n            tmp = wc[['id', 'city', 'lat', 'lng', 'population', 'latBin', 'lngBin']].copy()\n            tmp['latBin2'] = tmp['latBin'] + dlat\n            tmp['lngBin2'] = tmp['lngBin'] + dlng\n            expanded.append(tmp.drop(columns=['latBin', 'lngBin']))\n    wcExp = pd.concat(expanded, ignore_index=True)\n\n    cand = wcExp.merge(\n        rc[['Primary Key', 'Latitude (Y)', 'Longitude (X)', 'latBin', 'lngBin']],\n        left_on=['latBin2', 'lngBin2'],\n        right_on=['latBin', 'lngBin'],\n        how='inner'\n    )\n\n    dlat = cand['lat'] - cand['Latitude (Y)']\n    dlng = cand['lng'] - cand['Longitude (X)']\n    dist = np.sqrt(dlat * dlat + dlng * dlng)\n    cand = cand[dist <= tol]\n\n    # Count unique modern cities that have at least one nearby Roman city\n    n = cand['id'].nunique()\n    return pd.DataFrame({'count': [int(n)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count modern cities (from worldcities.csv) with population > 100,000 that lie within 0.1 degrees (Euclidean distance in lat/lng degrees) of any ancient Roman-era city in roman_cities.csv: coerce coordinates to numeric; filter population>100k; bin ancient+modern into 0.1\u00b0 grid, neighbor-bin expand modern points, join on bins to generate candidates, compute degree-distance <=0.1, then return unique modern city count as single-row DataFrame.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "worldcities": {
+        "x": 100,
+        "y": 40
+      },
+      "romanCities": {
+        "x": 100,
+        "y": 220
+      },
+      "nearbyModernCount": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "worldcities-->nearbyModernCount",
+        "source": {
+          "operatorID": "worldcities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nearbyModernCount",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "romanCities-->nearbyModernCount",
+        "source": {
+          "operatorID": "romanCities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nearbyModernCount",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

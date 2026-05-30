@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-100-7-1779101087030",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "topTenCategories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n\n    path = \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv\"\n    # File has a title row, then a proper header row.\n    df = pd.read_csv(path, skiprows=1, dtype=str)\n\n    # If the header was not parsed (shows up as Unnamed columns with first row = header labels), fix it.\n    if all(c.startswith(\"Unnamed\") for c in df.columns) and len(df) > 0 and str(df.iloc[0, 0]).strip().lower() == \"state\":\n        df.columns = df.iloc[0].tolist()\n        df = df.iloc[1:].copy()\n\n    # Drop trailing source/blank rows\n    df = df.dropna(how=\"all\")\n    df[\"State\"] = df[\"State\"].astype(str).str.strip()\n    df[\"Category\"] = df[\"Category\"].astype(str).str.strip()\n    return df[[\"State\", \"Category\", \"# of Reports\", \"Percentage\"]]\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Top_Ten_Report_Categories.csv via pd.read_csv(skiprows=1, dtype=str); if columns are Unnamed and first row contains ['State','Category','# of Reports','Percentage'], promote that row to header; drop all-null trailing rows and return standardized columns [State, Category, # of Reports, Percentage]. Source path: data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "statesWithIdentityTheftTop",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(topTenCategories):\n    import pandas as pd\n\n    df = topTenCategories.copy()\n\n    # Remove footer / note rows (they have NaN for numeric-ish columns after standardization)\n    df = df[df['# of Reports'].notna() & df['Percentage'].notna()]\n\n    # Ensure report counts are usable for ordering\n    df['reports'] = (\n        df['# of Reports']\n        .astype(str)\n        .str.replace(',', '', regex=False)\n        .str.strip()\n    )\n    df = df[df['reports'].str.fullmatch(r'\\d+')]\n    df['reports'] = df['reports'].astype(int)\n\n    # For each state, find the top category by report count (tie-breaker: keep all tied max)\n    max_per_state = df.groupby('State', as_index=False)['reports'].max().rename(columns={'reports': 'max_reports'})\n    df2 = df.merge(max_per_state, on='State', how='inner')\n    top_rows = df2[df2['reports'] == df2['max_reports']]\n\n    # Keep states where Identity Theft is (one of) the top category/categories\n    out = (\n        top_rows[top_rows['Category'].str.strip().eq('Identity Theft')]\n        [['State']]\n        .drop_duplicates()\n        .sort_values('State')\n        .reset_index(drop=True)\n    )\n\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "From topTenCategories: drop footer/note rows where ['# of Reports'] or 'Percentage' is null; parse '# of Reports' (remove commas) into int 'reports'; compute per-state max reports and keep all categories tied for the max; filter to rows where Category == 'Identity Theft'; return distinct State names sorted ascending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "topTenCategories": {
+        "x": 100,
+        "y": 40
+      },
+      "statesWithIdentityTheftTop": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "topTenCategories-->statesWithIdentityTheftTop",
+        "source": {
+          "operatorID": "topTenCategories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "statesWithIdentityTheftTop",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

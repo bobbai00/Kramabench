@@ -1,0 +1,162 @@
+{
+  "headId": "step-agent-536-6-1779123532442",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "rawPreview",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    # preview first 30 rows of first sheet without header inference\n    return pd.read_excel(path, sheet_name=0, header=None, dtype=str, nrows=30)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect Excel file 1-s2.0-S0092867420301070-mmc3.xlsx \u2014 read first 30 rows from sheet 0 with header=None and dtype=str to determine sheet structure and the header row for acetylproteomics significance table(s)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "sheetNames",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    xl = pd.ExcelFile(path)\n    return pd.DataFrame({'sheet_name': xl.sheet_names})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List sheet names in 1-s2.0-S0092867420301070-mmc3.xlsx via pd.ExcelFile(...).sheet_names to locate acetylproteomics and significance-related sheets",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "sheetMeta",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import pandas as pd\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    xl = pd.ExcelFile(path)\n    rows = []\n    for s in xl.sheet_names:\n        df = pd.read_excel(path, sheet_name=s, header=None, nrows=5)\n        rows.append({'sheet_name': s, 'ncols_first5rows': df.shape[1], 'row0': '\\t'.join([str(x) for x in df.iloc[0].tolist()])})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Quickly profile each sheet in 1-s2.0-S0092867420301070-mmc3.xlsx \u2014 for every sheet, read first 5 rows with header=None and return sheet_name, number of columns, and a tab-joined representation of row0 to identify the acetylproteomics significance table",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "loadAcetylGenes",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    path = \"data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx\"\n    # Sheet D-SE-acetyl appears to be a single-column list of significant genes\n    df = pd.read_excel(path, sheet_name=\"D-SE-acetyl\", header=None, dtype=str)\n    df = df.rename(columns={0: \"gene\"})\n    df[\"gene\"] = df[\"gene\"].astype(str).str.strip()\n    # Drop empty/NA rows\n    df = df[df[\"gene\"].notna() & (df[\"gene\"] != \"\") & (df[\"gene\"].str.lower() != \"nan\")]\n    return df.reset_index(drop=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load sheet 'D-SE-acetyl' from 1-s2.0-S0092867420301070-mmc3.xlsx as a single-column list of significant genes by acetylproteomics (read with header=None, dtype=str); rename column to 'gene' and drop blank/NA rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "countAcetylGenes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(loadAcetylGenes) -> pd.DataFrame:\n    # Count distinct, non-empty gene symbols in the acetylproteomics significant gene list\n    genes = loadAcetylGenes.copy()\n    genes['gene'] = genes['gene'].astype(str).str.strip()\n    genes = genes[genes['gene'].notna() & (genes['gene'] != '') & (genes['gene'].str.lower() != 'nan')]\n    return pd.DataFrame([{\n        'significant_gene_count': int(genes['gene'].nunique())\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count significant genes by acetylproteomics from loadAcetylGenes \u2014 strip whitespace, drop empty/'nan' gene values, compute nunique of column 'gene' and return as single-row column significant_gene_count",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "rawPreview": {
+        "x": 100,
+        "y": 40
+      },
+      "sheetNames": {
+        "x": 100,
+        "y": 220
+      },
+      "sheetMeta": {
+        "x": 100,
+        "y": 400
+      },
+      "loadAcetylGenes": {
+        "x": 100,
+        "y": 580
+      },
+      "countAcetylGenes": {
+        "x": 400,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "loadAcetylGenes-->countAcetylGenes",
+        "source": {
+          "operatorID": "loadAcetylGenes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "countAcetylGenes",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

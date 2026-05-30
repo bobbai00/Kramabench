@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-564-5-1779124157509",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "ejPopulations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    path = 'data/environment/input/environmental-justice-populations.csv'\n    return pd.read_csv(path, dtype={'GEOID': str})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load environmental-justice-populations.csv via pd.read_csv; keep GEOID as string (dtype={'GEOID': str}) to preserve leading zeros and enable joins/grouping by geographic identifier.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "waterTesting2023",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    path = 'data/environment/input/water-body-testing-2023.csv'\n    return pd.read_csv(path)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body-testing-2023.csv via pd.read_csv (comma delimiter, first row header, UTF-8 defaults) containing 2023 water body sample results including marine beach samples and bacteria exceedance indicators/values.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marineEJExceedanceDiff",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(ejPopulations, waterTesting2023) -> pd.DataFrame:\n    import pandas as pd\n\n    # --- Prepare EJ municipality % (use population share in EJ block groups) ---\n    ej = ejPopulations.copy()\n    # Normalize municipality name for join\n    ej['MunicipalityNorm'] = (\n        ej['Municipality']\n        .astype(str)\n        .str.strip()\n        .str.lower()\n    )\n    # Ensure numeric percent\n    ejPctCol = 'Percent of population in EJ BGs'\n    ej[ejPctCol] = pd.to_numeric(ej[ejPctCol], errors='coerce')\n\n    # Two groups per prompt\n    ejHigh = ej.loc[ej[ejPctCol] > 50, ['MunicipalityNorm']].assign(ejGroup='gt50')\n    ejLow = ej.loc[ej[ejPctCol] < 25, ['MunicipalityNorm']].assign(ejGroup='lt25')\n    ejGroups = pd.concat([ejHigh, ejLow], ignore_index=True)\n\n    # --- Prepare marine samples and exceedance indicator ---\n    wt = waterTesting2023.copy()\n    wt = wt[wt['Beach Type Description'].astype(str).str.strip().str.lower().eq('marine')]\n\n    wt['CommunityNorm'] = wt['Community'].astype(str).str.strip().str.lower()\n    # Violation is Yes/No; treat Yes as exceedance\n    wt['exceed'] = wt['Violation'].astype(str).str.strip().str.lower().eq('yes').astype(int)\n\n    # --- Join and compute exceedance rates ---\n    merged = wt.merge(ejGroups, left_on='CommunityNorm', right_on='MunicipalityNorm', how='inner')\n\n    rates = (\n        merged.groupby('ejGroup')\n        .agg(nSamples=('exceed', 'size'), nExceed=('exceed', 'sum'))\n        .assign(exceedRate=lambda d: d['nExceed'] / d['nSamples'])\n        .reset_index()\n    )\n\n    # Compute difference: (gt50 rate - lt25 rate)\n    rateMap = dict(zip(rates['ejGroup'], rates['exceedRate']))\n    diff = rateMap.get('gt50', float('nan')) - rateMap.get('lt25', float('nan'))\n\n    return pd.DataFrame([{\n        'exceedRate_gt50': rateMap.get('gt50', float('nan')),\n        'exceedRate_lt25': rateMap.get('lt25', float('nan')),\n        'difference': diff,\n        'nSamples_gt50': int(rates.loc[rates['ejGroup'].eq('gt50'), 'nSamples'].iloc[0]) if (rates['ejGroup'] == 'gt50').any() else None,\n        'nSamples_lt25': int(rates.loc[rates['ejGroup'].eq('lt25'), 'nSamples'].iloc[0]) if (rates['ejGroup'] == 'lt25').any() else None,\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water-body-testing-2023.csv to marine beach samples (Beach Type Description == 'Marine'); derive exceedance flag from Violation (Yes=1, No=0). From environmental-justice-populations.csv, compute EJ population share (Percent of population in EJ BGs) by municipality; classify municipalities into two cohorts: >50% (gt50) and <25% (lt25). Inner join marine samples to municipality cohorts on normalized Community/Municipality names; compute exceedance rate = nExceed/nSamples per cohort; output both cohort rates and the difference (gt50 - lt25) plus sample counts.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "ejPopulations": {
+        "x": 100,
+        "y": 40
+      },
+      "waterTesting2023": {
+        "x": 100,
+        "y": 220
+      },
+      "marineEJExceedanceDiff": {
+        "x": 400,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "ejPopulations-->marineEJExceedanceDiff",
+        "source": {
+          "operatorID": "ejPopulations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineEJExceedanceDiff",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "waterTesting2023-->marineEJExceedanceDiff",
+        "source": {
+          "operatorID": "waterTesting2023",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marineEJExceedanceDiff",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

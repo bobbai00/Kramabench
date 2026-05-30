@@ -1,0 +1,374 @@
+{
+  "operators": [
+    {
+      "operatorID": "omni_spec",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\n\ndef load() -> pd.DataFrame:\n    path = 'data/astronomy/input/omni2_low_res/omni2.txt'\n    with open(path, 'r', encoding='utf-8', errors='ignore') as f:\n        txt = f.read()\n    return pd.DataFrame([{'path': path, 'content': txt}])\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load OMNI2 format specification from data/astronomy/input/omni2_low_res/omni2.txt",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "omni2024",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "import pandas as pd\nimport numpy as np\nfrom pathlib import Path\n\ndef load() -> pd.DataFrame:\n    path = Path('data/astronomy/input/omni2_low_res/omni2_2024.dat')\n    # fixed-width per OMNI2 spec; use colspecs inferred from typical OMNI2 layout (55 words)\n    # We'll parse by whitespace since fields are fixed but separated; robust to multiple spaces.\n    df = pd.read_csv(path, delim_whitespace=True, header=None)\n    # name columns 1..N\n    df.columns = [f'w{i}' for i in range(1, df.shape[1]+1)]\n    return df\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Load OMNI2 hourly data for 2024 from data/astronomy/input/omni2_low_res/omni2_2024.dat using whitespace parsing; keep raw words as w1..wN",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarmb_pod_files",
+      "operatorType": "DataLoading",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def load() -> pd.DataFrame:\n    import glob, pandas as pd\n    files = sorted(glob.glob('data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt'))\n    return pd.DataFrame({'path': files})\n"
+      },
+      "inputPorts": [],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "List Swarm-B POD neutral density files matching data/astronomy/input/swarmb/SB_DNS_POD_2024_*.txt",
+      "dynamicInputPorts": false,
+      "dynamicOutputPorts": false
+    },
+    {
+      "operatorID": "swarmb_dns",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarmb_pod_files):\n    import pandas as pd\n    import numpy as np\n    import glob\n    import re\n\n    paths = swarmb_pod_files['path'].tolist()\n    dfs = []\n    for p in paths:\n        # Skip comment/header lines starting with # or %\n        df = pd.read_csv(p, sep=r\"\\s+\", comment='#', header=None, engine='python')\n        # Heuristic: expect at least time + density + position. Keep all cols.\n        df['source_path'] = p\n        dfs.append(df)\n    out = pd.concat(dfs, ignore_index=True)\n    # Try to detect datetime column: if first 6 cols are Y M D h m s\n    if out.shape[1] >= 7:\n        # columns 0..5 likely date parts\n        ymdhms = out.iloc[:,0:6]\n        if np.issubdtype(ymdhms.dtypes[0], np.number):\n            try:\n                dt = pd.to_datetime(dict(year=out[0].astype(int), month=out[1].astype(int), day=out[2].astype(int),\n                                         hour=out[3].astype(int), minute=out[4].astype(int), second=out[5].astype(int)), errors='coerce', utc=True)\n                out.insert(0,'datetime',dt)\n            except Exception:\n                pass\n    return out"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Read all Swarm-B POD DNS files (whitespace-delimited, skip comment lines). Concatenate; attempt to construct UTC datetime from first 6 numeric columns if present; retain all raw columns plus source_path.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "omni_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(omni2024):\n    import pandas as pd\n    df = omni2024.copy()\n    df.columns = [c.replace('w','') for c in df.columns]\n    rename = {'1':'year','2':'doy','3':'hour','39':'kp','50':'ap_daily','51':'f107'}\n    df = df.rename(columns=rename)\n\n    df['datetime'] = (\n        pd.to_datetime(df['year'].astype(int).astype(str), format='%Y')\n        + pd.to_timedelta(df['doy'].astype(int)-1, unit='D')\n        + pd.to_timedelta(df['hour'].astype(int), unit='h')\n    )\n\n    # replace fill values with NA\n    df['ap_daily'] = pd.to_numeric(df['ap_daily'], errors='coerce')\n    df['f107'] = pd.to_numeric(df['f107'], errors='coerce')\n    df['kp'] = pd.to_numeric(df['kp'], errors='coerce')\n    df.loc[df['ap_daily']==999, 'ap_daily'] = pd.NA\n    df.loc[df['f107']==999.9, 'f107'] = pd.NA\n    df.loc[df['kp']==99, 'kp'] = pd.NA\n\n    # Kp code to ap (3-hour) mapping (standard table)\n    kp_map = {\n        0:0, 3:2, 7:3, 10:4, 13:5, 17:6, 20:7, 23:9, 27:12, 30:15, 33:18, 37:22,\n        40:27, 43:32, 47:39, 50:48, 53:56, 57:67, 60:80, 63:94, 67:111, 70:132,\n        73:154, 77:179, 80:207, 83:236, 87:300, 90:400\n    }\n    df['ap_3h'] = df['kp'].map(kp_map).astype('float')\n\n    # daily series for f107 and ap_daily\n    daily = (df.groupby(['year','doy'], as_index=False)\n               .agg(f107=('f107','mean'), ap_daily=('ap_daily','mean')))\n    daily['date'] = (pd.to_datetime(daily['year'].astype(int).astype(str), format='%Y')\n                     + pd.to_timedelta(daily['doy'].astype(int)-1, unit='D'))\n    daily = daily.sort_values('date')\n    daily['f107a'] = daily['f107'].rolling(window=81, center=True, min_periods=1).mean()\n\n    df['date'] = df['datetime'].dt.floor('D')\n    df = df.merge(daily[['date','f107a','f107','ap_daily']], on='date', how='left', suffixes=('','_d'))\n\n    # after merge, keep daily-derived f107/ap as per model inputs\n    out = df[['datetime','f107_d','f107a','ap_daily_d','ap_3h']].rename(\n        columns={'f107_d':'f107','ap_daily_d':'ap_daily'}\n    )\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean OMNI2 2024 hourly data: build datetime from year/doy/hour; replace fill values; compute 3-hour ap from Kp via standard table; compute daily f107 and 81-day centered f107a; output hourly datetime,f107,f107a,ap_daily,ap_3h",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "swarmb_clean",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarmb_dns):\n    import pandas as pd\n    df = swarmb_dns\n\n    # ensure column access\n    cols = list(df.columns)\n    def pick(k):\n        return k if k in cols else (str(k) if str(k) in cols else None)\n\n    c_date, c_time = pick(0), pick(1)\n    c_alt, c_lon, c_lat, c_lst, c_rho = pick(3), pick(4), pick(5), pick(6), pick(8)\n\n    sub = df[[c_date, c_time, c_alt, c_lon, c_lat, c_lst, c_rho]].copy()\n    sub.columns = ['date', 'time', 'alt_km', 'lon_deg', 'lat_deg', 'lst_hr', 'rho_meas']\n\n    # Build datetime efficiently\n    d = pd.to_datetime(sub['date'], errors='coerce', utc=True)\n    t = pd.to_datetime(sub['time'], errors='coerce')\n    # time-of-day as timedelta\n    td = pd.to_timedelta(t.dt.hour, unit='h') + pd.to_timedelta(t.dt.minute, unit='m') + pd.to_timedelta(t.dt.second, unit='s') + pd.to_timedelta(t.dt.microsecond, unit='us')\n    dt = d + td\n\n    out = pd.DataFrame({\n        'datetime': dt,\n        'alt_km': pd.to_numeric(sub['alt_km'], errors='coerce'),\n        'lat_deg': pd.to_numeric(sub['lat_deg'], errors='coerce'),\n        'lon_deg': pd.to_numeric(sub['lon_deg'], errors='coerce'),\n        'lst_hr': pd.to_numeric(sub['lst_hr'], errors='coerce'),\n        'rho_meas': pd.to_numeric(sub['rho_meas'], errors='coerce'),\n    })\n\n    out = out.dropna(subset=['datetime','alt_km','lat_deg','lon_deg','rho_meas'])\n    out = out.sort_values('datetime')\n\n    # downsample to 1-minute to reduce size (Swarm is 30s cadence)\n    out = out.set_index('datetime').resample('1min').mean(numeric_only=True).dropna(subset=['rho_meas']).reset_index()\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Clean Swarm-B DNS: build UTC datetime via date + time-of-day timedelta (vectorized); keep alt_km, lat_deg, lon_deg, lst_hr, rho_meas; downsample to 1-min means to reduce size for modeling.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "join_inputs",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(swarmb_clean, omni_clean) -> pd.DataFrame:\n    import pandas as pd\n    df = swarmb_clean.copy()\n    # ensure timezone-aware UTC\n    df['datetime'] = pd.to_datetime(df['datetime'], utc=True)\n    df['datetime_hour'] = df['datetime'].dt.floor('h')\n\n    omni = omni_clean.copy()\n    omni['datetime'] = pd.to_datetime(omni['datetime'], utc=True)\n\n    out = df.merge(\n        omni,\n        left_on='datetime_hour',\n        right_on='datetime',\n        how='left',\n        suffixes=('', '_omni')\n    )\n    out = out.drop(columns=['datetime_omni'])\n    return out\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "Input 0",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        },
+        {
+          "portID": "input-1",
+          "displayName": "Input 1",
+          "allowMultiInputs": false,
+          "isDynamicPort": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Join Swarm-B 1-min data to OMNI2 hourly inputs by flooring Swarm datetime to UTC hour; ensure both keys are tz-aware UTC; attach f107,f107a,ap_daily,ap_3h.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "nrlmsise_rho",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(join_inputs) -> pd.DataFrame:\n    import numpy as np\n    import pandas as pd\n    from pymsis import msis\n\n    df = join_inputs.copy()\n\n    # Build time/space arrays\n    t = pd.to_datetime(df['datetime'], utc=True).dt.tz_convert(None).to_numpy(dtype='datetime64[ns]')\n    alt_km = df['alt_km'].to_numpy(float) / 1000.0  # meters -> km\n    lat = df['lat_deg'].to_numpy(float)\n    lon = df['lon_deg'].to_numpy(float)\n\n    f107 = df['f107'].to_numpy(float)\n    f107a = df['f107a'].to_numpy(float)\n\n    # Prepare Ap time series from unique hours\n    omni_hourly = (\n        df[['datetime_hour', 'ap_3h', 'ap_daily']]\n        .drop_duplicates('datetime_hour')\n        .sort_values('datetime_hour')\n    )\n    omni_hourly['datetime_hour'] = pd.to_datetime(omni_hourly['datetime_hour'], utc=True)\n\n    ap3_series = omni_hourly.set_index('datetime_hour')['ap_3h'].astype(float)\n    apd_series = omni_hourly.set_index('datetime_hour')['ap_daily'].astype(float)\n\n    # 3-hourly and daily series (aligned)\n    ap3_3h = ap3_series.resample('3h').first()\n    apd_1d = apd_series.resample('1D').first()\n\n    dt_hour = pd.to_datetime(df['datetime_hour'], utc=True)\n    dt3 = dt_hour.dt.floor('3h')\n    dtd = dt_hour.dt.floor('1D')\n\n    n = len(df)\n    ap = np.empty((n, 7), dtype=float)\n    ap[:, 0] = apd_1d.reindex(dtd).to_numpy()\n    for k in range(6):\n        ap[:, 1 + k] = ap3_3h.reindex(dt3 - pd.to_timedelta(3*k, unit='h')).to_numpy()\n\n    # Fallbacks for any NaNs\n    cur_ap3 = df['ap_3h'].to_numpy(float)\n    cur_apd = df['ap_daily'].to_numpy(float)\n    ap[:, 0] = np.where(np.isfinite(ap[:, 0]), ap[:, 0], cur_apd)\n    for j in range(1, 7):\n        ap[:, j] = np.where(np.isfinite(ap[:, j]), ap[:, j], cur_ap3)\n\n    # Run MSIS\n    out = msis.run(t, lon, lat, alt_km, f107s=f107, f107as=f107a, aps=ap)\n\n    # Robust rho extraction\n    rho_model = None\n    if isinstance(out, dict):\n        rho_model = out.get('rho', None)\n    else:\n        try:\n            rho_model = out['rho']\n        except Exception:\n            rho_model = None\n\n    if rho_model is None:\n        rho_model = np.asarray(out)\n\n    rho_model = np.asarray(rho_model).astype(float)\n    # Reduce to (n,) if extra dims exist\n    if rho_model.ndim == 2:\n        if rho_model.shape[0] == n and rho_model.shape[1] == 1:\n            rho_model = rho_model[:, 0]\n        elif rho_model.shape[1] == n and rho_model.shape[0] == 1:\n            rho_model = rho_model[0, :]\n        else:\n            # take first column as best guess\n            rho_model = rho_model[:, 0]\n    elif rho_model.ndim > 2:\n        rho_model = rho_model.reshape((n, -1))[:, 0]\n\n    # Ensure length n\n    if len(rho_model) != n:\n        raise ValueError(f\"rho_model length {len(rho_model)} != n {n}; rho_model shape={rho_model.shape}\")\n\n    return pd.DataFrame({\n        'datetime': pd.to_datetime(df['datetime'], utc=True).to_numpy(),\n        'rho_meas': df['rho_meas'].to_numpy(float),\n        'rho_model': rho_model,\n    })\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Run NRLMSISE-00 via pymsis.msis.run with OMNI2-derived f107/f107a and Ap(7) vector. Robustly extract rho output and enforce 1D length match; return datetime,rho_meas,rho_model.",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    },
+    {
+      "operatorID": "rmse",
+      "operatorType": "DataProcessing",
+      "operatorVersion": "N/A",
+      "operatorProperties": {
+        "code": "def process(nrlmsise_rho) -> pd.DataFrame:\n    import numpy as np\n    df = nrlmsise_rho.dropna(subset=['rho_meas','rho_model']).copy()\n    err = df['rho_model'].to_numpy() - df['rho_meas'].to_numpy()\n    rmse = float(np.sqrt(np.mean(err**2)))\n    return pd.DataFrame({'rmse':[rmse]})\n"
+      },
+      "inputPorts": [
+        {
+          "portID": "input-0",
+          "displayName": "input_0",
+          "allowMultiInputs": true,
+          "isDynamicPort": false,
+          "dependencies": []
+        }
+      ],
+      "outputPorts": [
+        {
+          "portID": "output-0",
+          "displayName": "",
+          "allowMultiInputs": false,
+          "isDynamicPort": false
+        }
+      ],
+      "showAdvanced": false,
+      "isDisabled": false,
+      "customDisplayName": "Compute RMSE between NRLMSISE-00 modeled neutral density and Swarm-B measured neutral density over all 2024 1-min samples (after dropping NA).",
+      "dynamicInputPorts": true,
+      "dynamicOutputPorts": true
+    }
+  ],
+  "operatorPositions": {
+    "omni_spec": {
+      "x": 100,
+      "y": 40
+    },
+    "omni2024": {
+      "x": 430,
+      "y": 400
+    },
+    "swarmb_pod_files": {
+      "x": 100,
+      "y": 220
+    },
+    "swarmb_dns": {
+      "x": 430,
+      "y": 220
+    },
+    "omni_clean": {
+      "x": 760,
+      "y": 400
+    },
+    "swarmb_clean": {
+      "x": 760,
+      "y": 220
+    },
+    "join_inputs": {
+      "x": 1090,
+      "y": 310
+    },
+    "nrlmsise_rho": {
+      "x": 1420,
+      "y": 310
+    },
+    "rmse": {
+      "x": 1750,
+      "y": 310
+    }
+  },
+  "links": [
+    {
+      "linkID": "swarmb_pod_files-->swarmb_dns",
+      "source": {
+        "operatorID": "swarmb_pod_files",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarmb_dns",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "omni2024-->omni_clean",
+      "source": {
+        "operatorID": "omni2024",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "omni_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarmb_dns-->swarmb_clean",
+      "source": {
+        "operatorID": "swarmb_dns",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "swarmb_clean",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "swarmb_clean-->join_inputs",
+      "source": {
+        "operatorID": "swarmb_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "join_inputs",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "omni_clean-->join_inputs",
+      "source": {
+        "operatorID": "omni_clean",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "join_inputs",
+        "portID": "input-1"
+      }
+    },
+    {
+      "linkID": "join_inputs-->nrlmsise_rho",
+      "source": {
+        "operatorID": "join_inputs",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "nrlmsise_rho",
+        "portID": "input-0"
+      }
+    },
+    {
+      "linkID": "nrlmsise_rho-->rmse",
+      "source": {
+        "operatorID": "nrlmsise_rho",
+        "portID": "output-0"
+      },
+      "target": {
+        "operatorID": "rmse",
+        "portID": "input-0"
+      }
+    }
+  ],
+  "commentBoxes": [],
+  "settings": {}
+}
