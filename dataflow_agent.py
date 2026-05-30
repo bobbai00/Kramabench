@@ -109,6 +109,7 @@ class AgentSettings:
     few_shot_prompt: bool = False
     table_structure_hint: bool = False
     loader_escalation: bool = False
+    frontier_depth: int = 0
     max_result_rows: int = 0
     # Global loader-proliferation budget: max distinct loader ids per source
     # path before a new loader for that path is rejected (plan5, lever F).
@@ -145,6 +146,7 @@ class AgentSettings:
             "fewShotPrompt": self.few_shot_prompt,
             "tableStructureHint": self.table_structure_hint,
             "loaderEscalation": self.loader_escalation,
+            "frontierDepth": self.frontier_depth,
             "maxResultRows": self.max_result_rows,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
@@ -771,6 +773,7 @@ class DataflowAgent:
             few_shot_prompt: bool = False,
             table_structure_hint: bool = False,
             loader_escalation: bool = False,
+            frontier_depth: int = 0,
             max_result_rows: int = 0,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
@@ -842,6 +845,7 @@ class DataflowAgent:
             few_shot_prompt=few_shot_prompt,
             table_structure_hint=table_structure_hint,
             loader_escalation=loader_escalation,
+            frontier_depth=frontier_depth,
             max_result_rows=max_result_rows,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
