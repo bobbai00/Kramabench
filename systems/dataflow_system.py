@@ -1486,3 +1486,30 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeLineageErr(DataflowSystem):
 
 # W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
 
+
+
+class DataflowSystemGPT5MiniLatestSchemaConvergeCap20(DataflowSystem):
+    """gpt-5-mini, LATEST context, schema on, + loader hint + budget + reflection.
+
+    The gpt-5-mini peer of the cost-minimized stack, for the symmetric fair-set
+    thesis (DataFlow vs CodeAgent on both models).
+    """
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_steps=20,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeCap20",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
