@@ -95,6 +95,7 @@ class AgentSettings:
     # Per-operator cardinality lineage line (rows in→out, kept %) + alarms on
     # empty-output / fan-out explosion (lever 1). False = no-op default.
     lineage_stats: bool = False
+    lineage_error_context: bool = False
     # Surface worker-flagged degenerate joins (near-zero key match w/ unmatched-key
     # sample, or many-to-many fan-out) as a `Join check` line (lever 2). No-op default.
     join_telemetry: bool = False
@@ -138,6 +139,7 @@ class AgentSettings:
             "loaderHint": self.loader_hint,
             "valueFormatFlags": self.value_format_flags,
             "lineageStats": self.lineage_stats,
+            "lineageErrorContext": self.lineage_error_context,
             "joinTelemetry": self.join_telemetry,
             "graphAudit": self.graph_audit,
             "coercionTelemetry": self.coercion_telemetry,
@@ -765,6 +767,7 @@ class DataflowAgent:
             loader_hint: bool = False,
             value_format_flags: bool = False,
             lineage_stats: bool = False,
+            lineage_error_context: bool = False,
             join_telemetry: bool = False,
             graph_audit: bool = False,
             coercion_telemetry: bool = False,
@@ -837,6 +840,7 @@ class DataflowAgent:
             loader_hint=loader_hint,
             value_format_flags=value_format_flags,
             lineage_stats=lineage_stats,
+            lineage_error_context=lineage_error_context,
             join_telemetry=join_telemetry,
             graph_audit=graph_audit,
             coercion_telemetry=coercion_telemetry,

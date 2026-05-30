@@ -47,6 +47,7 @@ class DataflowSystem(System):
         loader_hint: bool = False,
         value_format_flags: bool = False,
         lineage_stats: bool = False,
+        lineage_error_context: bool = False,
         join_telemetry: bool = False,
         graph_audit: bool = False,
         coercion_telemetry: bool = False,
@@ -119,6 +120,7 @@ class DataflowSystem(System):
         self.value_format_flags = value_format_flags
         # Cardinality lineage line + degenerate-transition alarms (lever 1); no-op default.
         self.lineage_stats = lineage_stats
+        self.lineage_error_context = lineage_error_context
         # Degenerate-join telemetry (lever 2); no-op default.
         self.join_telemetry = join_telemetry
         # Graph-reachability audit / dead-load detection (lever 3); no-op default.
@@ -261,6 +263,7 @@ class DataflowSystem(System):
             loader_hint=self.loader_hint,
             value_format_flags=self.value_format_flags,
             lineage_stats=self.lineage_stats,
+            lineage_error_context=self.lineage_error_context,
             join_telemetry=self.join_telemetry,
             graph_audit=self.graph_audit,
             coercion_telemetry=self.coercion_telemetry,
@@ -391,6 +394,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "loader_hint": self.loader_hint,
                 "value_format_flags": self.value_format_flags,
                 "lineage_stats": self.lineage_stats,
+                "lineage_error_context": self.lineage_error_context,
                 "join_telemetry": self.join_telemetry,
                 "graph_audit": self.graph_audit,
                 "coercion_telemetry": self.coercion_telemetry,
@@ -1459,6 +1463,23 @@ class DataflowSystemGPT52LatestSchemaConvergeFrontier(DataflowSystem):
             attempt_reflection=True, frontier_depth=2,
             max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT52LatestSchemaConvergeFrontier",
+            verbose=verbose, *args, **kwargs,
+        )
+
+
+# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
+
+
+
+class DataflowSystemGPT5MiniLatestSchemaConvergeLineageErr(DataflowSystem):
+    """gpt-5-mini converge + compact dataflow-aware stats."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
+            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
+            attempt_reflection=True, lineage_error_context=True,
+            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeLineageErr",
             verbose=verbose, *args, **kwargs,
         )
 
