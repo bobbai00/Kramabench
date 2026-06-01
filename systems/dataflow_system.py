@@ -57,6 +57,8 @@ class DataflowSystem(System):
         table_structure_hint: bool = False,
         loader_escalation: bool = False,
         frontier_depth: int = 0,
+        flow_level: int = 0,
+        data_level: int = 0,
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
@@ -133,6 +135,8 @@ class DataflowSystem(System):
         self.table_structure_hint = table_structure_hint
         self.loader_escalation = loader_escalation
         self.frontier_depth = frontier_depth
+        self.flow_level = flow_level
+        self.data_level = data_level
         self.max_result_rows = max_result_rows
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
@@ -273,6 +277,8 @@ class DataflowSystem(System):
             table_structure_hint=self.table_structure_hint,
             loader_escalation=self.loader_escalation,
             frontier_depth=self.frontier_depth,
+            flow_level=self.flow_level,
+            data_level=self.data_level,
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
@@ -404,6 +410,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "table_structure_hint": self.table_structure_hint,
                 "loader_escalation": self.loader_escalation,
                 "frontier_depth": self.frontier_depth,
+                "flow_level": self.flow_level,
+                "data_level": self.data_level,
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
@@ -1508,6 +1516,34 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeCap20(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConvergeCap20",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+
+class DataflowSystemGPT5MiniLatestSchemaConvergeLevels(DataflowSystem):
+    """gpt-5-mini, LATEST context, schema on, + loader hint + budget + reflection.
+
+    The gpt-5-mini peer of the cost-minimized stack, for the symmetric fair-set
+    thesis (DataFlow vs CodeAgent on both models).
+    """
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            stats_enabled=False,
+            schema_in_result=True,
+            loader_hint=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            flow_level=2,
+            data_level=2,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeLevels",
             verbose=verbose,
             *args,
             **kwargs,
