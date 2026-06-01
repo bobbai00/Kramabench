@@ -48,18 +48,32 @@ for concepts; come here for "how do I run it / where do I look."
 ## DataflowSystem variants
 
 Defined in `systems/dataflow_system.py` and exported from
-`systems/__init__.py`:
+`systems/__init__.py`. Context is controlled by **`context_mode`** (latest/delta)
++ the two ordinal DECORATE levels **`flow_level`** / **`data_level`** (0–3 each;
+see `claude/CONTEXT-DESIGN.md §8b`). The lean canonical set:
 
-| Class | Model |
-|---|---|
-| `DataflowSystem` | base (defaults to `claude-haiku-4.5`) |
-| `DataflowSystemHaiku45` | `claude-haiku-4.5` |
-| `DataflowSystemGPT5Mini` | `gpt-5-mini` |
+| Class | Model | Config |
+|---|---|---|
+| `DataflowSystem` | base (`claude-haiku-4.5`) | bare (flow_level=0, data_level=0) |
+| `DataflowSystemHaiku45` | `claude-haiku-4.5` | bare |
+| `DataflowSystemGPT5Mini` | `gpt-5-mini` | bare |
+| `DataflowSystemLocalLlm` | `local-llm` (local-react) | bare, max_steps=20 |
+| `DataflowSystemGPT52LatestSchemaConverge` | `gpt-5.2` | converge: flow_level=1, data_level=1 (thesis arm) |
+| `DataflowSystemGPT5MiniLatestSchemaConverge` | `gpt-5-mini` | converge: flow_level=1, data_level=1 (thesis arm) |
+| `DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct` | `gpt-5-mini` | converge + **data_level=2** (structural-profile, the accuracy win) |
+| `DataflowSystemGPT5MiniLatestSchemaConvergeFewShot` | `gpt-5-mini` | converge + few-shot prior (W2 cost win) |
+| `DataflowSystemGPT5MiniLatestSchemaConvergeCap20` | `gpt-5-mini` | converge + max_steps=20 (#31 step-cap) |
+| `DataflowSystemGPT5MiniLatestSchemaConvergeLevels` | `gpt-5-mini` | reference level config: flow_level=2, data_level=2 |
 
-Add a new variant by subclassing `DataflowSystem` and passing `model_type`,
-`name`, and any overrides to `super().__init__`. Also re-export from
-`systems/__init__.py` so the harness's dynamic lookup
-(`__import__("systems"); getattr(systems_module, system_name)`) can find it.
+The 30+ one-off A/B + stats-sweep variants from the campaign were removed (their
+results live in `claude/seed1/` + `system_scratch/` by SUT name, which the
+analysis tools read by string — unaffected by the class pruning).
+
+Add a new variant by subclassing `DataflowSystem`, passing `model_type`, `name`,
+`context_mode`, and `flow_level`/`data_level` (plus any ACT-side knobs:
+`max_steps`, `max_loaders_per_source`, `attempt_reflection`). Re-export from
+`systems/__init__.py` so the dynamic lookup
+(`getattr(systems_module, system_name)`) can find it.
 
 ## How evaluation works end to end
 

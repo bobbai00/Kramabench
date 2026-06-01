@@ -601,392 +601,24 @@ class DataflowSystemGPT5Mini(DataflowSystem):
         )
 
 
-# ────────────────────────────────────────────────────────────────────────
-# Haiku-4.5 × {context-mode, stats} matrix — 3 × 2 = 6 variants.
-# Each subclass pins one combination so the benchmark can sweep both
-# dimensions by name (no env vars required). All other agent parameters
-# follow `DataflowSystemHaiku45`'s defaults.
-# ────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────
+# The "converge" stack = the cost-minimized DataFlow configuration:
+# LATEST context (aggregated history) + flow_level=1 (loader-remediation) +
+# data_level=1 (compact typed Schema line) + a loader-proliferation budget and
+# attempt-reflection (ACT-side convergence guards). Expressed via the two
+# ordinal DECORATE levels (see claude/CONTEXT-DESIGN.md §5/§8b).
+# ─────────────────────────────────────────────────────────────────────────
 
 
-class _Haiku45Variant(DataflowSystem):
-    """Base for the Haiku 4.5 sweep — subclasses only override name + the
-    `context_mode` / `stats_enabled` pair so the matrix stays declarative."""
-
-    _CONTEXT_MODE: str = "latest"
-    _STATS_ENABLED: bool = False
-    _NAME: str = "DataflowSystemHaiku45"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-haiku-4.5",
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            context_mode=self._CONTEXT_MODE,
-            stats_enabled=self._STATS_ENABLED,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
-
-
-class DataflowSystemHaiku45LatestStatsOff(_Haiku45Variant):
-    _CONTEXT_MODE = "latest"
-    _STATS_ENABLED = False
-    _NAME = "DataflowSystemHaiku45LatestStatsOff"
-
-
-class DataflowSystemHaiku45LatestStatsOn(_Haiku45Variant):
-    _CONTEXT_MODE = "latest"
-    _STATS_ENABLED = True
-    _NAME = "DataflowSystemHaiku45LatestStatsOn"
-
-
-class DataflowSystemHaiku45DeltaStatsOff(_Haiku45Variant):
-    _CONTEXT_MODE = "delta"
-    _STATS_ENABLED = False
-    _NAME = "DataflowSystemHaiku45DeltaStatsOff"
-
-
-class DataflowSystemHaiku45DeltaStatsOn(_Haiku45Variant):
-    _CONTEXT_MODE = "delta"
-    _STATS_ENABLED = True
-    _NAME = "DataflowSystemHaiku45DeltaStatsOn"
-
-
-class DataflowSystemHaiku45FullStatsOff(_Haiku45Variant):
-    _CONTEXT_MODE = "full"
-    _STATS_ENABLED = False
-    _NAME = "DataflowSystemHaiku45FullStatsOff"
-
-
-class DataflowSystemHaiku45FullStatsOn(_Haiku45Variant):
-    _CONTEXT_MODE = "full"
-    _STATS_ENABLED = True
-    _NAME = "DataflowSystemHaiku45FullStatsOn"
-
-
-# ────────────────────────────────────────────────────────────────────────
-# GPT family × {latest, delta} with stats=on. Pins gpt-5-mini and gpt-5.2
-# from the LiteLLM catalogue so the benchmark can sweep models alongside
-# the Haiku 4.5 matrix above. Stats are on for all four — the comparison
-# is purely about model × context-mode at the same render configuration.
-# ────────────────────────────────────────────────────────────────────────
-
-
-class _GPTStatsOnVariant(DataflowSystem):
-    """Base for the GPT-family stats-on sweep. Subclasses pin model + context."""
-
-    _MODEL_TYPE: str = "gpt-5-mini"
-    _CONTEXT_MODE: str = "latest"
-    _NAME: str = "DataflowSystem"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type=self._MODEL_TYPE,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            context_mode=self._CONTEXT_MODE,
-            stats_enabled=True,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT5MiniLatestStatsOn(_GPTStatsOnVariant):
-    _MODEL_TYPE = "gpt-5-mini"
-    _CONTEXT_MODE = "latest"
-    _NAME = "DataflowSystemGPT5MiniLatestStatsOn"
-
-
-class DataflowSystemGPT5MiniDeltaStatsOn(_GPTStatsOnVariant):
-    _MODEL_TYPE = "gpt-5-mini"
-    _CONTEXT_MODE = "delta"
-    _NAME = "DataflowSystemGPT5MiniDeltaStatsOn"
-
-
-class DataflowSystemGPT5MiniFullStatsOn(_GPTStatsOnVariant):
-    _MODEL_TYPE = "gpt-5-mini"
-    _CONTEXT_MODE = "full"
-    _NAME = "DataflowSystemGPT5MiniFullStatsOn"
-
-
-class DataflowSystemGPT52LatestStatsOn(_GPTStatsOnVariant):
-    _MODEL_TYPE = "gpt-5.2"
-    _CONTEXT_MODE = "latest"
-    _NAME = "DataflowSystemGPT52LatestStatsOn"
-
-
-class DataflowSystemGPT52DeltaStatsOn(_GPTStatsOnVariant):
-    _MODEL_TYPE = "gpt-5.2"
-    _CONTEXT_MODE = "delta"
-    _NAME = "DataflowSystemGPT52DeltaStatsOn"
-
-
-class DataflowSystemGPT52FullStatsOn(_GPTStatsOnVariant):
-    _MODEL_TYPE = "gpt-5.2"
-    _CONTEXT_MODE = "full"
-    _NAME = "DataflowSystemGPT52FullStatsOn"
-
-
-# ────────────────────────────────────────────────────────────────────────
-# plan1 — convergence guard (goal.md lever C, limitation L1). Identical to
-# DataflowSystemGPT5MiniFullStatsOn (the gpt-5-mini *FullStatsOn baseline):
-# gpt-5-mini, context_mode=full, stats on, char limits 1000/3000, with the
-# DataflowSystem defaults parallel_tool_calls=True and max_steps=50. The ONLY
-# difference is max_operator_edits=5 — caps consecutive edits to the same
-# operator so the worst thrashing tails (baseline: one op edited 13–25× in a
-# row) are truncated. Isolates lever C as the single variable vs the baseline.
-# ────────────────────────────────────────────────────────────────────────
-
-
-class DataflowSystemGPT5MiniFullStatsOnGuard(DataflowSystem):
-    """gpt-5-mini, full context, stats on, + convergence guard (cap 5)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="full",
-            stats_enabled=True,
-            max_operator_edits=5,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniFullStatsOnGuard",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# ────────────────────────────────────────────────────────────────────────
-# plan2 — schema-first CODE mode (goal.md lever E). Same as the baseline
-# DataflowSystemGPT5MiniFullStatsOn EXCEPT the per-column representation:
-# verbose `Column stats:` (stats_enabled) is OFF and replaced by a compact
-# typed `Schema:` line (schema_in_result). Tests whether name+type at ~1/4 the
-# token cost of full stats preserves accuracy — a cost/accuracy Pareto point.
-# ────────────────────────────────────────────────────────────────────────
-
-
-class DataflowSystemGPT5MiniFullSchemaNoStats(DataflowSystem):
-    """gpt-5-mini, full context, stats OFF, compact typed Schema line ON."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniFullSchemaNoStats",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52FullSchemaNoStats(DataflowSystem):
-    """gpt-5.2, full context, stats OFF, compact typed Schema line ON.
-
-    The plan2 keeper (lever E, schema-first) on gpt-5.2 — the model where cost
-    is most severe (baseline $18 sum, 2.55M-token outlier). Confirms whether the
-    -53% schema win holds on the stronger model, comparing against the
-    DataflowSystemGPT52FullStatsOn baseline on the same 49 tasks.
-    """
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52FullSchemaNoStats",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# ────────────────────────────────────────────────────────────────────────
-# plan4 — stage-aware loader-remediation hint (lever D, accuracy). Stacks on
-# the plan2 schema keeper (full, stats off, schema on) + loader_hint=True. The
-# only delta vs DataflowSystem*FullSchemaNoStats is the `Loader hint:` line
-# appended to a failed DataLoading op (keyed on the exception class). Targets
-# the load-error cluster (UnicodeDecodeError/ParserError/FileNotFoundError).
-# plan5 — global loader-proliferation budget (lever F, cost). Same base +
-# max_loaders_per_source=2 (reject the 3rd distinct loader for one source path;
-# a well-formed flow needs ≤1 loader per file, 2 allows slack — a general
-# hygiene default, not fit to the benchmark). Robust to plan1's new-id evasion.
-# ────────────────────────────────────────────────────────────────────────
-class DataflowSystemGPT5MiniFullSchemaLoaderHint(DataflowSystem):
-    """gpt-5-mini, full, stats off, schema on, + loader-remediation hint (plan4)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniFullSchemaLoaderHint",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52FullSchemaLoaderHint(DataflowSystem):
-    """gpt-5.2, full, stats off, schema on, + loader-remediation hint (plan4)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52FullSchemaLoaderHint",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT5MiniFullSchemaLoaderBudget(DataflowSystem):
-    """gpt-5-mini, full, stats off, schema on, + loader-proliferation budget=2 (plan5)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            max_loaders_per_source=2,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniFullSchemaLoaderBudget",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52FullSchemaLoaderBudget(DataflowSystem):
-    """gpt-5.2, full, stats off, schema on, + loader-proliferation budget=2 (plan5)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            max_loaders_per_source=2,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52FullSchemaLoaderBudget",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52FullSchemaLoaderHintBudget(DataflowSystem):
-    """gpt-5.2 best stack: schema (plan2) + loader hint (plan4) + loader budget (plan5).
-
-    The candidate best dataflow config for the dataflow-vs-script thesis check.
-    """
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52FullSchemaLoaderHintBudget",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# ────────────────────────────────────────────────────────────────────────
-# plan3 — per-operator attempt reflection (progress reflection / lever C-D).
-# Stacks on the plan2 schema keeper + attempt_reflection=True. Targets
-# same-operator thrashing — the agent re-deriving blind variants because CODE
-# mode strips its prior code (e.g. astronomy-easy-4 edited one op 38× / 1.5M tok
-# on gpt-5.2). The only delta vs *FullSchemaNoStats is the reflection block.
-# ────────────────────────────────────────────────────────────────────────
-class DataflowSystemGPT5MiniFullSchemaReflect(DataflowSystem):
-    """gpt-5-mini, full, stats off, schema on, + attempt reflection (plan3)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniFullSchemaReflect",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52FullSchemaReflect(DataflowSystem):
-    """gpt-5.2, full, stats off, schema on, + attempt reflection (plan3)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=True,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52FullSchemaReflect",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# ────────────────────────────────────────────────────────────────────────
-# Cost-minimized stack vs the script agent. The gpt-5.2 thesis showed DataFlow
-# is MORE accurate (12 vs 8 pass) but ~2.85x MORE EXPENSIVE than CodeAgent
-# ($13.05 vs $4.58) — driven by FULL-mode per-step DAG/result re-rendering, more
-# steps, and the spiral tail (1.53M tok max vs CodeAgent's 197K). This config
-# drops to LATEST context (no per-step FULL re-render) + keeps the cheap compact
-# schema + turns on ALL convergence levers (loader hint + budget + reflection)
-# to cap the tail. Goal: close the cost gap to the script agent while keeping
-# DataFlow's accuracy edge.
-# ────────────────────────────────────────────────────────────────────────
 class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
-    """gpt-5.2, LATEST context, schema on, + loader hint + loader budget + reflection."""
+    """gpt-5.2 converge stack (flow_level=1, data_level=1). Thesis arm."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
             model_type="gpt-5.2",
             context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
+            flow_level=1,
+            data_level=1,
             max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
@@ -999,19 +631,15 @@ class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
 
 
 class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
-    """gpt-5-mini, LATEST context, schema on, + loader hint + budget + reflection.
-
-    The gpt-5-mini peer of the cost-minimized stack, for the symmetric fair-set
-    thesis (DataFlow vs CodeAgent on both models).
-    """
+    """gpt-5-mini converge stack (flow_level=1, data_level=1). Thesis arm
+    (the gpt-5-mini peer for the symmetric DataFlow-vs-Script comparison)."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
             model_type="gpt-5-mini",
             context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
+            flow_level=1,
+            data_level=1,
             max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
@@ -1023,477 +651,57 @@ class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
         )
 
 
-# Accuracy lever: converge stack + value-format flags (currency/percent/thousands
-# cleaning hints). Only delta vs *LatestSchemaConverge is value_format_flags=True,
-# so an A/B on the persistent-failure set isolates the lever. Targets the silent
-# to_numeric(coerce) dataloss class (legal-hard-15 etc.).
-class DataflowSystemGPT5MiniLatestSchemaConvergeFmt(DataflowSystem):
-    """gpt-5-mini converge stack + value-format flags."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            value_format_flags=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeFmt",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52LatestSchemaConvergeFmt(DataflowSystem):
-    """gpt-5.2 converge stack + value-format flags."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            value_format_flags=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConvergeFmt",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# Lever 1 A/B: converge stack + cardinality lineage line + degenerate-transition
-# alarms. Only delta vs *LatestSchemaConverge is lineage_stats=True, so an A/B
-# isolates the lever. Targets the dominant silent-cardinality wrong-answer
-# (filter-to-0 / zero-match join / wrong group count) AND the cost spiral tail.
-class DataflowSystemGPT5MiniLatestSchemaConvergeLineage(DataflowSystem):
-    """gpt-5-mini converge stack + cardinality lineage + alarms."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            lineage_stats=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeLineage",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52LatestSchemaConvergeLineage(DataflowSystem):
-    """gpt-5.2 converge stack + cardinality lineage + alarms."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            lineage_stats=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConvergeLineage",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# Lever 2 A/B: converge stack + degenerate-join telemetry. Only delta vs
-# *LatestSchemaConverge is join_telemetry=True. Tests whether ACTIONABLE
-# surfacing (the unmatched-key sample showing WHY a join failed) crosses the
-# acting threshold that lever 1's passive cardinality alarm did not.
-class DataflowSystemGPT5MiniLatestSchemaConvergeJoin(DataflowSystem):
-    """gpt-5-mini converge stack + degenerate-join telemetry."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            join_telemetry=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeJoin",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52LatestSchemaConvergeJoin(DataflowSystem):
-    """gpt-5.2 converge stack + degenerate-join telemetry."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            join_telemetry=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConvergeJoin",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# Lever 3 A/B: converge stack + graph-reachability audit (dead-load detection).
-# Only delta vs *LatestSchemaConverge is graph_audit=True.
-class DataflowSystemGPT5MiniLatestSchemaConvergeGraph(DataflowSystem):
-    """gpt-5-mini converge stack + graph-reachability audit."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            graph_audit=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeGraph",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52LatestSchemaConvergeGraph(DataflowSystem):
-    """gpt-5.2 converge stack + graph-reachability audit."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            graph_audit=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConvergeGraph",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# Lever 4 A/B: converge stack + coerce-to-NaN dataloss telemetry. Only delta vs
-# *LatestSchemaConverge is coercion_telemetry=True. Targets the confirmed
-# coercion-dataloss failure class (legal-hard-15) with an actionable sample of
-# the dropped values; complements the (pre-cast) value-format hint.
-class DataflowSystemGPT5MiniLatestSchemaConvergeCoerce(DataflowSystem):
-    """gpt-5-mini converge stack + coercion-dataloss telemetry."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            coercion_telemetry=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeCoerce",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT52LatestSchemaConvergeCoerce(DataflowSystem):
-    """gpt-5.2 converge stack + coercion-dataloss telemetry."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
-            coercion_telemetry=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConvergeCoerce",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# Serialization study: converge stack but a TIGHT result char cap (~3 sample rows
-# vs ~6) to test the fewer-records token/accuracy trade-off. Config-only delta
-# (max_operator_result_char_limit). TSV stays (offline study: JSON/TOML cost
-# 1.5-2.2x MORE tokens, so format is not the lever; rows are).
-class DataflowSystemGPT5MiniLatestSchemaConvergeFewRows(DataflowSystem):
-    """gpt-5-mini converge stack + tight result char cap (~3 sample rows)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, max_operator_result_char_limit=250,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeFewRows",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W1: TRUE row cap (first ceil(N/2)+last floor(N/2) rows) — vs the char-budget
-# FewRows proxy. Char limit back to default 1000; only max_result_rows differs.
-class DataflowSystemGPT5MiniLatestSchemaConvergeRows3(DataflowSystem):
-    """gpt-5-mini converge + row cap N=3."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, max_result_rows=3,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeRows3",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-class DataflowSystemGPT5MiniLatestSchemaConvergeRows5(DataflowSystem):
-    """gpt-5-mini converge + row cap N=5."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, max_result_rows=5,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeRows5",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W4: converge + COMPACT per-column stats (numeric null/min/max; categorical
-# distinct/top-5) on top of the schema line. Tests whether the high-signal stats
-# subset helps accuracy at a fraction of the full-stats token cost.
-class DataflowSystemGPT5MiniLatestSchemaConvergeCompactStats(DataflowSystem):
-    """gpt-5-mini converge + compact dataflow-aware stats."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, compact_stats=True,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeCompactStats",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
-class DataflowSystemGPT5MiniLatestSchemaConvergeTimeline(DataflowSystem):
-    """gpt-5-mini converge + recent-steps construction timeline."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, lineage_timeline=True,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeTimeline",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W2: converge + few-shot best-practices appended to the system prompt.
-class DataflowSystemGPT5MiniLatestSchemaConvergeFewShot(DataflowSystem):
-    """gpt-5-mini converge + few-shot best-practices prompt."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, few_shot_prompt=True,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeFewShot",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# plan2 control arm: NO per-column info block at all (stats off + schema off).
-# Triangulates the column-info representation {full-stats | compact-schema | none}
-# so we can attribute plan2's win to the schema vs to merely dropping stats.
-class DataflowSystemGPT5MiniFullNoStatsNoSchema(DataflowSystem):
-    """gpt-5-mini, full context, stats OFF, schema OFF (no per-column info)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="full",
-            stats_enabled=False,
-            schema_in_result=False,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniFullNoStatsNoSchema",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-# ────────────────────────────────────────────────────────────────────────
-# In-house local model under the text-mode `local-react` driver. Forces
-# the local driver explicitly (model_type="local-llm" would auto-derive it
-# server-side, but we pin it for clarity). Stats off; operator properties
-# off — note the local-react context assembler ignores
-# includeOperatorProperties regardless (server.ts:62-66), so this only
-# documents intent. max_steps capped at 20.
-# ────────────────────────────────────────────────────────────────────────
-
-
-class DataflowSystemLocalLlm(DataflowSystem):
-    """DataflowSystem using the in-house local model via the local-react driver."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="local-llm",
-            driver="local-react",
-            max_steps=20,
-            stats_enabled=False,
-            include_operator_properties=False,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemLocalLlm",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
 class DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct(DataflowSystem):
-    """gpt-5-mini converge + compact dataflow-aware stats."""
+    """Converge + data_level=2 — the structural-profile rung (#25/26/27), the
+    campaign's one accuracy win (+8 single / +4 best-of-2)."""
+
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, table_structure_hint=True,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            flow_level=1,
+            data_level=2,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct",
-            verbose=verbose, *args, **kwargs,
+            verbose=verbose,
+            *args,
+            **kwargs,
         )
 
 
-# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
+class DataflowSystemGPT5MiniLatestSchemaConvergeFewShot(DataflowSystem):
+    """Converge + few-shot worked-examples prior (W2, the −5.9% cost win)."""
 
-
-class DataflowSystemGPT5MiniLatestSchemaConvergeLoaderEsc(DataflowSystem):
-    """gpt-5-mini converge + loader-budget escalation (#29)."""
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, loader_escalation=True,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeLoaderEsc",
-            verbose=verbose, *args, **kwargs,
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            few_shot_prompt=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeFewShot",
+            verbose=verbose,
+            *args,
+            **kwargs,
         )
-
-
-class DataflowSystemGPT5MiniLatestSchemaConvergeFrontier(DataflowSystem):
-    """gpt-5-mini converge + compact dataflow-aware stats."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, frontier_depth=2,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeFrontier",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
-
-
-class DataflowSystemGPT52LatestSchemaConvergeFrontier(DataflowSystem):
-    """gpt-5-mini converge + compact dataflow-aware stats."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, frontier_depth=2,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConvergeFrontier",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
-
-
-
-class DataflowSystemGPT5MiniLatestSchemaConvergeLineageErr(DataflowSystem):
-    """gpt-5-mini converge + compact dataflow-aware stats."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", context_mode="latest", stats_enabled=False,
-            schema_in_result=True, loader_hint=True, max_loaders_per_source=2,
-            attempt_reflection=True, lineage_error_context=True,
-            max_operator_result_char_limit=1000, max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeLineageErr",
-            verbose=verbose, *args, **kwargs,
-        )
-
-
-# W3: converge + construction TIMELINE in LATEST mode (the events the agent took).
-
 
 
 class DataflowSystemGPT5MiniLatestSchemaConvergeCap20(DataflowSystem):
-    """gpt-5-mini, LATEST context, schema on, + loader hint + budget + reflection.
-
-    The gpt-5-mini peer of the cost-minimized stack, for the symmetric fair-set
-    thesis (DataFlow vs CodeAgent on both models).
-    """
+    """Converge + a hard 20-step budget (#31, ACT-side cost lever)."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
             model_type="gpt-5-mini",
             context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
+            flow_level=1,
+            data_level=1,
             max_loaders_per_source=2,
             attempt_reflection=True,
             max_steps=20,
@@ -1506,25 +714,18 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeCap20(DataflowSystem):
         )
 
 
-
 class DataflowSystemGPT5MiniLatestSchemaConvergeLevels(DataflowSystem):
-    """gpt-5-mini, LATEST context, schema on, + loader hint + budget + reflection.
-
-    The gpt-5-mini peer of the cost-minimized stack, for the symmetric fair-set
-    thesis (DataFlow vs CodeAgent on both models).
-    """
+    """Reference level-config SUT — converge plus flow_level=2 / data_level=2
+    set explicitly, demonstrating the ordinal DECORATE knobs."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
             model_type="gpt-5-mini",
             context_mode="latest",
-            stats_enabled=False,
-            schema_in_result=True,
-            loader_hint=True,
-            max_loaders_per_source=2,
-            attempt_reflection=True,
             flow_level=2,
             data_level=2,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConvergeLevels",
@@ -1533,3 +734,20 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeLevels(DataflowSystem):
             **kwargs,
         )
 
+
+class DataflowSystemLocalLlm(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=20,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
