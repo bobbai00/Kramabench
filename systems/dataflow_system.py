@@ -111,32 +111,40 @@ class DataflowSystem(System):
         self.parallel_tool_calls = True if parallel_tool_calls is None else parallel_tool_calls
         self.allowed_operator_types = allowed_operator_types
         self.disabled_tools = disabled_tools
-        self.stats_enabled = stats_enabled
         # None -> server default (true).
         self.include_operator_properties = include_operator_properties
-        # Compact `Schema:` line per result (lever E); False = no-op default.
-        self.schema_in_result = schema_in_result
-        # Loader-remediation hint on failed load-stage ops (plan4); no-op default.
-        self.loader_hint = loader_hint
-        # Value-format flags (currency/percent/thousands cleaning hints); no-op default.
-        self.value_format_flags = value_format_flags
-        # Cardinality lineage line + degenerate-transition alarms (lever 1); no-op default.
-        self.lineage_stats = lineage_stats
-        self.lineage_error_context = lineage_error_context
-        # Degenerate-join telemetry (lever 2); no-op default.
-        self.join_telemetry = join_telemetry
-        # Graph-reachability audit / dead-load detection (lever 3); no-op default.
-        self.graph_audit = graph_audit
-        # Coerce-to-NaN dataloss telemetry (lever 4); no-op default.
-        self.coercion_telemetry = coercion_telemetry
-        self.compact_stats = compact_stats
+        # ---- DECORATE control: the two ordinal facet levels (CONTEXT-DESIGN §5) ----
+        # Context decoration is controlled purely by flow_level / data_level (each
+        # expands, agent-service side, into the per-rung render flags via the rung
+        # catalog). The individual decoration booleans are no longer sent on the
+        # wire; for back-compat the legacy per-lever kwargs (schema_in_result,
+        # loader_hint, table_structure_hint, …) are TRANSLATED here to the minimum
+        # level that enables them, and OR'd with any explicit level. This collapses
+        # the old non-cumulative one-off configs onto the cumulative ladder.
+        #   flow L1 loader_hint | L2 lineage_stats/lineage_error_context |
+        #          L3 graph_audit/join_telemetry
+        #   data L1 schema_in_result | L2 table_structure_hint |
+        #          L3 value_format_flags/coercion_telemetry
+        flow_from_flags = 0
+        if loader_hint:
+            flow_from_flags = max(flow_from_flags, 1)
+        if lineage_stats or lineage_error_context:
+            flow_from_flags = max(flow_from_flags, 2)
+        if graph_audit or join_telemetry:
+            flow_from_flags = max(flow_from_flags, 3)
+        data_from_flags = 0
+        if schema_in_result or stats_enabled or compact_stats:
+            data_from_flags = max(data_from_flags, 1)
+        if table_structure_hint:
+            data_from_flags = max(data_from_flags, 2)
+        if value_format_flags or coercion_telemetry:
+            data_from_flags = max(data_from_flags, 3)
+        self.flow_level = max(flow_level, flow_from_flags)
+        self.data_level = max(data_level, data_from_flags)
+        # SELECT reinjection + static prior (kept fine-grained knobs).
         self.lineage_timeline = lineage_timeline
         self.few_shot_prompt = few_shot_prompt
-        self.table_structure_hint = table_structure_hint
         self.loader_escalation = loader_escalation
-        self.frontier_depth = frontier_depth
-        self.flow_level = flow_level
-        self.data_level = data_level
         self.max_result_rows = max_result_rows
         # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
         self.max_loaders_per_source = max_loaders_per_source
@@ -261,22 +269,10 @@ class DataflowSystem(System):
             parallel_tool_calls=self.parallel_tool_calls,
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
-            stats_enabled=self.stats_enabled,
             include_operator_properties=self.include_operator_properties,
-            schema_in_result=self.schema_in_result,
-            loader_hint=self.loader_hint,
-            value_format_flags=self.value_format_flags,
-            lineage_stats=self.lineage_stats,
-            lineage_error_context=self.lineage_error_context,
-            join_telemetry=self.join_telemetry,
-            graph_audit=self.graph_audit,
-            coercion_telemetry=self.coercion_telemetry,
-            compact_stats=self.compact_stats,
             lineage_timeline=self.lineage_timeline,
             few_shot_prompt=self.few_shot_prompt,
-            table_structure_hint=self.table_structure_hint,
             loader_escalation=self.loader_escalation,
-            frontier_depth=self.frontier_depth,
             flow_level=self.flow_level,
             data_level=self.data_level,
             max_result_rows=self.max_result_rows,
@@ -394,22 +390,10 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "parallel_tool_calls": self.parallel_tool_calls,
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
-                "stats_enabled": self.stats_enabled,
                 "include_operator_properties": self.include_operator_properties,
-                "schema_in_result": self.schema_in_result,
-                "loader_hint": self.loader_hint,
-                "value_format_flags": self.value_format_flags,
-                "lineage_stats": self.lineage_stats,
-                "lineage_error_context": self.lineage_error_context,
-                "join_telemetry": self.join_telemetry,
-                "graph_audit": self.graph_audit,
-                "coercion_telemetry": self.coercion_telemetry,
-                "compact_stats": self.compact_stats,
                 "lineage_timeline": self.lineage_timeline,
                 "few_shot_prompt": self.few_shot_prompt,
-                "table_structure_hint": self.table_structure_hint,
                 "loader_escalation": self.loader_escalation,
-                "frontier_depth": self.frontier_depth,
                 "flow_level": self.flow_level,
                 "data_level": self.data_level,
                 "max_result_rows": self.max_result_rows,

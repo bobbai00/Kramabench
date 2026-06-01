@@ -79,38 +79,26 @@ class AgentSettings:
     context_mode: str = AGENT_CONTEXT_MODE  # "full", "delta", or "latest"
     parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS
     allowed_operator_types: Optional[list[str]] = None  # None -> server default
-    stats_enabled: bool = False  # Render `Column stats:` block per non-error result.
     # Render each operator's `Properties:` line in the assembled snapshot.
     # None -> server default (true); code operators are stripped regardless.
     include_operator_properties: Optional[bool] = None
     # Render a compact `Schema:` line (col + type) per result — cheaper
     # substitute for full column-stats (lever E). False = no-op default.
-    schema_in_result: bool = False
     # Append a `Loader hint:` remediation line to a failed load-stage operator,
     # keyed on the exception class (plan4, lever D). False = no-op default.
-    loader_hint: bool = False
     # Flag currency/percent/thousands string columns with cleaning hints
     # (value-format flags). False = no-op default.
-    value_format_flags: bool = False
     # Per-operator cardinality lineage line (rows in→out, kept %) + alarms on
     # empty-output / fan-out explosion (lever 1). False = no-op default.
-    lineage_stats: bool = False
-    lineage_error_context: bool = False
     # Surface worker-flagged degenerate joins (near-zero key match w/ unmatched-key
     # sample, or many-to-many fan-out) as a `Join check` line (lever 2). No-op default.
-    join_telemetry: bool = False
     # Flag dead/disconnected DataLoading operators via typed-DAG reachability
     # (lever 3, `Graph check`). No-op default.
-    graph_audit: bool = False
     # Surface coerce-to-NaN dataloss from to_numeric/to_datetime(errors="coerce")
     # with a sample of dropped values (lever 4). No-op default.
-    coercion_telemetry: bool = False
-    compact_stats: bool = False
     lineage_timeline: bool = False
     few_shot_prompt: bool = False
-    table_structure_hint: bool = False
     loader_escalation: bool = False
-    frontier_depth: int = 0
     flow_level: int = 0
     data_level: int = 0
     max_result_rows: int = 0
@@ -136,21 +124,9 @@ class AgentSettings:
             "agentMode": self.agent_mode,
             "contextMode": self.context_mode,
             "parallelToolCalls": self.parallel_tool_calls,
-            "statsEnabled": self.stats_enabled,
-            "schemaInResult": self.schema_in_result,
-            "loaderHint": self.loader_hint,
-            "valueFormatFlags": self.value_format_flags,
-            "lineageStats": self.lineage_stats,
-            "lineageErrorContext": self.lineage_error_context,
-            "joinTelemetry": self.join_telemetry,
-            "graphAudit": self.graph_audit,
-            "coercionTelemetry": self.coercion_telemetry,
-            "compactStats": self.compact_stats,
             "lineageTimeline": self.lineage_timeline,
             "fewShotPrompt": self.few_shot_prompt,
-            "tableStructureHint": self.table_structure_hint,
             "loaderEscalation": self.loader_escalation,
-            "frontierDepth": self.frontier_depth,
             "flowLevel": self.flow_level,
             "dataLevel": self.data_level,
             "maxResultRows": self.max_result_rows,
@@ -765,22 +741,10 @@ class DataflowAgent:
             context_mode: str = AGENT_CONTEXT_MODE,
             parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS,
             allowed_operator_types: Optional[list[str]] = None,
-            stats_enabled: bool = False,
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
-            schema_in_result: bool = False,
-            loader_hint: bool = False,
-            value_format_flags: bool = False,
-            lineage_stats: bool = False,
-            lineage_error_context: bool = False,
-            join_telemetry: bool = False,
-            graph_audit: bool = False,
-            coercion_telemetry: bool = False,
-            compact_stats: bool = False,
             lineage_timeline: bool = False,
             few_shot_prompt: bool = False,
-            table_structure_hint: bool = False,
             loader_escalation: bool = False,
-            frontier_depth: int = 0,
             flow_level: int = 0,
             data_level: int = 0,
             max_result_rows: int = 0,
@@ -840,22 +804,10 @@ class DataflowAgent:
             context_mode=context_mode,
             parallel_tool_calls=parallel_tool_calls,
             allowed_operator_types=allowed_operator_types,
-            stats_enabled=stats_enabled,
             include_operator_properties=include_operator_properties,
-            schema_in_result=schema_in_result,
-            loader_hint=loader_hint,
-            value_format_flags=value_format_flags,
-            lineage_stats=lineage_stats,
-            lineage_error_context=lineage_error_context,
-            join_telemetry=join_telemetry,
-            graph_audit=graph_audit,
-            coercion_telemetry=coercion_telemetry,
-            compact_stats=compact_stats,
             lineage_timeline=lineage_timeline,
             few_shot_prompt=few_shot_prompt,
-            table_structure_hint=table_structure_hint,
             loader_escalation=loader_escalation,
-            frontier_depth=frontier_depth,
             flow_level=flow_level,
             data_level=data_level,
             max_result_rows=max_result_rows,
