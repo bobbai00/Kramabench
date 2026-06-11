@@ -34,12 +34,69 @@ DEFAULT_MAX_PRINT_OUTPUTS_LENGTH = int(_max_print_env) if _max_print_env.isdigit
 REASONING_EFFORT_SUFFIXES = ("-high", "-medium", "-low")
 
 
+# OpenAI reasoning models reject a non-default `temperature` (only 1 is allowed)
+# and bill reasoning tokens inside `completion_tokens`.
+_REASONING_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def _is_reasoning_model(model_id: str) -> bool:
+    m = (model_id or "").split("/")[-1]
+    return any(m.startswith(p) for p in _REASONING_MODEL_PREFIXES)
+
+
 def _parse_model_and_reasoning_effort(model_type: str) -> tuple[str, Optional[str]]:
     """Parse model name like 'gpt-5-mini-medium' into ('gpt-5-mini', 'medium')."""
     for suffix in REASONING_EFFORT_SUFFIXES:
         if model_type.endswith(suffix):
             return model_type[: -len(suffix)], suffix.lstrip("-")
     return model_type, None
+
+
+class UsageTrackingOpenAIModel(OpenAIServerModel):
+    """OpenAIServerModel that accumulates the per-call token-class breakdown that
+    smolagents' RunResult.token_usage drops — cache-read and reasoning tokens —
+    by reading the raw OpenAI response on every generate() call."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.reset_usage()
+
+    @property
+    def supports_stop_parameter(self) -> bool:
+        # smolagents' built-in regex misses dotted reasoning ids (e.g. "gpt-5.4"),
+        # so it would send `stop` and get a 400. All gpt-5*/o* reasoning models
+        # reject `stop`; force it off and let smolagents trim stop seqs client-side.
+        if _is_reasoning_model(self.model_id or ""):
+            return False
+        from smolagents.models import supports_stop_parameter as _ssp
+        return _ssp(self.model_id or "")
+
+    def reset_usage(self):
+        self.usage_acc = {
+            "input": 0, "output": 0, "cached": 0, "reasoning": 0, "calls": 0,
+        }
+
+    def _track(self, msg):
+        try:
+            usage = getattr(getattr(msg, "raw", None), "usage", None)
+            if usage is None:
+                return
+            self.usage_acc["calls"] += 1
+            self.usage_acc["input"] += int(getattr(usage, "prompt_tokens", 0) or 0)
+            self.usage_acc["output"] += int(getattr(usage, "completion_tokens", 0) or 0)
+            ptd = getattr(usage, "prompt_tokens_details", None)
+            if ptd is not None:
+                self.usage_acc["cached"] += int(getattr(ptd, "cached_tokens", 0) or 0)
+            ctd = getattr(usage, "completion_tokens_details", None)
+            if ctd is not None:
+                self.usage_acc["reasoning"] += int(getattr(ctd, "reasoning_tokens", 0) or 0)
+        except Exception:
+            pass
+
+    def generate(self, *args, **kwargs):
+        msg = super().generate(*args, **kwargs)
+        self._track(msg)
+        return msg
 
 
 def _strip_code_blocks(text: str) -> str:
@@ -159,6 +216,9 @@ class CodeAgentResult:
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    reasoning_tokens: int = 0
+    cached_tokens: int = 0
+    cost_usd: float = 0.0
     num_steps: int = 0
 
 
@@ -237,11 +297,14 @@ class CodeAgentWrapper:
         model_kwargs = {}
         if reasoning_effort:
             model_kwargs["reasoning_effort"] = reasoning_effort
-        self._model = OpenAIServerModel(
+        # Reasoning models (gpt-5*/o*) only accept the default temperature (1);
+        # sending temperature=0.2 returns a 400. Omit it for those.
+        if not _is_reasoning_model(model_id):
+            model_kwargs["temperature"] = 0.2
+        self._model = UsageTrackingOpenAIModel(
             model_id=model_id,
             api_base=self.api_base,
             api_key=self.api_key,
-            temperature=0.2,
             **model_kwargs,
         )
 
@@ -312,6 +375,32 @@ class CodeAgentWrapper:
         if num_steps == 0 and trace:
             num_steps = len(trace)
 
+        # Per-class breakdown (cache-read + reasoning) captured by the tracking
+        # model, which smolagents' aggregate token_usage omits. Fall back to the
+        # accumulator's own input/output if smolagents didn't report them.
+        acc = getattr(self._model, "usage_acc", {}) or {}
+        reasoning_tokens = int(acc.get("reasoning", 0) or 0)
+        cached_tokens = int(acc.get("cached", 0) or 0)
+        if not input_tokens and acc.get("input"):
+            input_tokens = int(acc["input"])
+        if not output_tokens and acc.get("output"):
+            output_tokens = int(acc["output"])
+        if not total_tokens:
+            total_tokens = input_tokens + output_tokens
+
+        cost_usd = 0.0
+        try:
+            from systems.cost_utils import compute_cost
+            c = compute_cost(
+                self.model_type,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+            )
+            cost_usd = c if c is not None else 0.0
+        except Exception:
+            pass
+
         return CodeAgentResult(
             response=response,
             reasoning_trace=trace,
@@ -320,11 +409,16 @@ class CodeAgentWrapper:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cached_tokens=cached_tokens,
+            cost_usd=cost_usd,
             num_steps=num_steps,
         )
 
     def reset(self):
         """Reset the agent state."""
+        if self._model is not None and hasattr(self._model, "reset_usage"):
+            self._model.reset_usage()
         if self._agent and self._model:
             # Build agent kwargs
             agent_kwargs = {

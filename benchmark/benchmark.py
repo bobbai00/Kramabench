@@ -99,6 +99,9 @@ class Executor:
         token_usage = system_overall_response.get("token_usage", 0)
         token_usage_input = system_overall_response.get("token_usage_input", 0)
         token_usage_output = system_overall_response.get("token_usage_output", 0)
+        token_usage_reasoning = system_overall_response.get("token_usage_reasoning", 0)
+        token_usage_cached = system_overall_response.get("token_usage_cached", 0)
+        cost_usd = system_overall_response.get("cost_usd", 0)
         model_output = system_overall_response["explanation"]
         code_string = system_overall_response["pipeline_code"]
         response = {}
@@ -108,6 +111,12 @@ class Executor:
         response["token_usage_sut"] = token_usage
         response["token_usage_sut_input"] = token_usage_input
         response["token_usage_sut_output"] = token_usage_output
+        # Extended cost breakdown (shared by Dataflow + Code-agent systems):
+        # reasoning tokens are a subset of output; cached are input served from
+        # cache; cost_usd is computed by each system from the per-class counts.
+        response["token_usage_sut_reasoning"] = token_usage_reasoning
+        response["token_usage_sut_cached"] = token_usage_cached
+        response["cost_usd_sut"] = cost_usd
         if "subtasks" in task and self.run_subtasks:
             response["subresponses"] = []
             for subtask in task["subtasks"]:

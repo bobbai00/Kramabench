@@ -96,7 +96,8 @@ class AgentSettings:
     # (lever 3, `Graph check`). No-op default.
     # Surface coerce-to-NaN dataloss from to_numeric/to_datetime(errors="coerce")
     # with a sample of dropped values (lever 4). No-op default.
-    lineage_timeline: bool = False
+    thought_replay: bool = False
+    thought_replay_k: int = 10
     few_shot_prompt: bool = False
     loader_escalation: bool = False
     flow_level: int = 0
@@ -124,7 +125,8 @@ class AgentSettings:
             "agentMode": self.agent_mode,
             "contextMode": self.context_mode,
             "parallelToolCalls": self.parallel_tool_calls,
-            "lineageTimeline": self.lineage_timeline,
+            "thoughtReplay": self.thought_replay,
+            "thoughtReplayK": self.thought_replay_k,
             "fewShotPrompt": self.few_shot_prompt,
             "loaderEscalation": self.loader_escalation,
             "flowLevel": self.flow_level,
@@ -480,7 +482,10 @@ def send_message(
         ws.send(json.dumps({"type": "message", "content": message, "messageSource": "chat"}))
 
         final_response = ""
-        usage_total = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        usage_total = {
+            "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
+            "reasoning_tokens": 0, "cached_input_tokens": 0,
+        }
         step_count = 0
         stopped = False
         error: Optional[str] = None
@@ -544,6 +549,8 @@ def send_message(
                 usage_total["input_tokens"] += int(u.get("inputTokens") or 0)
                 usage_total["output_tokens"] += int(u.get("outputTokens") or 0)
                 usage_total["total_tokens"] += int(u.get("totalTokens") or 0)
+                usage_total["reasoning_tokens"] += int(u.get("reasoningTokens") or 0)
+                usage_total["cached_input_tokens"] += int(u.get("cachedInputTokens") or 0)
             elif ev_type == "complete":
                 complete = True
             elif ev_type == "error":
@@ -742,7 +749,8 @@ class DataflowAgent:
             parallel_tool_calls: bool = AGENT_PARALLEL_TOOL_CALLS,
             allowed_operator_types: Optional[list[str]] = None,
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
-            lineage_timeline: bool = False,
+            thought_replay: bool = False,
+            thought_replay_k: int = 10,
             few_shot_prompt: bool = False,
             loader_escalation: bool = False,
             flow_level: int = 0,
@@ -805,7 +813,8 @@ class DataflowAgent:
             parallel_tool_calls=parallel_tool_calls,
             allowed_operator_types=allowed_operator_types,
             include_operator_properties=include_operator_properties,
-            lineage_timeline=lineage_timeline,
+            thought_replay=thought_replay,
+            thought_replay_k=thought_replay_k,
             few_shot_prompt=few_shot_prompt,
             loader_escalation=loader_escalation,
             flow_level=flow_level,

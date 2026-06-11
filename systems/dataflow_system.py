@@ -52,7 +52,8 @@ class DataflowSystem(System):
         graph_audit: bool = False,
         coercion_telemetry: bool = False,
         compact_stats: bool = False,
-        lineage_timeline: bool = False,
+        thought_replay: bool = False,
+        thought_replay_k: int = 10,
         few_shot_prompt: bool = False,
         table_structure_hint: bool = False,
         loader_escalation: bool = False,
@@ -142,7 +143,8 @@ class DataflowSystem(System):
         self.flow_level = max(flow_level, flow_from_flags)
         self.data_level = max(data_level, data_from_flags)
         # SELECT reinjection + static prior (kept fine-grained knobs).
-        self.lineage_timeline = lineage_timeline
+        self.thought_replay = thought_replay
+        self.thought_replay_k = thought_replay_k
         self.few_shot_prompt = few_shot_prompt
         self.loader_escalation = loader_escalation
         self.max_result_rows = max_result_rows
@@ -270,7 +272,8 @@ class DataflowSystem(System):
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
             include_operator_properties=self.include_operator_properties,
-            lineage_timeline=self.lineage_timeline,
+            thought_replay=self.thought_replay,
+            thought_replay_k=self.thought_replay_k,
             few_shot_prompt=self.few_shot_prompt,
             loader_escalation=self.loader_escalation,
             flow_level=self.flow_level,
@@ -391,7 +394,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
                 "include_operator_properties": self.include_operator_properties,
-                "lineage_timeline": self.lineage_timeline,
+                "thought_replay": self.thought_replay,
+                "thought_replay_k": self.thought_replay_k,
                 "few_shot_prompt": self.few_shot_prompt,
                 "loader_escalation": self.loader_escalation,
                 "flow_level": self.flow_level,
@@ -470,11 +474,28 @@ Your last line MUST BE: **Final Answer: <value>**"""
             print(f"[DataflowSystem] React steps count: {len(react_steps)}")
             print(f"[DataflowSystem] Stopped: {result.stopped}, Error: {result.error}")
 
-        # Extract token usage
+        # Extract token usage (with per-class breakdown: reasoning + cache-read)
         usage = result.usage or {}
         token_usage = usage.get("total_tokens", 0) or usage.get("totalTokens", 0)
         token_usage_input = usage.get("input_tokens", 0) or usage.get("inputTokens", 0)
         token_usage_output = usage.get("output_tokens", 0) or usage.get("outputTokens", 0)
+        token_usage_reasoning = usage.get("reasoning_tokens", 0) or usage.get("reasoningTokens", 0)
+        token_usage_cached = (
+            usage.get("cached_input_tokens", 0) or usage.get("cachedInputTokens", 0)
+            or usage.get("cache_read_input_tokens", 0)
+        )
+        cost_usd = 0.0
+        try:
+            from systems.cost_utils import compute_cost
+            c = compute_cost(
+                self.model_type,
+                input_tokens=token_usage_input,
+                output_tokens=token_usage_output,
+                cached_tokens=token_usage_cached,
+            )
+            cost_usd = c if c is not None else 0.0
+        except Exception:
+            pass
 
         # Step count: prefer the WS-derived count from MessageResult.stats; fall
         # back to counting agent steps with tool calls in the ReAct trace.
@@ -492,6 +513,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "input_tokens": token_usage_input,
             "output_tokens": token_usage_output,
             "total_tokens": token_usage,
+            "reasoning_tokens": token_usage_reasoning,
+            "cached_tokens": token_usage_cached,
+            "cost_usd": cost_usd,
             "num_steps": num_steps,
             "elapsed_seconds": round(elapsed_seconds, 2),
         }
@@ -554,6 +578,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "token_usage": token_usage,
             "token_usage_input": token_usage_input,
             "token_usage_output": token_usage_output,
+            "token_usage_reasoning": token_usage_reasoning,
+            "token_usage_cached": token_usage_cached,
+            "cost_usd": cost_usd,
         }
 
     def cleanup(self) -> None:
@@ -729,6 +756,259 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeLevels(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniLatestSchemaConvergeLevels",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestSchemaConvergeThoughtReplay(DataflowSystem):
+    """Converge + thought-replay reinjection (SELECT-side). Re-injects the last
+    K=10 agent reasoning events as a `# Reasoning` block (thought + compressed
+    actions) plus per-operator `Last edited: step N` back-pointers. Only fires
+    under LATEST context — built on the converge base so the knob actually takes
+    effect rather than silently no-op'ing."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            thought_replay=True,
+            thought_replay_k=10,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniLatestSchemaConvergeThoughtReplay",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Haiku-4.5 2x2 parameter study. Two axes, four configs; everything else held
+# constant (model=claude-haiku-4.5, context_mode=latest, data annotation fixed
+# at data_level=2 = mid-level structural-profile stats, char limits 1000/3000 —
+# matching DataflowSystemHaiku45 / the converge stacks).
+#   Axis 1 — thought_replay (the new SELECT-side reasoning-reinjection rung): off/on
+#   Axis 2 — data-lineage flow section (the `# Operators needing attention`
+#            block rendered AFTER the dataflow): off (flow_level=0) /
+#            on (flow_level=2, which enables the lineage rungs: cardinality +
+#            lineage-error-context, on top of loader remediation).
+# thought_replay only fires under LATEST, so context_mode=latest is required for
+# the axis to be meaningful.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class DataflowSystemHaiku45Annot2(DataflowSystem):
+    """2x2 baseline: data annotation L2 only. lineage OFF, thought_replay OFF."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="latest",
+            flow_level=0,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemHaiku45Annot2",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemHaiku45Annot2Lineage(DataflowSystem):
+    """2x2: lineage ON (flow_level=2), thought_replay OFF. data annotation L2."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="latest",
+            flow_level=2,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemHaiku45Annot2Lineage",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemHaiku45Annot2ThoughtReplay(DataflowSystem):
+    """2x2: lineage OFF, thought_replay ON (K=10). data annotation L2."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="latest",
+            flow_level=0,
+            data_level=2,
+            thought_replay=True,
+            thought_replay_k=10,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemHaiku45Annot2ThoughtReplay",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemHaiku45Annot2LineageThoughtReplay(DataflowSystem):
+    """2x2: lineage ON (flow_level=2) + thought_replay ON (K=10). data annotation L2."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="latest",
+            flow_level=2,
+            data_level=2,
+            thought_replay=True,
+            thought_replay_k=10,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemHaiku45Annot2LineageThoughtReplay",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemHaiku45DeltaLineageReplay(DataflowSystem):
+    """DELTA-mode counterpart of the both-on config: context_mode=delta + lineage
+    (flow_level=2) + data annotation L2 + thought_replay flag set. NOTE: thought_replay
+    is a no-op under DELTA (the `# Reasoning` reinjection is LATEST-only) — DELTA already
+    renders each event's thought inline, so this config has the reasoning trajectory
+    natively. Pairs with DataflowSystemHaiku45Annot2Lineage (LATEST, lineage on,
+    thoughts OFF) for a thoughts-present vs thoughts-absent comparison with lineage held on."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="delta",
+            flow_level=2,
+            data_level=2,
+            thought_replay=True,
+            thought_replay_k=10,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemHaiku45DeltaLineageReplay",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniAnnot2LineageThoughtReplay(DataflowSystem):
+    """gpt-5-mini peer of the Haiku both-flags system: LATEST + lineage (flow_level=2)
+    + data annotation L2 + recent-events (thoughtReplay) ON with K=5."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            flow_level=2,
+            data_level=2,
+            thought_replay=True,
+            thought_replay_k=5,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniAnnot2LineageThoughtReplay",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniAnnot2Lineage(DataflowSystem):
+    """gpt-5-mini peer of the Haiku lineage-only system: LATEST + lineage (flow_level=2)
+    + data annotation L2, recent-events OFF. The no-replay control."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            flow_level=2,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniAnnot2Lineage",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54Annot2LineageThoughtReplay(DataflowSystem):
+    """gpt-5.4 latest + lineage (flow_level=2) + data annotation L2 + recent-events
+    (thoughtReplay) ON with K=5. max_steps=50 (matches the code-agent default for the
+    head-to-head comparison)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=50,
+            flow_level=2,
+            data_level=2,
+            thought_replay=True,
+            thought_replay_k=5,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54Annot2LineageThoughtReplay",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54Annot2Lineage(DataflowSystem):
+    """gpt-5.4 latest + lineage (flow_level=2) + data annotation L2, recent-events
+    (thoughtReplay) OFF — current dataflow + lineage section only. The no-replay
+    control peer of DataflowSystemGPT54Annot2LineageThoughtReplay. max_steps=50."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=50,
+            flow_level=2,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54Annot2Lineage",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemSonnet46Annot2LineageThoughtReplay(DataflowSystem):
+    """Sonnet-4.6 peer of the Haiku/gpt-5-mini both-flags system: LATEST + lineage
+    (flow_level=2) + data annotation L2 + recent-events (thoughtReplay) ON with K=5.
+    max_steps capped at 20."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-sonnet-4.6",
+            context_mode="latest",
+            max_steps=20,
+            flow_level=2,
+            data_level=2,
+            thought_replay=True,
+            thought_replay_k=5,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemSonnet46Annot2LineageThoughtReplay",
             verbose=verbose,
             *args,
             **kwargs,

@@ -164,6 +164,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
             "total_tokens": result.total_tokens,
+            "reasoning_tokens": result.reasoning_tokens,
+            "cached_tokens": result.cached_tokens,
+            "cost_usd": result.cost_usd,
             "num_steps": result.num_steps,
             "elapsed_seconds": round(result.elapsed_seconds, 2),
         }
@@ -181,9 +184,12 @@ Your last line MUST BE: **Final Answer: <value>**"""
         return {
             "explanation": {"id": "main-task", "answer": answer},
             "pipeline_code": "",
-            "token_usage": 0,
-            "token_usage_input": 0,
-            "token_usage_output": 0,
+            "token_usage": result.total_tokens,
+            "token_usage_input": result.input_tokens,
+            "token_usage_output": result.output_tokens,
+            "token_usage_reasoning": result.reasoning_tokens,
+            "token_usage_cached": result.cached_tokens,
+            "cost_usd": result.cost_usd,
         }
 
     def cleanup(self) -> None:
@@ -291,3 +297,36 @@ class CodeAgentSystemGpt52FullInput(CodeAgentSystem):
     def serve_query(self, query, query_id="default-0", subset_files=None):
         """Override to always use full input (ignore subset_files)."""
         return super().serve_query(query, query_id, subset_files=None)
+
+
+# Model-routing proxy (claude->Anthropic, gpt/o->OpenAI). Code-agent peers that
+# hit the SAME upstream as the DataflowSystem so the comparison is apples-to-apples.
+PROXY_API_BASE = "http://localhost:8099/v1"
+
+
+class CodeAgentSystemGpt5MiniProxy(CodeAgentSystem):
+    """Code agent on gpt-5-mini via the routing proxy (-> OpenAI). Peer of the
+    DataflowSystem gpt-5-mini latest+replay config."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            api_base=PROXY_API_BASE,
+            name="CodeAgentSystemGpt5MiniProxy",
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+
+class CodeAgentSystemGpt54Proxy(CodeAgentSystem):
+    """Code agent on gpt-5.4 via the routing proxy (-> OpenAI). Peer of the
+    DataflowSystem gpt-5.4 latest+replay config."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            api_base=PROXY_API_BASE,
+            name="CodeAgentSystemGpt54Proxy",
+            verbose=verbose,
+            *args, **kwargs
+        )
