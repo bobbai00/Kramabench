@@ -98,6 +98,7 @@ class AgentSettings:
     # with a sample of dropped values (lever 4). No-op default.
     thought_replay: bool = False
     thought_replay_k: int = 10
+    error_reflection: bool = False
     few_shot_prompt: bool = False
     loader_escalation: bool = False
     flow_level: int = 0
@@ -127,6 +128,7 @@ class AgentSettings:
             "parallelToolCalls": self.parallel_tool_calls,
             "thoughtReplay": self.thought_replay,
             "thoughtReplayK": self.thought_replay_k,
+            "errorReflection": self.error_reflection,
             "fewShotPrompt": self.few_shot_prompt,
             "loaderEscalation": self.loader_escalation,
             "flowLevel": self.flow_level,
@@ -751,6 +753,7 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             thought_replay: bool = False,
             thought_replay_k: int = 10,
+            error_reflection: bool = False,
             few_shot_prompt: bool = False,
             loader_escalation: bool = False,
             flow_level: int = 0,
@@ -815,6 +818,7 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
+            error_reflection=error_reflection,
             few_shot_prompt=few_shot_prompt,
             loader_escalation=loader_escalation,
             flow_level=flow_level,

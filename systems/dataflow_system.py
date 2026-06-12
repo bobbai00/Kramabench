@@ -54,6 +54,7 @@ class DataflowSystem(System):
         compact_stats: bool = False,
         thought_replay: bool = False,
         thought_replay_k: int = 10,
+        error_reflection: bool = False,
         few_shot_prompt: bool = False,
         table_structure_hint: bool = False,
         loader_escalation: bool = False,
@@ -145,6 +146,7 @@ class DataflowSystem(System):
         # SELECT reinjection + static prior (kept fine-grained knobs).
         self.thought_replay = thought_replay
         self.thought_replay_k = thought_replay_k
+        self.error_reflection = error_reflection
         self.few_shot_prompt = few_shot_prompt
         self.loader_escalation = loader_escalation
         self.max_result_rows = max_result_rows
@@ -274,6 +276,7 @@ class DataflowSystem(System):
             include_operator_properties=self.include_operator_properties,
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
+            error_reflection=self.error_reflection,
             few_shot_prompt=self.few_shot_prompt,
             loader_escalation=self.loader_escalation,
             flow_level=self.flow_level,
@@ -396,6 +399,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "include_operator_properties": self.include_operator_properties,
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
+                "error_reflection": self.error_reflection,
                 "few_shot_prompt": self.few_shot_prompt,
                 "loader_escalation": self.loader_escalation,
                 "flow_level": self.flow_level,
@@ -941,6 +945,29 @@ class DataflowSystemGPT5MiniAnnot2Lineage(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT5MiniAnnot2Lineage",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniAnnot2LineageErrorReflect(DataflowSystem):
+    """gpt-5-mini: LATEST + lineage (flow_level=2) + data annotation L2, recent-events
+    OFF, error-reflection ON. A/B treatment over DataflowSystemGPT5MiniAnnot2Lineage
+    to test whether surfacing per-operator attempt/error history breaks the churn
+    loops (same config otherwise)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="latest",
+            flow_level=2,
+            data_level=2,
+            thought_replay=False,
+            error_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniAnnot2LineageErrorReflect",
             verbose=verbose,
             *args,
             **kwargs,
