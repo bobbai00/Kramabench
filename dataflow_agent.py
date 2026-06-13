@@ -99,6 +99,7 @@ class AgentSettings:
     thought_replay: bool = False
     thought_replay_k: int = 10
     error_reflection: bool = False
+    error_reflection_threshold: int = 3
     few_shot_prompt: bool = False
     loader_escalation: bool = False
     flow_level: int = 0
@@ -129,6 +130,7 @@ class AgentSettings:
             "thoughtReplay": self.thought_replay,
             "thoughtReplayK": self.thought_replay_k,
             "errorReflection": self.error_reflection,
+            "errorReflectionThreshold": self.error_reflection_threshold,
             "fewShotPrompt": self.few_shot_prompt,
             "loaderEscalation": self.loader_escalation,
             "flowLevel": self.flow_level,
@@ -758,6 +760,7 @@ class DataflowAgent:
             thought_replay: bool = False,
             thought_replay_k: int = 10,
             error_reflection: bool = False,
+            error_reflection_threshold: int = 3,
             few_shot_prompt: bool = False,
             loader_escalation: bool = False,
             flow_level: int = 0,
@@ -823,6 +826,7 @@ class DataflowAgent:
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
             error_reflection=error_reflection,
+            error_reflection_threshold=error_reflection_threshold,
             few_shot_prompt=few_shot_prompt,
             loader_escalation=loader_escalation,
             flow_level=flow_level,

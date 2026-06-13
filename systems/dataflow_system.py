@@ -55,6 +55,7 @@ class DataflowSystem(System):
         thought_replay: bool = False,
         thought_replay_k: int = 10,
         error_reflection: bool = False,
+        error_reflection_threshold: int = 3,
         few_shot_prompt: bool = False,
         table_structure_hint: bool = False,
         loader_escalation: bool = False,
@@ -147,6 +148,7 @@ class DataflowSystem(System):
         self.thought_replay = thought_replay
         self.thought_replay_k = thought_replay_k
         self.error_reflection = error_reflection
+        self.error_reflection_threshold = error_reflection_threshold
         self.few_shot_prompt = few_shot_prompt
         self.loader_escalation = loader_escalation
         self.max_result_rows = max_result_rows
@@ -277,6 +279,7 @@ class DataflowSystem(System):
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
             error_reflection=self.error_reflection,
+            error_reflection_threshold=self.error_reflection_threshold,
             few_shot_prompt=self.few_shot_prompt,
             loader_escalation=self.loader_escalation,
             flow_level=self.flow_level,
@@ -400,6 +403,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
                 "error_reflection": self.error_reflection,
+                "error_reflection_threshold": self.error_reflection_threshold,
                 "few_shot_prompt": self.few_shot_prompt,
                 "loader_escalation": self.loader_escalation,
                 "flow_level": self.flow_level,
