@@ -401,7 +401,11 @@ def create_agent(
     if settings:
         payload["settings"] = settings.to_api_dict()
 
-    response = requests.post(url, json=payload)
+    # The merged agent-service requires the delegating user's JWT in the
+    # Authorization header (not just the payload) on agent creation — it forwards
+    # that identity to the LLM gateway. Without it, /api/agents returns 401.
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(url, json=payload, headers=headers)
     response.raise_for_status()
 
     data = response.json()

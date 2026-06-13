@@ -29,6 +29,7 @@ from .dataflow_system import (
     DataflowSystemGPT5MiniAnnot2Lineage,
     # gpt-5-mini lineage + error-reflection (replay off) — churn-loop A/B
     DataflowSystemGPT5MiniAnnot2LineageErrorReflect,
+    DataflowSystemGPT54Annot2LineageErrorReflect,
     # Sonnet-4.6 both-flags peer (lineage + replay ON, K=5, max_steps=20)
     DataflowSystemSonnet46Annot2LineageThoughtReplay,
     # gpt-5.4 latest + lineage + replay (K=5) — head-to-head vs code agent

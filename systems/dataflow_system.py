@@ -974,6 +974,28 @@ class DataflowSystemGPT5MiniAnnot2LineageErrorReflect(DataflowSystem):
         )
 
 
+class DataflowSystemGPT54Annot2LineageErrorReflect(DataflowSystem):
+    """gpt-5.4: LATEST + lineage (flow_level=2) + data annotation L2, recent-events
+    OFF, error-reflection ON (folded into the operator block). max_steps=50."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=50,
+            flow_level=2,
+            data_level=2,
+            thought_replay=False,
+            error_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54Annot2LineageErrorReflect",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
 class DataflowSystemGPT54Annot2LineageThoughtReplay(DataflowSystem):
     """gpt-5.4 latest + lineage (flow_level=2) + data annotation L2 + recent-events
     (thoughtReplay) ON with K=5. max_steps=50 (matches the code-agent default for the
