@@ -51,6 +51,15 @@ AGENT_DRIVER: Optional[str] = None
 # Render each operator's `Properties:` line in the assembled snapshot
 # (code operators' `code` blob is always stripped). None -> server default (true).
 AGENT_INCLUDE_OPERATOR_PROPERTIES: Optional[bool] = None
+# Tool-call dialect for the local text-mode driver ("local-react"). Selects BOTH
+# the system prompt and the output parser the driver applies to the model's
+# completion:
+#   "qwen-xml"   — Qwen3-Coder `<tool_call><function=…><parameter=…>` XML.
+#       Default, matching the agent-service's own default.
+#   "react-text" — DeepSeek-style Thought / Action / Action Input (the format
+#       used before the Qwen migration). Opt-in per system.
+# Ignored by the "vercel-tool-use" driver (native tool calling).
+AGENT_TOOL_DIALECT = "qwen-xml"
 
 # Workflow Configuration
 DEFAULT_WORKFLOW_NAME = "Benchmark Workflow"
@@ -110,6 +119,9 @@ class AgentSettings:
     # Inject an `Attempt reflection:` block on heavily-edited operators
     # (plan3, progress reflection). False = no-op default.
     attempt_reflection: bool = False
+    # Tool-call dialect for the local-react driver ("qwen-xml" | "react-text").
+    # Ignored by vercel-tool-use. Default is qwen-xml (the new format).
+    tool_dialect: str = AGENT_TOOL_DIALECT
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -134,6 +146,7 @@ class AgentSettings:
             "maxResultRows": self.max_result_rows,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
+            "toolDialect": self.tool_dialect,
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
@@ -758,6 +771,7 @@ class DataflowAgent:
             max_result_rows: int = 0,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
+            tool_dialect: str = AGENT_TOOL_DIALECT,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -788,6 +802,8 @@ class DataflowAgent:
             allowed_operator_types: Optional whitelist of operator type names; None uses server default
             include_operator_properties: Render each operator's `Properties:` line in
                 the assembled context; None uses server default (true)
+            tool_dialect: Tool-call dialect for the local-react driver
+                ("react-text" | "qwen-xml"); ignored by vercel-tool-use
             texera_api_endpoint: Texera backend API endpoint
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
@@ -822,6 +838,8 @@ class DataflowAgent:
             max_result_rows=max_result_rows,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
+            tool_dialect=tool_dialect,
+
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
