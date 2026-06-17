@@ -107,6 +107,8 @@ class AgentSettings:
     # with a sample of dropped values (lever 4). No-op default.
     thought_replay: bool = False
     thought_replay_k: int = 10
+    error_reflection: bool = False
+    error_reflection_threshold: int = 3
     few_shot_prompt: bool = False
     loader_escalation: bool = False
     flow_level: int = 0
@@ -139,6 +141,8 @@ class AgentSettings:
             "parallelToolCalls": self.parallel_tool_calls,
             "thoughtReplay": self.thought_replay,
             "thoughtReplayK": self.thought_replay_k,
+            "errorReflection": self.error_reflection,
+            "errorReflectionThreshold": self.error_reflection_threshold,
             "fewShotPrompt": self.few_shot_prompt,
             "loaderEscalation": self.loader_escalation,
             "flowLevel": self.flow_level,
@@ -412,7 +416,11 @@ def create_agent(
     if settings:
         payload["settings"] = settings.to_api_dict()
 
-    response = requests.post(url, json=payload)
+    # The merged agent-service requires the delegating user's JWT in the
+    # Authorization header (not just the payload) on agent creation — it forwards
+    # that identity to the LLM gateway. Without it, /api/agents returns 401.
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(url, json=payload, headers=headers)
     response.raise_for_status()
 
     data = response.json()
@@ -764,6 +772,8 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             thought_replay: bool = False,
             thought_replay_k: int = 10,
+            error_reflection: bool = False,
+            error_reflection_threshold: int = 3,
             few_shot_prompt: bool = False,
             loader_escalation: bool = False,
             flow_level: int = 0,
@@ -831,6 +841,8 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
+            error_reflection=error_reflection,
+            error_reflection_threshold=error_reflection_threshold,
             few_shot_prompt=few_shot_prompt,
             loader_escalation=loader_escalation,
             flow_level=flow_level,
