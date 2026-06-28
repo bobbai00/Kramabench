@@ -39,6 +39,12 @@ from .dataflow_system import (
     DataflowSystemGPT54Annot2LineageThoughtReplay,
     # gpt-5.4 latest + lineage, replay OFF (no-replay control)
     DataflowSystemGPT54Annot2Lineage,
+    # gpt-5.4 Gate-0 headroom pair (latest-core vs full T/A/O delta trajectory, steps=12)
+    DataflowSystemGPT54Gate0Latest,
+    DataflowSystemGPT54Gate0Delta,
+    # gpt-5.4 all-domains comparison pair (latest vs delta, steps=25, result char limit=3000)
+    DataflowSystemGPT54AllLatest,
+    DataflowSystemGPT54AllDelta,
     # Local-model sweep variants (local-react driver, qwen-xml dialect)
     DataflowSystemLocalLlm1,
     DataflowSystemLocalLlm2,

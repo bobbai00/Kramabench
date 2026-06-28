@@ -1122,6 +1122,100 @@ class DataflowSystemGPT54Annot2Lineage(DataflowSystem):
         )
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Gate-0 headroom pair (learned-context-selection project). Byte-identical
+# arms (gpt-5.4, flow_level=0 → NO "Operators needing attention" flow section,
+# data_level=2, thought_replay OFF, max_steps=12) EXCEPT context_mode. The ONLY
+# variable is history representation: latest-core (# Current Dataflow + per-op
+# result summaries) vs full per-event Thought/Action/Observation trajectory.
+# max_steps capped at 12 because gpt-5.4 reasoning is slow (~1-2 min/step), so a
+# churning task at 25 steps ran ~50 min; 12 bounds per-task wall-clock.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class DataflowSystemGPT54Gate0Latest(DataflowSystem):
+    """Gate-0 LATEST arm: gpt-5.4 latest-core (flow=0, data=2, no replay), steps=12."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=12,
+            flow_level=0,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54Gate0Latest",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54Gate0Delta(DataflowSystem):
+    """Gate-0 DELTA arm: gpt-5.4 full Thought/Action/Observation trajectory.
+    Identical to DataflowSystemGPT54Gate0Latest except context_mode='delta'."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=12,
+            flow_level=0,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54Gate0Delta",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54AllLatest(DataflowSystem):
+    """All-domains comparison, LATEST arm: gpt-5.4 latest-core (flow=0, data=2, no
+    replay). Same as Gate-0 latest but max_steps=25 and result char limit=3000."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=0,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=3000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54AllLatest",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54AllDelta(DataflowSystem):
+    """All-domains comparison, DELTA arm: gpt-5.4 full Thought/Action/Observation
+    trajectory. Identical to DataflowSystemGPT54AllLatest except context_mode='delta'."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=2,
+            thought_replay=False,
+            max_operator_result_char_limit=3000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54AllDelta",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
 class DataflowSystemSonnet46Annot2LineageThoughtReplay(DataflowSystem):
     """Sonnet-4.6 peer of the Haiku/gpt-5-mini both-flags system: LATEST + lineage
     (flow_level=2) + data annotation L2 + recent-events (thoughtReplay) ON with K=5.
