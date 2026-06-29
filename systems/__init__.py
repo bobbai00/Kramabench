@@ -8,7 +8,6 @@ from .dataflow_system import (
     DataflowSystem,
     DataflowSystemHaiku45,
     DataflowSystemGPT5Mini,
-    DataflowSystemLocalLlm,
     # Thesis converge stacks (DataFlow-vs-Script, both models)
     DataflowSystemGPT52LatestSchemaConverge,
     # gpt-5.4 converge pair — Latest vs Delta context A/B
@@ -40,6 +39,39 @@ from .dataflow_system import (
     DataflowSystemGPT54Annot2LineageThoughtReplay,
     # gpt-5.4 latest + lineage, replay OFF (no-replay control)
     DataflowSystemGPT54Annot2Lineage,
+    # Local-model sweep variants (local-react driver, qwen-xml dialect)
+    DataflowSystemLocalLlm1,
+    DataflowSystemLocalLlm2,
+    DataflowSystemLocalLlm3,
+    DataflowSystemLocalLlm4,
+    DataflowSystemLocalLlm5,
+    DataflowSystemLocalLlm6,
+    DataflowSystemLocalLlm7,
+    DataflowSystemLocalLlm8,
+    DataflowSystemLocalLlm9,
+    DataflowSystemLocalLlm10,
+    DataflowSystemLocalLlm11,
+    DataflowSystemLocalLlm12,
+    DataflowSystemLocalLlm13,
+    DataflowSystemLocalLlm14,
+    DataflowSystemLocalLlm15,
+    DataflowSystemLocalLlm30BV1,
+    DataflowSystemLocalLlm30BV2,
+    DataflowSystemLocalLlm30BV3,
+    DataflowSystemLocalLlm30BV4,
+    DataflowSystemLocalLlm30BV5,
+    DataflowSystemLocalLlm30BV6,
+    DataflowSystemLocalLlm30BV7,
+    DataflowSystemLocalLlm30BV8,
+    DataflowSystemLocalLlm30BV9,
+    DataflowSystemLocalLlm30BV10,
+    DataflowSystemLocalLlm30BBaseModel,
+    # Local-model sweep under the previous ReAct text dialect (react-text)
+    DataflowSystemLocalLlmReactText1,
+    DataflowSystemLocalLlmReactText2,
+    DataflowSystemLocalLlmReactText3,
+    DataflowSystemLocalLlmReactText4,
+    DataflowSystemLocalLlmReactText5,
 )
 from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt54Proxy
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem

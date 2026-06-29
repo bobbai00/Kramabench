@@ -65,6 +65,7 @@ class DataflowSystem(System):
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
+        tool_dialect: str = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -156,6 +157,11 @@ class DataflowSystem(System):
         self.max_loaders_per_source = max_loaders_per_source
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
         self.attempt_reflection = attempt_reflection
+        # Tool-call dialect for the local-react driver. Default to the new Qwen
+        # XML format ("qwen-xml"), matching the agent-service default; the
+        # react-text variants opt in to the previous ReAct text format. Ignored
+        # by the vercel-tool-use driver.
+        self.tool_dialect = tool_dialect or "qwen-xml"
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -287,6 +293,7 @@ class DataflowSystem(System):
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
+            tool_dialect=self.tool_dialect,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -411,6 +418,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
+                "tool_dialect": self.tool_dialect,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -1137,19 +1145,550 @@ class DataflowSystemSonnet46Annot2LineageThoughtReplay(DataflowSystem):
         )
 
 
-class DataflowSystemLocalLlm(DataflowSystem):
+class DataflowSystemLocalLlm1(DataflowSystem):
     """DataflowSystem using the in-house local model via the local-react driver."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
             model_type="local-llm",
             driver="local-react",
-            max_steps=20,
+            max_steps=10,
+            stats_enabled=False,
             include_operator_properties=False,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemLocalLlm",
+            name="DataflowSystemLocalLlm1",
             verbose=verbose,
             *args,
             **kwargs,
         )
+
+
+class DataflowSystemLocalLlm2(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm2",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm3(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm3",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm4(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm4",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm5(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm5",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm6(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm6",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm7(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm7",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm8(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm8",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm9(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=10,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm9",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm10(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=15,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm10",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm11(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=15,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm11",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm12(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=15,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm12",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm13(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=15,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm13",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm14(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=15,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm14",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm15(DataflowSystem):
+    """DataflowSystem using the in-house local model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=15,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm15",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV1(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV1",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV2(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV2",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV3(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV3",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV4(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV4",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV5(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV5",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV6(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV6",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV7(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV7",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV8(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV8",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV9(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV9",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BV10(DataflowSystem):
+    """DataflowSystem using the in-house local 30B model via the local-react driver."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BV10",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlm30BBaseModel(DataflowSystem):
+    """DataflowSystem using the in-house local 30B BASE (non-instruct) model
+    via the local-react driver. Config mirrors the 30B sweep variants."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemLocalLlm30BBaseModel",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ────────────────────────────────────────────────────────────────────────
+# In-house local model under the PREVIOUS ReAct text tool-call dialect
+# (tool_dialect="react-text"). Same local-react driver as the blocks above,
+# but the model emits Thought / Action / Action Input text instead of the
+# Qwen3-Coder `<tool_call><function=…><parameter=…>` XML — so these pin
+# tool_dialect explicitly. The default dialect is "qwen-xml" (the new format),
+# so every other local system above uses Qwen. Config otherwise mirrors the
+# 30B variants (max_steps=25).
+# ────────────────────────────────────────────────────────────────────────
+
+
+class _LocalLlmReactTextVariant(DataflowSystem):
+    """Base for the local model under the react-text tool-call dialect.
+    Subclasses only override `name` so the sweep stays declarative."""
+
+    _NAME: str = "DataflowSystemLocalLlmReactText"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="local-llm",
+            driver="local-react",
+            tool_dialect="react-text",
+            max_steps=25,
+            stats_enabled=False,
+            include_operator_properties=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemLocalLlmReactText1(_LocalLlmReactTextVariant):
+    _NAME = "DataflowSystemLocalLlmReactText1"
+
+
+class DataflowSystemLocalLlmReactText2(_LocalLlmReactTextVariant):
+    _NAME = "DataflowSystemLocalLlmReactText2"
+
+
+class DataflowSystemLocalLlmReactText3(_LocalLlmReactTextVariant):
+    _NAME = "DataflowSystemLocalLlmReactText3"
+
+
+class DataflowSystemLocalLlmReactText4(_LocalLlmReactTextVariant):
+    _NAME = "DataflowSystemLocalLlmReactText4"
+
+
+class DataflowSystemLocalLlmReactText5(_LocalLlmReactTextVariant):
+    _NAME = "DataflowSystemLocalLlmReactText5"
