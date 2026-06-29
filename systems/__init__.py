@@ -11,6 +11,9 @@ from .dataflow_system import (
     DataflowSystemLocalLlm,
     # Thesis converge stacks (DataFlow-vs-Script, both models)
     DataflowSystemGPT52LatestSchemaConverge,
+    # gpt-5.4 converge pair — Latest vs Delta context A/B
+    DataflowSystemGPT54LatestSchemaConverge,
+    DataflowSystemGPT54DeltaSchemaConverge,
     DataflowSystemGPT5MiniLatestSchemaConverge,
     # Canonical level-based + the validated levers
     DataflowSystemGPT5MiniLatestSchemaConvergeLevels,      # flow_level/data_level config
@@ -21,6 +24,7 @@ from .dataflow_system import (
     # Haiku-4.5 2x2 study: thought_replay {off,on} x data-lineage flow {off,on}; data annotation L2 fixed
     DataflowSystemHaiku45Annot2,
     DataflowSystemHaiku45Annot2Lineage,
+    DataflowSystemHaiku45Annot2LineageErrorReflect,
     DataflowSystemHaiku45Annot2ThoughtReplay,
     DataflowSystemHaiku45Annot2LineageThoughtReplay,
     DataflowSystemHaiku45DeltaLineageReplay,  # DELTA + lineage (thoughts via DELTA inline)
