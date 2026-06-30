@@ -107,6 +107,17 @@ class AgentSettings:
     # with a sample of dropped values (lever 4). No-op default.
     thought_replay: bool = False
     thought_replay_k: int = 10
+    agent_turns: bool = False
+    collapse_superseded: bool = False
+    # DELTA context-budget watermark (tokens; est. chars/4). With
+    # collapse_superseded on, lossless delta is sent untouched while it fits this
+    # cap; superseded results are blanked oldest-first only once delta exceeds it.
+    # 0 = no cap (collapse_superseded alone = unconditional collapse).
+    context_budget_tokens: int = 0
+    # DELTA naive sliding-window baseline (comparator for collapse_superseded):
+    # below context_budget_tokens = lossless delta; above it, drop oldest whole
+    # agent events until it fits. Takes precedence over collapse when both on.
+    truncate_oldest: bool = False
     error_reflection: bool = False
     error_reflection_threshold: int = 3
     few_shot_prompt: bool = False
@@ -141,6 +152,10 @@ class AgentSettings:
             "parallelToolCalls": self.parallel_tool_calls,
             "thoughtReplay": self.thought_replay,
             "thoughtReplayK": self.thought_replay_k,
+            "agentTurns": self.agent_turns,
+            "collapseSuperseded": self.collapse_superseded,
+            "contextBudgetTokens": self.context_budget_tokens,
+            "truncateOldest": self.truncate_oldest,
             "errorReflection": self.error_reflection,
             "errorReflectionThreshold": self.error_reflection_threshold,
             "fewShotPrompt": self.few_shot_prompt,
@@ -772,6 +787,10 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             thought_replay: bool = False,
             thought_replay_k: int = 10,
+            agent_turns: bool = False,
+            collapse_superseded: bool = False,
+            context_budget_tokens: int = 0,
+            truncate_oldest: bool = False,
             error_reflection: bool = False,
             error_reflection_threshold: int = 3,
             few_shot_prompt: bool = False,
@@ -841,6 +860,10 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
+            agent_turns=agent_turns,
+            collapse_superseded=collapse_superseded,
+            context_budget_tokens=context_budget_tokens,
+            truncate_oldest=truncate_oldest,
             error_reflection=error_reflection,
             error_reflection_threshold=error_reflection_threshold,
             few_shot_prompt=few_shot_prompt,

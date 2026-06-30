@@ -54,6 +54,10 @@ class DataflowSystem(System):
         compact_stats: bool = False,
         thought_replay: bool = False,
         thought_replay_k: int = 10,
+        agent_turns: bool = False,
+        collapse_superseded: bool = False,
+        context_budget_tokens: int = 0,
+        truncate_oldest: bool = False,
         error_reflection: bool = False,
         error_reflection_threshold: int = 3,
         few_shot_prompt: bool = False,
@@ -148,6 +152,10 @@ class DataflowSystem(System):
         # SELECT reinjection + static prior (kept fine-grained knobs).
         self.thought_replay = thought_replay
         self.thought_replay_k = thought_replay_k
+        self.agent_turns = agent_turns
+        self.collapse_superseded = collapse_superseded
+        self.context_budget_tokens = context_budget_tokens
+        self.truncate_oldest = truncate_oldest
         self.error_reflection = error_reflection
         self.error_reflection_threshold = error_reflection_threshold
         self.few_shot_prompt = few_shot_prompt
@@ -284,6 +292,10 @@ class DataflowSystem(System):
             include_operator_properties=self.include_operator_properties,
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
+            agent_turns=self.agent_turns,
+            collapse_superseded=self.collapse_superseded,
+            context_budget_tokens=self.context_budget_tokens,
+            truncate_oldest=self.truncate_oldest,
             error_reflection=self.error_reflection,
             error_reflection_threshold=self.error_reflection_threshold,
             few_shot_prompt=self.few_shot_prompt,
@@ -409,6 +421,10 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "include_operator_properties": self.include_operator_properties,
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
+                "agent_turns": self.agent_turns,
+                "collapse_superseded": self.collapse_superseded,
+                "context_budget_tokens": self.context_budget_tokens,
+                "truncate_oldest": self.truncate_oldest,
                 "error_reflection": self.error_reflection,
                 "error_reflection_threshold": self.error_reflection_threshold,
                 "few_shot_prompt": self.few_shot_prompt,
@@ -715,6 +731,222 @@ class DataflowSystemGPT54DeltaSchemaConverge(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT54DeltaSchemaConverge",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54DeltaSchemaConvergeCollapse(DataflowSystem):
+    """DELTA + supersession-collapse: identical to DataflowSystemGPT54DeltaSchemaConverge
+    but collapse_superseded=True — each operator's result renders only at its latest
+    (still-live) turn; superseded/deleted results become `(omitted — superseded)` while
+    Thoughts+Actions stay intact. Near-lossless; bounds result content to live-operator
+    count instead of trajectory length. The DAG-pruning arm vs full delta."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            collapse_superseded=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54DeltaSchemaConvergeCollapse",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54DeltaSchemaConvergeCap4k(DataflowSystem):
+    """DELTA + WATERMARK supersession-collapse at a small 4000-token cap.
+    Identical to DataflowSystemGPT54DeltaSchemaConverge but collapse_superseded=True
+    AND context_budget_tokens=4000: lossless delta is sent UNTOUCHED while it fits
+    ~4k tokens (≈16k chars), and only once it exceeds the cap are superseded results
+    blanked OLDEST-FIRST — the minimum needed to get back under. The cap is set
+    deliberately small so the watermark clearly TRIGGERS within a 25-step run (early
+    steps stay lossless; collapse kicks in mid-run). The cap-gated arm vs the
+    always-on collapse (DataflowSystemGPT54DeltaSchemaConvergeCollapse) and lossless
+    delta (DataflowSystemGPT54DeltaSchemaConverge)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            collapse_superseded=True,
+            context_budget_tokens=4000,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54DeltaSchemaConvergeCap4k",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54DeltaSchemaConvergeCap8k(DataflowSystem):
+    """DELTA + WATERMARK supersession-collapse at an 8000-token cap (the gentler
+    collapse arm of the fixed-budget sweep). Same as Cap4k but context_budget_tokens
+    =8000, so lossless delta survives longer before any blanking. Pairs with
+    Trunc8k at the same budget to show collapse vs naive truncation."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            collapse_superseded=True,
+            context_budget_tokens=8000,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54DeltaSchemaConvergeCap8k",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54DeltaSchemaConvergeTrunc4k(DataflowSystem):
+    """DELTA + naive SLIDING-WINDOW truncation at a 4000-token cap — the comparator
+    for Cap4k. Below the cap = lossless delta; above it, the OLDEST whole agent
+    events are dropped (entire turns, not just results) until it fits, with an
+    `(… N earlier events omitted …)` marker. Same budget as Cap4k, dumber eviction:
+    shows whether DAG-aware supersession-collapse beats plain truncation at matched X."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            truncate_oldest=True,
+            context_budget_tokens=4000,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54DeltaSchemaConvergeTrunc4k",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54DeltaSchemaConvergeTrunc8k(DataflowSystem):
+    """DELTA + naive SLIDING-WINDOW truncation at an 8000-token cap — the comparator
+    for Cap8k (truncation at the gentler budget)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            truncate_oldest=True,
+            context_budget_tokens=8000,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54DeltaSchemaConvergeTrunc8k",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54LatestSchemaConvergeErrorReflect(DataflowSystem):
+    """HYBRID: SchemaConverge LATEST core + selective ERROR-REFLECTION reinjection.
+    Identical to DataflowSystemGPT54LatestSchemaConverge (latest, flow=1, data=1,
+    steps=25) except error_reflection=True: when an operator errors repeatedly, its
+    failed-attempt history is folded back into the context. Targets the latest
+    'thrash' failure (e.g. legal-hard-1) without paying for the full delta trajectory."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            error_reflection=True,
+            error_reflection_threshold=2,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54LatestSchemaConvergeErrorReflect",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54LatestSchemaConvergeReinject(DataflowSystem):
+    """HYBRID: SchemaConverge LATEST core + selective reinjection of BOTH error
+    history (error_reflection) AND recent reasoning (thought_replay K=5). Same knobs
+    as DataflowSystemGPT54LatestSchemaConverge otherwise. The fuller 'selective
+    add-back': latest's compactness + delta's error-recovery/trajectory memory,
+    added back only where it pays off."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            error_reflection=True,
+            error_reflection_threshold=2,
+            thought_replay=True,
+            thought_replay_k=5,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54LatestSchemaConvergeReinject",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54LatestSchemaConvergeAgentTurns(DataflowSystem):
+    """Idea-1 arm: SchemaConverge LATEST core + a `# Agent Turns` section (the full
+    Thought/Action/Observation trajectory, rendered delta-style). Same knobs as
+    DataflowSystemGPT54LatestSchemaConverge (latest, flow=1, data=1, steps=25)
+    plus agent_turns=True — a hybrid of latest's compact current-state and delta's
+    trajectory, to test whether appending the turn history to latest helps."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            agent_turns=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54LatestSchemaConvergeAgentTurns",
             verbose=verbose,
             *args,
             **kwargs,

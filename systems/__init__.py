@@ -13,6 +13,16 @@ from .dataflow_system import (
     # gpt-5.4 converge pair — Latest vs Delta context A/B
     DataflowSystemGPT54LatestSchemaConverge,
     DataflowSystemGPT54DeltaSchemaConverge,
+    DataflowSystemGPT54DeltaSchemaConvergeCollapse,
+    DataflowSystemGPT54DeltaSchemaConvergeCap4k,
+    DataflowSystemGPT54DeltaSchemaConvergeCap8k,
+    DataflowSystemGPT54DeltaSchemaConvergeTrunc4k,
+    DataflowSystemGPT54DeltaSchemaConvergeTrunc8k,
+    # hybrid: latest core + selective reinjection (error-reflection [+ thought-replay])
+    DataflowSystemGPT54LatestSchemaConvergeErrorReflect,
+    DataflowSystemGPT54LatestSchemaConvergeReinject,
+    # idea-1: latest core + full Thought/Action/Observation `# Agent Turns` section
+    DataflowSystemGPT54LatestSchemaConvergeAgentTurns,
     DataflowSystemGPT5MiniLatestSchemaConverge,
     # Canonical level-based + the validated levers
     DataflowSystemGPT5MiniLatestSchemaConvergeLevels,      # flow_level/data_level config
