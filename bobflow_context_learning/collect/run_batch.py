@@ -84,6 +84,29 @@ def run_one(domain, task_id, arm, timeout):
         return (task_id, arm, "timeout")
 
 
+def _run_sample(sample, arms, args):
+    """Write the manifest and run all (task, arm) jobs in a thread pool."""
+    from collections import Counter
+    os.makedirs(os.path.dirname(MANIFEST), exist_ok=True)
+    json.dump({"arms": arms, "ids": bool(getattr(args, "ids", None)),
+               "sample": [{"workload": w, "task_id": t, "answer_type": a} for w, t, a in sample]},
+              open(MANIFEST, "w"), indent=2)
+    say(f"\n[run_batch] {len(sample)} tasks x {len(arms)} arms = {len(sample)*len(arms)} runs; "
+        f"arms={arms}; workers={args.workers}; timeout={args.timeout}s/run")
+    for w, t, _ in sample:
+        say(f"    {w:12s} {t}")
+    jobs = [(w, t, arm) for (w, t, _) in sample for arm in arms]
+    say(f"\n[run_batch] dispatching {len(jobs)} jobs ...\n")
+    results = []
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futs = {pool.submit(run_one, w, t, arm, args.timeout): (t, arm) for (w, t, arm) in jobs}
+        for fut in as_completed(futs):
+            results.append(fut.result())
+            n_done = sum(1 for _, _, s in results if s in ("ok", "skip"))
+            say(f"[run_batch] progress {len(results)}/{len(jobs)} finished, {n_done} have eval")
+    say(f"\n[run_batch] DONE. outcomes: {dict(Counter(s for _, _, s in results))}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--per-domain", type=int, default=5)
@@ -92,10 +115,30 @@ def main():
     ap.add_argument("--timeout", type=int, default=1800, help="per (task,arm) subprocess timeout sec")
     ap.add_argument("--all-tasks", action="store_true",
                     help="run EVERY task in every domain (ignore --per-domain and the hard filter)")
+    ap.add_argument("--ids", nargs="+", default=None,
+                    help="explicit task ids to run (overrides domain selection)")
+    ap.add_argument("--ids-file", default=None,
+                    help="JSON file with a list of task ids (robust alternative to --ids)")
     ap.add_argument("--arms", nargs="+", default=DEFAULT_ARMS,
                     help="SUT class names to run per task (default: Gate-0 pair)")
     args = ap.parse_args()
     arms = args.arms
+
+    # Explicit id list (--ids or --ids-file; split any space-joined single arg).
+    ids = args.ids
+    if args.ids_file:
+        ids = json.load(open(args.ids_file))
+    elif ids and len(ids) == 1 and " " in ids[0]:
+        ids = ids[0].split()
+    if ids:
+        atype_by_id = {}
+        for dom in DOMAINS:
+            for w, t, a in load_tasks(dom, hard_only=False):
+                atype_by_id[t] = (w, a)
+        sample = [(atype_by_id.get(t, (t.rsplit("-", 2)[0], None))[0], t,
+                   atype_by_id.get(t, (None, None))[1]) for t in ids]
+        _run_sample(sample, arms, args)
+        return
 
     rng = random.Random(args.seed)
     sample = []
@@ -112,30 +155,7 @@ def main():
             pick = rng.sample(pool_tasks, min(args.per_domain, len(pool_tasks)))
         sample.extend(pick)
         say(f"[run_batch] {dom:12s} {len(pick)} tasks picked (of {len(pool_tasks)})")
-
-    os.makedirs(os.path.dirname(MANIFEST), exist_ok=True)
-    json.dump({"seed": args.seed, "per_domain": args.per_domain, "all_tasks": args.all_tasks, "arms": arms,
-               "sample": [{"workload": w, "task_id": t, "answer_type": a} for w, t, a in sample]},
-              open(MANIFEST, "w"), indent=2)
-    say(f"\n[run_batch] {len(sample)} tasks x {len(arms)} arms = {len(sample)*len(arms)} runs; "
-        f"arms={arms}; workers={args.workers}; timeout={args.timeout}s/run")
-    for w, t, _ in sample:
-        say(f"    {w:12s} {t}")
-
-    # Build the full (task, arm) job list. Latest and delta are independent jobs.
-    jobs = [(w, t, arm) for (w, t, _) in sample for arm in arms]
-    say(f"\n[run_batch] dispatching {len(jobs)} jobs ...\n")
-
-    results = []
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futs = {pool.submit(run_one, w, t, arm, args.timeout): (t, arm) for (w, t, arm) in jobs}
-        for fut in as_completed(futs):
-            results.append(fut.result())
-            n_done = sum(1 for _, _, s in results if s in ("ok", "skip"))
-            say(f"[run_batch] progress {len(results)}/{len(jobs)} finished, {n_done} have eval")
-
-    from collections import Counter
-    say(f"\n[run_batch] DONE. outcomes: {dict(Counter(s for _, _, s in results))}")
+    _run_sample(sample, arms, args)
 
 
 if __name__ == "__main__":

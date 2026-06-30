@@ -28,7 +28,8 @@ Commands (run `kb.py <cmd> -h` for details):
   failed     --sut S      list failed / score-0 task ids
   rerun-failed --sut S    detect score-0 tasks -> rerun -> reeval -> scores
   scores     [--sut S]    leaderboard / per-SUT scores (compute_scores.py)
-  cost       --sut S      LLM cost + token usage (by workload/difficulty/task)
+  cost       --sut S      LLM cost + token usage totals (by workload/difficulty/task)
+  tokens     --sut S      per-step token breakdown + aggregated stats + input-growth curve
   traces     --sut S      per-task traces + react-step/workflow metrics (system_scratch/)
 
 Examples:
@@ -38,6 +39,8 @@ Examples:
   ./kb.py failed --sut DataflowSystemGPT54DeltaSchemaConverge --zero-only --ids-only
   ./kb.py scores --sut DataflowSystemGPT54DeltaSchemaConverge
   ./kb.py cost --sut DataflowSystemGPT54DeltaSchemaConverge --by workload
+  ./kb.py tokens --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
+  ./kb.py tokens --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge
   ./kb.py traces --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
 """
 import argparse, csv, json, os, re, signal, statistics, subprocess, sys, time
@@ -513,6 +516,99 @@ def cmd_traces(a):
     print(f"  final operator types   : {dict(types)}")
 
 
+# ----------------------------- per-step token usage -----------------------------
+def step_token_rows(task_dir):
+    """Per-AGENT-step token usage from react_steps.json (in order). Each row:
+    in/out/cached/reasoning/total + the tools called that step."""
+    rs = _load(task_dir / "react_steps.json")
+    steps = rs.get("steps", []) if isinstance(rs, dict) else []
+    rows = []
+    for s in steps:
+        if s.get("role") != "agent":
+            continue
+        u = s.get("usage") or {}
+        rows.append({
+            "in": int(u.get("inputTokens", 0) or 0),
+            "out": int(u.get("outputTokens", 0) or 0),
+            "cached": int(u.get("cachedInputTokens", 0) or 0),
+            "reasoning": int(u.get("reasoningTokens", 0) or 0),
+            "total": int(u.get("totalTokens", 0) or 0),
+            "tools": [tc.get("toolName") for tc in (s.get("toolCalls") or [])],
+        })
+    return rows
+
+
+def _pct(part, whole):
+    return (100.0 * part / whole) if whole else 0.0
+
+
+def cmd_tokens(a):
+    # ---- single task: full per-step table ----
+    if a.task:
+        d = KB_ROOT / "system_scratch" / a.sut[0] / a.task
+        rows = step_token_rows(d)
+        if not rows:
+            sys.exit(f"no per-step usage in {d}/react_steps.json")
+        print(f"=== {a.sut[0]} / {a.task} — per-step token usage ({len(rows)} agent steps) ===")
+        print(f"  {'step':>4} {'in':>10} {'out':>7} {'cached':>10} {'reason':>7} {'total':>10} {'cum_total':>11}  tools")
+        cum = 0
+        for i, r in enumerate(rows, 1):
+            cum += r["total"]
+            tc = Counter(t for t in r["tools"] if t)
+            ts = " ".join(f"{k}×{v}" if v > 1 else k for k, v in tc.items())
+            print(f"  {i:>4} {r['in']:>10,} {r['out']:>7,} {r['cached']:>10,} {r['reasoning']:>7,} "
+                  f"{r['total']:>10,} {cum:>11,}  {ts}")
+        tin = sum(r["in"] for r in rows); tout = sum(r["out"] for r in rows)
+        tca = sum(r["cached"] for r in rows); tto = sum(r["total"] for r in rows)
+        print(f"  {'sum':>4} {tin:>10,} {tout:>7,} {tca:>10,} {'':>7} {tto:>10,}")
+        print(f"  per-step avg : in {tin // len(rows):,}  out {tout // len(rows):,}  total {tto // len(rows):,}"
+              f"   |  cache-hit {_pct(tca, tin):.0f}% of input")
+        print(f"  input growth : step1 {rows[0]['in']:,} -> step{len(rows)} {rows[-1]['in']:,}  "
+              f"(Δ {rows[-1]['in'] - rows[0]['in']:+,})")
+        return
+
+    # ---- aggregate over all tasks, per SUT (several --sut compare) ----
+    def mean(key, src):
+        return sum(x[key] for x in src) / len(src) if src else 0.0
+
+    for sut in a.sut:
+        base = KB_ROOT / "system_scratch" / sut
+        if not base.is_dir():
+            print(f"\n=== {sut}: no traces ==="); continue
+        task_tot, all_steps = [], []
+        by_index = defaultdict(list)   # step-index -> per-step rows (the growth curve)
+        for dd in sorted(base.iterdir()):
+            if not dd.is_dir() or dd.name.startswith("_"):
+                continue
+            rows = step_token_rows(dd)
+            if not rows:
+                continue
+            all_steps.extend(rows)
+            for i, r in enumerate(rows, 1):
+                by_index[i].append(r)
+            task_tot.append({k: sum(r[k] for r in rows) for k in ("in", "out", "cached", "reasoning", "total")}
+                            | {"steps": len(rows)})
+        if not task_tot:
+            print(f"\n=== {sut}: no per-step usage in react_steps.json ==="); continue
+        n, ns = len(task_tot), len(all_steps)
+        ti, tc = mean("in", task_tot), mean("cached", task_tot)
+        print(f"\n=== {sut}  ({_first_model(sut)}) — token breakdown: {n} tasks, {ns} agent-steps ===")
+        print(f"  per-task mean : in {ti:>9,.0f}  out {mean('out', task_tot):>7,.0f}  cached {tc:>9,.0f}  "
+              f"reasoning {mean('reasoning', task_tot):>7,.0f}  total {mean('total', task_tot):>9,.0f}  "
+              f"steps {mean('steps', task_tot):.1f}  cache-hit {_pct(tc, ti):.0f}%")
+        si, sc = mean("in", all_steps), mean("cached", all_steps)
+        med_in = statistics.median([r["in"] for r in all_steps]); mx_in = max(r["in"] for r in all_steps)
+        print(f"  per-step in   : mean {si:>9,.0f}  median {med_in:>9,.0f}  max {mx_in:>9,.0f}  cache-hit {_pct(sc, si):.0f}%")
+        print(f"  per-step out  : mean {mean('out', all_steps):>9,.0f}  reasoning {mean('reasoning', all_steps):>7,.0f}")
+        kmax = min(max(by_index), a.max_steps)
+        print(f"  input-growth curve (mean input tokens @ step k; n = tasks reaching k):")
+        for k in range(1, kmax + 1):
+            rs = by_index.get(k, [])
+            if rs:
+                print(f"    step {k:>2}: in {mean('in', rs):>9,.0f}  cached {mean('cached', rs):>9,.0f}  "
+                      f"out {mean('out', rs):>7,.0f}  (n={len(rs)})")
+
+
 # ----------------------------- score / trace helpers -----------------------------
 def reeval(sut, workloads=None):
     env = dict(os.environ)
@@ -720,6 +816,22 @@ def main():
     p.add_argument("--top", type=int, default=20, metavar="N",
                    help="for --by task: show top N tasks by cost (default 20)")
     p.set_defaults(fn=cmd_cost)
+
+    p = P("tokens",
+          "per-step token-usage breakdown from react_steps.json. with --task: a full\n"
+          "step-by-step table (in/out/cached/reasoning/total + cumulative + tools per step).\n"
+          "without --task: aggregated stats over all tasks — per-task means, per-step\n"
+          "distribution, cache-hit %, and the input-GROWTH curve (mean input tokens at step k,\n"
+          "which exposes the context-accumulation dynamics). pass several --sut to compare arms.\n\n"
+          "examples:\n"
+          "  kb.py tokens --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2\n"
+          "  kb.py tokens --sut <S1> <S2>                 # compare per-step token profiles\n"
+          "  kb.py tokens --sut <S> --max-steps 8")
+    p.add_argument("--sut", required=True, nargs="+", metavar="SUT", help="one or more SUT class names")
+    p.add_argument("--task", help="show the full per-step table for one task id (uses the first --sut)")
+    p.add_argument("--max-steps", type=int, default=12, metavar="N",
+                   help="how many step-indices to show in the input-growth curve (default 12)")
+    p.set_defaults(fn=cmd_tokens)
 
     p = P("traces",
           "query per-task artifacts under system_scratch/<SUT>/. without --task: list every\n"
