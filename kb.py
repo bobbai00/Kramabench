@@ -30,6 +30,7 @@ Commands (run `kb.py <cmd> -h` for details):
   scores     [--sut S]    leaderboard / per-SUT scores (compute_scores.py)
   cost       --sut S      LLM cost + token usage totals (by workload/difficulty/task)
   tokens     --sut S      per-step token breakdown + aggregated stats + input-growth curve
+  compare    --sut A B    A-vs-B: outcome matrix + both-pass cost split + cost dominators
   traces     --sut S      per-task traces + react-step/workflow metrics (system_scratch/)
 
 Examples:
@@ -42,6 +43,7 @@ Examples:
   ./kb.py tokens --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
   ./kb.py tokens --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge
   ./kb.py traces --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
+  ./kb.py compare --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge
 """
 import argparse, csv, json, os, re, signal, statistics, subprocess, sys, time
 from collections import Counter, defaultdict
@@ -473,6 +475,55 @@ def react_metrics(task_dir):
     return m
 
 
+def cmd_compare(a):
+    """Pairwise A-vs-B: outcome matrix, both-pass cost split, and cost dominators."""
+    A, B = a.sut
+    sa, sb = load_task_success(A), load_task_success(B)
+    ca = {r["task_id"]: r for r in load_cost_stats(A)}
+    cb = {r["task_id"]: r for r in load_cost_stats(B)}
+    if not ca or not cb:
+        sys.exit("missing stats for one of the SUTs (run them first)")
+    pa = lambda t: sa.get(t, 0) >= 1.0
+    pb = lambda t: sb.get(t, 0) >= 1.0
+    short = lambda s: s.replace("DataflowSystem", "").replace("CodeAgentSystem", "CA:")
+
+    print(f"{'SUT':<40}{'tasks':>6}{'pass':>6}{'pass%':>7}{'total$':>9}{'tokens':>13}")
+    for s, succ, cost in [(A, sa, ca), (B, sb, cb)]:
+        n = len(cost); pw = sum(1 for t in cost if succ.get(t, 0) >= 1.0)
+        tc = sum(r["cost"] for r in cost.values()); tk = sum(r["total_tokens"] for r in cost.values())
+        print(f"{short(s):<40}{n:>6}{pw:>6}{(100*pw/n if n else 0):>6.0f}%{('$%.2f' % tc):>9}{tk:>13,}")
+    print(f"  A = {A}\n  B = {B}")
+
+    common = sorted(set(ca) & set(cb))
+    both = [t for t in common if pa(t) and pb(t)]
+    onlyA = [t for t in common if pa(t) and not pb(t)]
+    onlyB = [t for t in common if pb(t) and not pa(t)]
+    neither = [t for t in common if not pa(t) and not pb(t)]
+    print(f"\noutcome over {len(common)} shared tasks: "
+          f"both pass {len(both)} | A-only {len(onlyA)} | B-only {len(onlyB)} | both fail {len(neither)}")
+
+    a_ch = [t for t in both if ca[t]["cost"] < cb[t]["cost"]]
+    b_ch = [t for t in both if cb[t]["cost"] < ca[t]["cost"]]
+    print(f"both-pass cost ({len(both)} tasks): "
+          f"A cheaper {len(a_ch)} (−${sum(cb[t]['cost']-ca[t]['cost'] for t in a_ch):.3f}) | "
+          f"B cheaper {len(b_ch)} (−${sum(ca[t]['cost']-cb[t]['cost'] for t in b_ch):.3f})")
+
+    net = sum(cb[t]["cost"] - ca[t]["cost"] for t in common)  # +ve = B pricier
+    dom = sorted(common, key=lambda t: abs(cb[t]["cost"] - ca[t]["cost"]), reverse=True)
+    print(f"\ncost gap (Δ = B−A) net over shared = ${net:+.3f}  (+ = B pricier).  top {a.top} dominators:")
+    print(f"  {'task':<22}{'Δ(B-A)':>10}   A($/steps/PF)      B($/steps/PF)")
+    cum = 0.0
+    for t in dom[:a.top]:
+        d = cb[t]["cost"] - ca[t]["cost"]; cum += d
+        print(f"  {t:<22}{('%+.4f' % d):>10}   ${ca[t]['cost']:.4f}/{ca[t]['num_steps']:>2}/{'P' if pa(t) else 'F'}"
+              f"     ${cb[t]['cost']:.4f}/{cb[t]['num_steps']:>2}/{'P' if pb(t) else 'F'}")
+    if net:
+        print(f"  -> top {a.top} = ${cum:+.3f}  ({100*cum/net:.0f}% of the net gap)")
+    extra = sorted(set(ca) ^ set(cb))
+    if extra:
+        print(f"\n(note: {len(extra)} task(s) only in one SUT, excluded from the shared comparison: {extra})")
+
+
 def cmd_traces(a):
     scratch = KB_ROOT / "system_scratch" / a.sut
     if not scratch.is_dir():
@@ -816,6 +867,17 @@ def main():
     p.add_argument("--top", type=int, default=20, metavar="N",
                    help="for --by task: show top N tasks by cost (default 20)")
     p.set_defaults(fn=cmd_cost)
+
+    p = P("compare",
+          "pairwise A-vs-B comparison of two SUTs from existing results (read-only):\n"
+          "per-SUT pass-rate + total cost/tokens, the outcome matrix (both pass / A-only /\n"
+          "B-only / both fail), the both-pass cost split (who's cheaper when both succeed),\n"
+          "and the cost DOMINATORS — the few tasks driving the total-cost gap, each with\n"
+          "steps + pass/fail, plus what %% of the gap the top-N account for.\n\n"
+          "example:\n  kb.py compare --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge")
+    p.add_argument("--sut", required=True, nargs=2, metavar="SUT", help="exactly two SUT class names (A B)")
+    p.add_argument("--top", type=int, default=10, metavar="N", help="how many cost dominators to show (default 10)")
+    p.set_defaults(fn=cmd_compare)
 
     p = P("tokens",
           "per-step token-usage breakdown from react_steps.json. with --task: a full\n"

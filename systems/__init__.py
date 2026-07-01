@@ -12,6 +12,9 @@ from .dataflow_system import (
     DataflowSystemGPT52LatestSchemaConverge,
     # gpt-5.4 converge pair — Latest vs Delta context A/B
     DataflowSystemGPT54LatestSchemaConverge,
+    DataflowSystemGPT54LatestSchemaConvergeLevels,
+    DataflowSystemGPT54LatestColumnStats,
+    DataflowSystemGPT54LatestColumnStatsOnly,
     DataflowSystemGPT54DeltaSchemaConverge,
     DataflowSystemGPT54DeltaSchemaConvergeCollapse,
     DataflowSystemGPT54DeltaSchemaConvergeCap4k,

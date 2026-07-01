@@ -69,6 +69,9 @@ class DataflowSystem(System):
         max_result_rows: int = 0,
         max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
+        column_stats: bool = False,
+        value_format: bool = False,
+        data_hints: bool = False,
         tool_dialect: str = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
@@ -165,6 +168,9 @@ class DataflowSystem(System):
         self.max_loaders_per_source = max_loaders_per_source
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
         self.attempt_reflection = attempt_reflection
+        self.column_stats = column_stats
+        self.value_format = value_format
+        self.data_hints = data_hints
         # Tool-call dialect for the local-react driver. Default to the new Qwen
         # XML format ("qwen-xml"), matching the agent-service default; the
         # react-text variants opt in to the previous ReAct text format. Ignored
@@ -305,6 +311,9 @@ class DataflowSystem(System):
             max_result_rows=self.max_result_rows,
             max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
+            column_stats=self.column_stats,
+            value_format=self.value_format,
+            data_hints=self.data_hints,
             tool_dialect=self.tool_dialect,
             verbosity_level=2 if self.verbose else 1,
         )
@@ -434,6 +443,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "max_result_rows": self.max_result_rows,
                 "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
+                "column_stats": self.column_stats,
+                "value_format": self.value_format,
+                "data_hints": self.data_hints,
                 "tool_dialect": self.tool_dialect,
             }
         }
@@ -707,6 +719,88 @@ class DataflowSystemGPT54LatestSchemaConverge(DataflowSystem):
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT54LatestSchemaConverge",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54LatestSchemaConvergeLevels(DataflowSystem):
+    """gpt-5.4 LATEST converge with flow_level=2 / data_level=2 (richer DECORATE:
+    L2 flow = cardinality alarms + errored-op upstream context; L2 data = the
+    structural-profile `Data hints:` block). Identical to
+    DataflowSystemGPT54LatestSchemaConverge otherwise (latest, max_steps=25)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=2,
+            data_level=2,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54LatestSchemaConvergeLevels",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54LatestColumnStats(DataflowSystem):
+    """gpt-5.4 LATEST at the notes' best operating point — flow_level=1
+    (pre-emptive loader remediation only; the post-hoc flow rungs are net-negative
+    per claude/FINDINGS.md) + data_level=2 (the `tableStructureHint` accuracy win)
+    — PLUS the standalone `column_stats` overlay: the full per-column
+    `Column Stats:` block (null/mean/min/max/distinct/top-N) that the CODE-mode
+    system prompt documents but no data level renders. A/Bs "does explicit
+    per-column metrics help?" on top of the best config. Otherwise identical to
+    DataflowSystemGPT54LatestSchemaConverge (latest, max_steps=25)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54LatestColumnStats",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT54LatestColumnStatsOnly(DataflowSystem):
+    """gpt-5.4 LATEST, the LEANEST column-stats-only view: flow_level=0 and
+    data_level=0 (no ladder annotations at all), column_stats ON, value_format &
+    data_hints OFF. The model sees only: operator summary + Properties + the
+    Inputs/Output shape line + the Result TSV + the per-column `Column Stats:`
+    block. Isolates the effect of column stats alone. Other params match
+    DataflowSystemGPT54LatestColumnStats (max_steps=25, loaders=2, reflection)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.4",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            value_format=False,
+            data_hints=False,
+            max_loaders_per_source=2,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT54LatestColumnStatsOnly",
             verbose=verbose,
             *args,
             **kwargs,

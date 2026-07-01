@@ -132,6 +132,9 @@ class AgentSettings:
     # Inject an `Attempt reflection:` block on heavily-edited operators
     # (plan3, progress reflection). False = no-op default.
     attempt_reflection: bool = False
+    column_stats: bool = False
+    value_format: bool = False
+    data_hints: bool = False
     # Tool-call dialect for the local-react driver ("qwen-xml" | "react-text").
     # Ignored by vercel-tool-use. Default is qwen-xml (the new format).
     tool_dialect: str = AGENT_TOOL_DIALECT
@@ -165,6 +168,9 @@ class AgentSettings:
             "maxResultRows": self.max_result_rows,
             "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
+            "columnStats": self.column_stats,
+            "valueFormat": self.value_format,
+            "dataHints": self.data_hints,
             "toolDialect": self.tool_dialect,
         }
         if self.allowed_operator_types is not None:
@@ -800,6 +806,9 @@ class DataflowAgent:
             max_result_rows: int = 0,
             max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
+            column_stats: bool = False,
+            value_format: bool = False,
+            data_hints: bool = False,
             tool_dialect: str = AGENT_TOOL_DIALECT,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
@@ -873,6 +882,9 @@ class DataflowAgent:
             max_result_rows=max_result_rows,
             max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
+            column_stats=column_stats,
+            value_format=value_format,
+            data_hints=data_hints,
             tool_dialect=tool_dialect,
 
         )
