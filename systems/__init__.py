@@ -15,12 +15,42 @@ from .dataflow_system import (
     DataflowSystemGPT54LatestSchemaConvergeLevels,
     DataflowSystemGPT54LatestColumnStats,
     DataflowSystemGPT54LatestColumnStatsOnly,
+    DataflowSystemGPT52LatestColumnStats,
+    DataflowSystemGPT52LatestColumnStatsOnly,
+    DataflowSystemGPT52LatestColumnStatsDataHints,
+    # old-branch replication probe (rich example + old-style error rendering)
+    DataflowSystemGPT52LatestColumnStatsOldStyle,
+)
+from .dataflow_system_old import (
+    # OLD STACK (fe917396a) via the era-matched client — the true A/B arm
+    DataflowSystemOldStackGPT52NoActionDetail,
+)
+from .dataflow_system import (
+    DataflowSystemGPT52DeltaColumnStatsDataHints,
+    DataflowSystemGPT52LatestStats2k,
+    DataflowSystemGPT52LatestStats5k,
+    DataflowSystemGPT52DeltaStats2k,
+    DataflowSystemGPT52DeltaStats5k,
+    DataflowSystemGPT52Latest5kSchemaOnly,
+    DataflowSystemGPT52Delta5kSchemaOnly,
+    # parallel-tool-calls ablation (parallel OFF, window OFF, else identical)
+    DataflowSystemGPT52DeltaColumnStatsDataHintsNoParallel,
     DataflowSystemGPT54DeltaSchemaConverge,
-    DataflowSystemGPT54DeltaSchemaConvergeCollapse,
-    DataflowSystemGPT54DeltaSchemaConvergeCap4k,
-    DataflowSystemGPT54DeltaSchemaConvergeCap8k,
-    DataflowSystemGPT54DeltaSchemaConvergeTrunc4k,
-    DataflowSystemGPT54DeltaSchemaConvergeTrunc8k,
+    # context-window compaction sweep (gpt-5.2 DELTA): compress vs sliding @ 3k/6k
+    DataflowSystemGPT52DeltaWin3kCompress,
+    DataflowSystemGPT52DeltaWin3kSliding,
+    DataflowSystemGPT52DeltaWin6kCompress,
+    DataflowSystemGPT52DeltaWin6kSliding,
+    # lean-deck iteration (capped deck stats cols + rows)
+    DataflowSystemGPT52DeltaWin3kCompressLean,
+    DataflowSystemGPT52DeltaWin6kCompressLean,
+    # prompt-aware iteration (DELTA prompt describes the compaction deck)
+    DataflowSystemGPT52DeltaWin3kCompressPromptAware,
+    # gpt-5-mini cross-model replication of the compaction sweep
+    DataflowSystemGPT5MiniDeltaWin3kCompress,
+    DataflowSystemGPT5MiniDeltaWin3kSliding,
+    DataflowSystemGPT5MiniDeltaWin6kCompress,
+    DataflowSystemGPT5MiniDeltaWin6kSliding,
     # hybrid: latest core + selective reinjection (error-reflection [+ thought-replay])
     DataflowSystemGPT54LatestSchemaConvergeErrorReflect,
     DataflowSystemGPT54LatestSchemaConvergeReinject,
@@ -92,6 +122,6 @@ from .dataflow_system import (
     DataflowSystemLocalLlmReactText4,
     DataflowSystemLocalLlmReactText5,
 )
-from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt54Proxy
+from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt54Proxy
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem
 from .dataflow_agent_session import DataflowAgentSessionRunner, DataflowAgentSessionSystem

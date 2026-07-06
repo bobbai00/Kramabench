@@ -30,6 +30,7 @@ class CodeAgentSystem(System):
         name: str = "CodeAgentSystem",
         use_fine_grained_prompt: bool = None,
         no_action_detail: bool = False,
+        max_print_outputs_length: int = None,
         *args, **kwargs
     ):
         super().__init__(name, verbose=verbose, *args, **kwargs)
@@ -39,6 +40,10 @@ class CodeAgentSystem(System):
         self.api_key = api_key
         self.use_fine_grained_prompt = use_fine_grained_prompt
         self.no_action_detail = no_action_detail
+        # Per-instance stdout-preview cap (the code agent's analog of the dataflow
+        # agent's max_operator_result_char_limit). None ⇒ fall back to the
+        # CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH env var / smolagents default.
+        self.max_print_outputs_length = max_print_outputs_length
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
         self.format_hints: Dict[str, str] = {}  # Map task_id -> format_hint string
@@ -68,6 +73,7 @@ class CodeAgentSystem(System):
             verbosity_level=2 if self.verbose else 1,
             use_fine_grained_prompt=self.use_fine_grained_prompt,
             no_action_detail=self.no_action_detail,
+            max_print_outputs_length=self.max_print_outputs_length,
         )
         self.agent.setup()
 
@@ -247,6 +253,26 @@ class CodeAgentSystemGpt52(CodeAgentSystem):
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(model_type="gpt-5.2", name="CodeAgentSystemGpt52", verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt52Chars2k(CodeAgentSystem):
+    """gpt-5.2 code agent, 2k stdout-preview cap (analog of dataflow 2k result char limit)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars2k",
+            max_print_outputs_length=2000, verbose=verbose, *args, **kwargs,
+        )
+
+
+class CodeAgentSystemGpt52Chars5k(CodeAgentSystem):
+    """gpt-5.2 code agent, 5k stdout-preview cap (analog of dataflow 5k result char limit)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars5k",
+            max_print_outputs_length=5000, verbose=verbose, *args, **kwargs,
+        )
 
 
 class CodeAgentSystemGpt52FineGrained(CodeAgentSystem):

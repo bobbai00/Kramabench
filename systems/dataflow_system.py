@@ -55,19 +55,17 @@ class DataflowSystem(System):
         thought_replay: bool = False,
         thought_replay_k: int = 10,
         agent_turns: bool = False,
-        collapse_superseded: bool = False,
-        context_budget_tokens: int = 0,
-        truncate_oldest: bool = False,
+        context_window_tokens: int = 0,
+        compaction_strategy: str = "compress",
+        deck_sample_ratio: float = 0.10,
         error_reflection: bool = False,
         error_reflection_threshold: int = 3,
         few_shot_prompt: bool = False,
         table_structure_hint: bool = False,
-        loader_escalation: bool = False,
         frontier_depth: int = 0,
         flow_level: int = 0,
         data_level: int = 0,
         max_result_rows: int = 0,
-        max_loaders_per_source: int = 0,
         attempt_reflection: bool = False,
         column_stats: bool = False,
         value_format: bool = False,
@@ -156,16 +154,13 @@ class DataflowSystem(System):
         self.thought_replay = thought_replay
         self.thought_replay_k = thought_replay_k
         self.agent_turns = agent_turns
-        self.collapse_superseded = collapse_superseded
-        self.context_budget_tokens = context_budget_tokens
-        self.truncate_oldest = truncate_oldest
+        self.context_window_tokens = context_window_tokens
+        self.compaction_strategy = compaction_strategy
+        self.deck_sample_ratio = deck_sample_ratio
         self.error_reflection = error_reflection
         self.error_reflection_threshold = error_reflection_threshold
         self.few_shot_prompt = few_shot_prompt
-        self.loader_escalation = loader_escalation
         self.max_result_rows = max_result_rows
-        # Global loader-proliferation budget (plan5); 0 = disabled (no-op).
-        self.max_loaders_per_source = max_loaders_per_source
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
         self.attempt_reflection = attempt_reflection
         self.column_stats = column_stats
@@ -299,17 +294,15 @@ class DataflowSystem(System):
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
             agent_turns=self.agent_turns,
-            collapse_superseded=self.collapse_superseded,
-            context_budget_tokens=self.context_budget_tokens,
-            truncate_oldest=self.truncate_oldest,
+            context_window_tokens=self.context_window_tokens,
+            compaction_strategy=self.compaction_strategy,
+            deck_sample_ratio=self.deck_sample_ratio,
             error_reflection=self.error_reflection,
             error_reflection_threshold=self.error_reflection_threshold,
             few_shot_prompt=self.few_shot_prompt,
-            loader_escalation=self.loader_escalation,
             flow_level=self.flow_level,
             data_level=self.data_level,
             max_result_rows=self.max_result_rows,
-            max_loaders_per_source=self.max_loaders_per_source,
             attempt_reflection=self.attempt_reflection,
             column_stats=self.column_stats,
             value_format=self.value_format,
@@ -431,17 +424,15 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
                 "agent_turns": self.agent_turns,
-                "collapse_superseded": self.collapse_superseded,
-                "context_budget_tokens": self.context_budget_tokens,
-                "truncate_oldest": self.truncate_oldest,
+                "context_window_tokens": self.context_window_tokens,
+                "compaction_strategy": self.compaction_strategy,
+                "deck_sample_ratio": self.deck_sample_ratio,
                 "error_reflection": self.error_reflection,
                 "error_reflection_threshold": self.error_reflection_threshold,
                 "few_shot_prompt": self.few_shot_prompt,
-                "loader_escalation": self.loader_escalation,
                 "flow_level": self.flow_level,
                 "data_level": self.data_level,
                 "max_result_rows": self.max_result_rows,
-                "max_loaders_per_source": self.max_loaders_per_source,
                 "attempt_reflection": self.attempt_reflection,
                 "column_stats": self.column_stats,
                 "value_format": self.value_format,
@@ -690,7 +681,6 @@ class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
             context_mode="latest",
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -714,7 +704,6 @@ class DataflowSystemGPT54LatestSchemaConverge(DataflowSystem):
             max_steps=25,
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -738,7 +727,6 @@ class DataflowSystemGPT54LatestSchemaConvergeLevels(DataflowSystem):
             max_steps=25,
             flow_level=2,
             data_level=2,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -767,11 +755,34 @@ class DataflowSystemGPT54LatestColumnStats(DataflowSystem):
             flow_level=1,
             data_level=2,
             column_stats=True,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT54LatestColumnStats",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestColumnStats(DataflowSystem):
+    """gpt-5.2 twin of DataflowSystemGPT54LatestColumnStats — same settings
+    (LATEST, flow_level=1, data_level=2, column_stats on, max_steps=25,
+    loaders=2, attempt_reflection, char limits 1000/3000), only the model
+    differs (gpt-5.2). For the cross-model comparison of the column-stats config."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestColumnStats",
             verbose=verbose,
             *args,
             **kwargs,
@@ -796,11 +807,152 @@ class DataflowSystemGPT54LatestColumnStatsOnly(DataflowSystem):
             column_stats=True,
             value_format=False,
             data_hints=False,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
             name="DataflowSystemGPT54LatestColumnStatsOnly",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestColumnStatsOnly(DataflowSystem):
+    """gpt-5.2 twin of DataflowSystemGPT54LatestColumnStatsOnly — the leanest
+    column-stats-only view (LATEST, flow_level=0, data_level=0, column_stats on,
+    value_format/data_hints off, max_steps=25, loaders=2, attempt_reflection,
+    char limits 1000/3000). Only the model differs (gpt-5.2)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            value_format=False,
+            data_hints=False,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestColumnStatsOnly",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestColumnStatsOldStyle(DataflowSystem):
+    """Old-branch replication probe: IDENTICAL config to
+    DataflowSystemGPT52LatestColumnStatsOnly (gpt-5.2, LATEST, flow0/data0,
+    column_stats on, hints off, steps=25, char limits 1000/3000), but run AFTER
+    two old-branch behaviors were restored in the agent service + engine:
+      1. the rich worked example (full stats-validation reasoning + the
+         explicit-filter self-correction beat) in the system prompt, and
+      2. old-style error rendering — the engine error carries only the
+         exception + user-code line pointer; the errored operator's code is
+         rendered by the agent-service in the context instead.
+    Compared against ColumnStatsOnly (same 20-task subset) to measure the lift."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            value_format=False,
+            data_hints=False,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestColumnStatsOldStyle",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestColumnStatsDataHints(DataflowSystem):
+    """Recovery probe: identical to DataflowSystemGPT52LatestColumnStatsOnly
+    (gpt-5.2, LATEST, flow_level=0, data_level=0, column_stats on) but with the
+    standalone `data_hints` flag ON. Tests whether the worker's data-derived
+    `Data hints:` block (esp. the "N columns are Unnamed -> re-read with
+    header=/skiprows=" signal) recovers the multi-row-header spreadsheet
+    failures. ONLY data_hints changes vs the baseline, isolating its effect."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            value_format=False,
+            data_hints=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52LatestColumnStatsDataHints",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52DeltaColumnStatsDataHints(DataflowSystem):
+    """DELTA counterpart of DataflowSystemGPT52LatestColumnStatsDataHints — same
+    knobs (gpt-5.2, flow_level=0, data_level=0, column_stats on, data_hints on,
+    value_format off, max_steps=25, attempt_reflection, char limits 1000/3000),
+    only context_mode=delta (per-step Thought/Action/Observation trajectory
+    instead of the aggregated LATEST snapshot)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            value_format=False,
+            data_hints=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52DeltaColumnStatsDataHints",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52DeltaColumnStatsDataHintsNoParallel(DataflowSystem):
+    """Parallel-tool-calls ablation: identical to DataflowSystemGPT52DeltaColumnStatsDataHints
+    (gpt-5.2, delta, flow=0/data=0, column_stats on, data_hints on, window OFF,
+    max_steps=25, attempt_reflection, char limits 1000/3000) but with
+    parallel_tool_calls=False — the model emits ONE tool call per turn instead of
+    batching independent actions. Measures the cost of forcing sequential actions
+    (more turns) against any accuracy effect, with the context window off."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            value_format=False,
+            data_hints=True,
+            attempt_reflection=True,
+            parallel_tool_calls=False,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52DeltaColumnStatsDataHintsNoParallel",
             verbose=verbose,
             *args,
             **kwargs,
@@ -820,7 +972,6 @@ class DataflowSystemGPT54DeltaSchemaConverge(DataflowSystem):
             max_steps=25,
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -831,134 +982,329 @@ class DataflowSystemGPT54DeltaSchemaConverge(DataflowSystem):
         )
 
 
-class DataflowSystemGPT54DeltaSchemaConvergeCollapse(DataflowSystem):
-    """DELTA + supersession-collapse: identical to DataflowSystemGPT54DeltaSchemaConverge
-    but collapse_superseded=True — each operator's result renders only at its latest
-    (still-live) turn; superseded/deleted results become `(omitted — superseded)` while
-    Thoughts+Actions stay intact. Near-lossless; bounds result content to live-operator
-    count instead of trajectory length. The DAG-pruning arm vs full delta."""
+# ---------------------------------------------------------------------------
+# Context-window compaction sweep (gpt-5.2, DELTA). Base config mirrors
+# DataflowSystemGPT52DeltaColumnStatsDataHints (flow=0/data=0, steps=25,
+# attempt_reflection, char limits 1000/3000, column_stats+data_hints on — which
+# now feed the compress DECK, since the raw-delta suffix is forced schema-only).
+# Each window is run with both compaction strategies so compress (fold prefix →
+# stats deck) can be compared head-to-head against sliding (drop oldest events)
+# at a MATCHED budget. Windows bound the assembled trajectory user-message
+# (system prompt ≈ 3.3k tokens is separate): 3k triggers compaction from ~step 4,
+# 6k from ~step 7 (the hard tail).
+# ---------------------------------------------------------------------------
+
+
+class DataflowSystemGPT52DeltaWin3kCompress(DataflowSystem):
+    """gpt-5.2 DELTA, 3k-token trajectory window, compress compaction: the oldest
+    events fold into a `# Dataflow (compacted)` stats deck (Column Schema and stats
+    + a 10% row peek), then raw delta resumes. Aggressive window (compacts from
+    ~step 4) — the compress arm of the 3k pair."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5.4",
+            model_type="gpt-5.2",
             context_mode="delta",
             max_steps=25,
-            flow_level=1,
-            data_level=1,
-            max_loaders_per_source=2,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
             attempt_reflection=True,
-            collapse_superseded=True,
+            context_window_tokens=3000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54DeltaSchemaConvergeCollapse",
+            name="DataflowSystemGPT52DeltaWin3kCompress",
             verbose=verbose,
             *args,
             **kwargs,
         )
 
 
-class DataflowSystemGPT54DeltaSchemaConvergeCap4k(DataflowSystem):
-    """DELTA + WATERMARK supersession-collapse at a small 4000-token cap.
-    Identical to DataflowSystemGPT54DeltaSchemaConverge but collapse_superseded=True
-    AND context_budget_tokens=4000: lossless delta is sent UNTOUCHED while it fits
-    ~4k tokens (≈16k chars), and only once it exceeds the cap are superseded results
-    blanked OLDEST-FIRST — the minimum needed to get back under. The cap is set
-    deliberately small so the watermark clearly TRIGGERS within a 25-step run (early
-    steps stay lossless; collapse kicks in mid-run). The cap-gated arm vs the
-    always-on collapse (DataflowSystemGPT54DeltaSchemaConvergeCollapse) and lossless
-    delta (DataflowSystemGPT54DeltaSchemaConverge)."""
+class DataflowSystemGPT52DeltaWin3kSliding(DataflowSystem):
+    """gpt-5.2 DELTA, 3k-token window, sliding compaction (the naive baseline): the
+    oldest whole agent events are dropped until it fits, leaving an omitted-marker.
+    The comparator for DataflowSystemGPT52DeltaWin3kCompress at a matched budget."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5.4",
+            model_type="gpt-5.2",
             context_mode="delta",
             max_steps=25,
-            flow_level=1,
-            data_level=1,
-            max_loaders_per_source=2,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
             attempt_reflection=True,
-            collapse_superseded=True,
-            context_budget_tokens=4000,
+            context_window_tokens=3000,
+            compaction_strategy="sliding",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54DeltaSchemaConvergeCap4k",
+            name="DataflowSystemGPT52DeltaWin3kSliding",
             verbose=verbose,
             *args,
             **kwargs,
         )
 
 
-class DataflowSystemGPT54DeltaSchemaConvergeCap8k(DataflowSystem):
-    """DELTA + WATERMARK supersession-collapse at an 8000-token cap (the gentler
-    collapse arm of the fixed-budget sweep). Same as Cap4k but context_budget_tokens
-    =8000, so lossless delta survives longer before any blanking. Pairs with
-    Trunc8k at the same budget to show collapse vs naive truncation."""
+class DataflowSystemGPT52DeltaWin6kCompress(DataflowSystem):
+    """gpt-5.2 DELTA, 6k-token window, compress compaction (gentler window: compacts
+    from ~step 7, so only the hard tail folds). The compress arm of the 6k pair."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5.4",
+            model_type="gpt-5.2",
             context_mode="delta",
             max_steps=25,
-            flow_level=1,
-            data_level=1,
-            max_loaders_per_source=2,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
             attempt_reflection=True,
-            collapse_superseded=True,
-            context_budget_tokens=8000,
+            context_window_tokens=6000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54DeltaSchemaConvergeCap8k",
+            name="DataflowSystemGPT52DeltaWin6kCompress",
             verbose=verbose,
             *args,
             **kwargs,
         )
 
 
-class DataflowSystemGPT54DeltaSchemaConvergeTrunc4k(DataflowSystem):
-    """DELTA + naive SLIDING-WINDOW truncation at a 4000-token cap — the comparator
-    for Cap4k. Below the cap = lossless delta; above it, the OLDEST whole agent
-    events are dropped (entire turns, not just results) until it fits, with an
-    `(… N earlier events omitted …)` marker. Same budget as Cap4k, dumber eviction:
-    shows whether DAG-aware supersession-collapse beats plain truncation at matched X."""
+class DataflowSystemGPT52DeltaWin6kSliding(DataflowSystem):
+    """gpt-5.2 DELTA, 6k-token window, sliding compaction — the comparator for
+    DataflowSystemGPT52DeltaWin6kCompress at a matched budget."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5.4",
+            model_type="gpt-5.2",
             context_mode="delta",
             max_steps=25,
-            flow_level=1,
-            data_level=1,
-            max_loaders_per_source=2,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
             attempt_reflection=True,
-            truncate_oldest=True,
-            context_budget_tokens=4000,
+            context_window_tokens=6000,
+            compaction_strategy="sliding",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54DeltaSchemaConvergeTrunc4k",
+            name="DataflowSystemGPT52DeltaWin6kSliding",
             verbose=verbose,
             *args,
             **kwargs,
         )
 
 
-class DataflowSystemGPT54DeltaSchemaConvergeTrunc8k(DataflowSystem):
-    """DELTA + naive SLIDING-WINDOW truncation at an 8000-token cap — the comparator
-    for Cap8k (truncation at the gentler budget)."""
+class DataflowSystemGPT52DeltaWin3kCompressPromptAware(DataflowSystem):
+    """gpt-5.2 DELTA, 3k window, compress — identical config to Win3kCompress, but
+    run AFTER the DELTA prompt gained the conditional `## History Compaction`
+    section (injected when window>0 AND compress). Measures the lift from telling
+    the model its history folds into a trustworthy stats deck, vs the pre-prompt
+    baseline (Win3kCompress = 62.7%)."""
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
-            model_type="gpt-5.4",
+            model_type="gpt-5.2",
             context_mode="delta",
             max_steps=25,
-            flow_level=1,
-            data_level=1,
-            max_loaders_per_source=2,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
             attempt_reflection=True,
-            truncate_oldest=True,
-            context_budget_tokens=8000,
+            context_window_tokens=3000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54DeltaSchemaConvergeTrunc8k",
+            name="DataflowSystemGPT52DeltaWin3kCompressPromptAware",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Lean-deck iteration (gpt-5.2). Same config as the Win{3k,6k}Compress SUTs, but
+# run AFTER the deck was made lean (DECK_STATS_MAX_COLS=12, DECK_MAX_ROWS=5 in
+# context-utils.ts) so the compress deck stays smaller than the raw trajectory on
+# wide tables. Compared against the recorded heavy-deck compress numbers and the
+# sliding baselines to test whether a lean deck recovers compress at 6k.
+# ---------------------------------------------------------------------------
+
+
+class DataflowSystemGPT52DeltaWin3kCompressLean(DataflowSystem):
+    """gpt-5.2 DELTA, 3k window, compress with the LEAN deck (capped stats cols +
+    fewer rows). Re-run of Win3kCompress under the leaner deck rendering."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
+            attempt_reflection=True,
+            context_window_tokens=3000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52DeltaWin3kCompressLean",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52DeltaWin6kCompressLean(DataflowSystem):
+    """gpt-5.2 DELTA, 6k window, compress with the LEAN deck. The key iteration:
+    at 6k the heavy deck lost to sliding (59.1% vs 60.5%) because wide-table stats
+    ballooned the deck; this tests whether the lean deck recovers compress at 6k."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
+            attempt_reflection=True,
+            context_window_tokens=6000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT52DeltaWin6kCompressLean",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ---------------------------------------------------------------------------
+# gpt-5-mini cross-model replication of the compaction sweep (same config as the
+# gpt-5.2 sweep, model_type="gpt-5-mini") — checks whether "compress wins at the
+# tight window" generalizes across models.
+# ---------------------------------------------------------------------------
+
+
+class DataflowSystemGPT5MiniDeltaWin3kCompress(DataflowSystem):
+    """gpt-5-mini DELTA, 3k window, compress compaction (cross-model replication)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
+            attempt_reflection=True,
+            context_window_tokens=3000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniDeltaWin3kCompress",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniDeltaWin3kSliding(DataflowSystem):
+    """gpt-5-mini DELTA, 3k window, sliding compaction (cross-model comparator)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
+            attempt_reflection=True,
+            context_window_tokens=3000,
+            compaction_strategy="sliding",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniDeltaWin3kSliding",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniDeltaWin6kCompress(DataflowSystem):
+    """gpt-5-mini DELTA, 6k window, compress compaction (cross-model replication)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
+            attempt_reflection=True,
+            context_window_tokens=6000,
+            compaction_strategy="compress",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniDeltaWin6kCompress",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniDeltaWin6kSliding(DataflowSystem):
+    """gpt-5-mini DELTA, 6k window, sliding compaction (cross-model comparator)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=0,
+            data_level=0,
+            column_stats=True,
+            data_hints=True,
+            attempt_reflection=True,
+            context_window_tokens=6000,
+            compaction_strategy="sliding",
+            deck_sample_ratio=0.10,
+            max_result_rows=8,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemGPT5MiniDeltaWin6kSliding",
             verbose=verbose,
             *args,
             **kwargs,
@@ -979,7 +1325,6 @@ class DataflowSystemGPT54LatestSchemaConvergeErrorReflect(DataflowSystem):
             max_steps=25,
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             error_reflection=True,
             error_reflection_threshold=2,
@@ -1006,7 +1351,6 @@ class DataflowSystemGPT54LatestSchemaConvergeReinject(DataflowSystem):
             max_steps=25,
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             error_reflection=True,
             error_reflection_threshold=2,
@@ -1035,7 +1379,6 @@ class DataflowSystemGPT54LatestSchemaConvergeAgentTurns(DataflowSystem):
             max_steps=25,
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             agent_turns=True,
             max_operator_result_char_limit=1000,
@@ -1057,7 +1400,6 @@ class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
             context_mode="latest",
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -1078,7 +1420,6 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct(DataflowSystem):
             context_mode="latest",
             flow_level=1,
             data_level=2,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -1098,7 +1439,6 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeFewShot(DataflowSystem):
             context_mode="latest",
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             few_shot_prompt=True,
             max_operator_result_char_limit=1000,
@@ -1119,7 +1459,6 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeCap20(DataflowSystem):
             context_mode="latest",
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_steps=20,
             max_operator_result_char_limit=1000,
@@ -1141,7 +1480,6 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeLevels(DataflowSystem):
             context_mode="latest",
             flow_level=2,
             data_level=2,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             max_operator_result_char_limit=1000,
             max_operator_result_cell_char_limit=3000,
@@ -1165,7 +1503,6 @@ class DataflowSystemGPT5MiniLatestSchemaConvergeThoughtReplay(DataflowSystem):
             context_mode="latest",
             flow_level=1,
             data_level=1,
-            max_loaders_per_source=2,
             attempt_reflection=True,
             thought_replay=True,
             thought_replay_k=10,
@@ -2112,3 +2449,99 @@ class DataflowSystemLocalLlmReactText4(_LocalLlmReactTextVariant):
 
 class DataflowSystemLocalLlmReactText5(_LocalLlmReactTextVariant):
     _NAME = "DataflowSystemLocalLlmReactText5"
+
+
+# ---------------------------------------------------------------------------
+# gpt-5.2 latest-vs-delta × 2k-vs-5k result-char-limit sweep, column stats ON.
+# Held constant across all four: model gpt-5.2, flow_level=1 (loader remediation),
+# data_level=1 (Schema line), column_stats=True (the per-column stats block),
+# max_steps=25, attempt_reflection, cell char limit 3000, NO compact tool. The
+# ONLY variables are context_mode (latest|delta) and max_operator_result_char_limit
+# (2000|5000) — a clean 2×2 for the cost/accuracy comparison.
+# ---------------------------------------------------------------------------
+class _GPT52StatsSweep(DataflowSystem):
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 2000
+    _NAME = "_GPT52StatsSweep"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestStats2k(_GPT52StatsSweep):
+    """gpt-5.2, LATEST, column stats ON, 2k result char limit."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 2000
+    _NAME = "DataflowSystemGPT52LatestStats2k"
+
+
+class DataflowSystemGPT52LatestStats5k(_GPT52StatsSweep):
+    """gpt-5.2, LATEST, column stats ON, 5k result char limit."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52LatestStats5k"
+
+
+class DataflowSystemGPT52DeltaStats2k(_GPT52StatsSweep):
+    """gpt-5.2, DELTA, column stats ON, 2k result char limit."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 2000
+    _NAME = "DataflowSystemGPT52DeltaStats2k"
+
+
+class DataflowSystemGPT52DeltaStats5k(_GPT52StatsSweep):
+    """gpt-5.2, DELTA, column stats ON, 5k result char limit."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52DeltaStats5k"
+
+
+# Schema-only twins of the 5k stats arms: column stats OFF, only the Schema line
+# (output column names + types, data_level=1) kept. Isolates "just the schema" vs
+# "schema + full per-column stats" at the 5k operating point, for latest & delta.
+class _GPT52SchemaOnly5k(DataflowSystem):
+    _CONTEXT_MODE = "latest"
+    _NAME = "_GPT52SchemaOnly5k"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=1,          # Schema line only
+            column_stats=False,    # stats block OFF
+            attempt_reflection=True,
+            max_operator_result_char_limit=5000,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnly5k):
+    """gpt-5.2, LATEST, 5k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "latest"
+    _NAME = "DataflowSystemGPT52Latest5kSchemaOnly"
+
+
+class DataflowSystemGPT52Delta5kSchemaOnly(_GPT52SchemaOnly5k):
+    """gpt-5.2, DELTA, 5k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "delta"
+    _NAME = "DataflowSystemGPT52Delta5kSchemaOnly"
