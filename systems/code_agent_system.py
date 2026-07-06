@@ -29,6 +29,7 @@ class CodeAgentSystem(System):
         verbose: bool = False,
         name: str = "CodeAgentSystem",
         use_fine_grained_prompt: bool = None,
+        use_custom_prompt: bool = None,
         no_action_detail: bool = False,
         max_print_outputs_length: int = None,
         *args, **kwargs
@@ -39,6 +40,7 @@ class CodeAgentSystem(System):
         self.api_base = api_base
         self.api_key = api_key
         self.use_fine_grained_prompt = use_fine_grained_prompt
+        self.use_custom_prompt = use_custom_prompt
         self.no_action_detail = no_action_detail
         # Per-instance stdout-preview cap (the code agent's analog of the dataflow
         # agent's max_operator_result_char_limit). None ⇒ fall back to the
@@ -72,6 +74,7 @@ class CodeAgentSystem(System):
             api_key=self.api_key,
             verbosity_level=2 if self.verbose else 1,
             use_fine_grained_prompt=self.use_fine_grained_prompt,
+            use_custom_prompt=self.use_custom_prompt,
             no_action_detail=self.no_action_detail,
             max_print_outputs_length=self.max_print_outputs_length,
         )
@@ -272,6 +275,27 @@ class CodeAgentSystemGpt52Chars5k(CodeAgentSystem):
         super().__init__(
             model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars5k",
             max_print_outputs_length=5000, verbose=verbose, *args, **kwargs,
+        )
+
+
+class CodeAgentSystemGpt52Chars2kGuided(CodeAgentSystem):
+    """Chars2k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active; prompt-parity
+    twin of the dataflow agent's always-on code-mode principles)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars2kGuided",
+            max_print_outputs_length=2000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
+        )
+
+
+class CodeAgentSystemGpt52Chars5kGuided(CodeAgentSystem):
+    """Chars5k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars5kGuided",
+            max_print_outputs_length=5000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
         )
 
 

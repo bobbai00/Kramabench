@@ -274,6 +274,7 @@ class CodeAgentWrapper:
         authorized_imports: list[str] = None,
         verbosity_level: int = 1,
         use_fine_grained_prompt: bool = None,
+        use_custom_prompt: bool = None,
         max_print_outputs_length: int = None,
         no_action_detail: bool = False,
     ):
@@ -285,6 +286,8 @@ class CodeAgentWrapper:
         self.verbosity_level = verbosity_level
         # If not explicitly set, fall back to environment variable
         self.use_fine_grained_prompt = use_fine_grained_prompt if use_fine_grained_prompt is not None else FINE_GRAINED_PROMPT_ENABLED
+        # If not explicitly set, fall back to environment variable
+        self.use_custom_prompt = use_custom_prompt if use_custom_prompt is not None else CUSTOMIZED_PROMPT_ENABLED
         # If not explicitly set, fall back to environment variable (None = no limit)
         self.max_print_outputs_length = max_print_outputs_length if max_print_outputs_length is not None else DEFAULT_MAX_PRINT_OUTPUTS_LENGTH
         self.no_action_detail = no_action_detail
@@ -325,7 +328,7 @@ class CodeAgentWrapper:
         # Add custom instructions if enabled
         if self.use_fine_grained_prompt:
             agent_kwargs["instructions"] = FINE_GRAINED_INSTRUCTIONS
-        elif CUSTOMIZED_PROMPT_ENABLED:
+        elif self.use_custom_prompt:
             agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
 
         agent_cls = NoActionDetailCodeAgent if self.no_action_detail else CodeAgent
@@ -437,7 +440,7 @@ class CodeAgentWrapper:
             # Add custom instructions if enabled
             if self.use_fine_grained_prompt:
                 agent_kwargs["instructions"] = FINE_GRAINED_INSTRUCTIONS
-            elif CUSTOMIZED_PROMPT_ENABLED:
+            elif self.use_custom_prompt:
                 agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
 
             agent_cls = NoActionDetailCodeAgent if self.no_action_detail else CodeAgent
