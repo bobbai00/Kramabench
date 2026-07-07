@@ -56,6 +56,7 @@ class DataflowSystem(System):
         thought_replay_k: int = 10,
         agent_turns: bool = False,
         context_window_tokens: int = 0,
+        static_compaction: bool = False,
         compaction_strategy: str = "compress",
         deck_sample_ratio: float = 0.10,
         error_reflection: bool = False,
@@ -155,6 +156,7 @@ class DataflowSystem(System):
         self.thought_replay_k = thought_replay_k
         self.agent_turns = agent_turns
         self.context_window_tokens = context_window_tokens
+        self.static_compaction = static_compaction
         self.compaction_strategy = compaction_strategy
         self.deck_sample_ratio = deck_sample_ratio
         self.error_reflection = error_reflection
@@ -295,6 +297,7 @@ class DataflowSystem(System):
             thought_replay_k=self.thought_replay_k,
             agent_turns=self.agent_turns,
             context_window_tokens=self.context_window_tokens,
+            static_compaction=self.static_compaction,
             compaction_strategy=self.compaction_strategy,
             deck_sample_ratio=self.deck_sample_ratio,
             error_reflection=self.error_reflection,
@@ -425,6 +428,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "thought_replay_k": self.thought_replay_k,
                 "agent_turns": self.agent_turns,
                 "context_window_tokens": self.context_window_tokens,
+                "static_compaction": self.static_compaction,
                 "compaction_strategy": self.compaction_strategy,
                 "deck_sample_ratio": self.deck_sample_ratio,
                 "error_reflection": self.error_reflection,
@@ -2545,3 +2549,77 @@ class DataflowSystemGPT52Delta5kSchemaOnly(_GPT52SchemaOnly5k):
     """gpt-5.2, DELTA, 5k, schema line ON, column stats OFF."""
     _CONTEXT_MODE = "delta"
     _NAME = "DataflowSystemGPT52Delta5kSchemaOnly"
+
+
+# ---------------------------------------------------------------------------
+# data_level=2 + result-char sweep (gpt-5.2). Same recipe as _GPT52StatsSweep
+# (column_stats ON, flow_level=1, max_steps=25, attempt_reflection) but with
+# data_level=2 — the `Output Table profile:` block (all-null rows/cols by name,
+# duplicate-row count, unnamed-header count) ON. Two result-char points: 5k
+# (recovery test vs the data_level=1 5k arms) and 10k (full runs). Optional
+# static_compaction demonstrates the DELTA-only auto-fold flag in isolation.
+# ---------------------------------------------------------------------------
+class _GPT52SweepD2(DataflowSystem):
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
+    _STATIC_COMPACTION = False
+    _NAME = "_GPT52SweepD2"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            static_compaction=self._STATIC_COMPACTION,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestStats5kD2(_GPT52SweepD2):
+    """gpt-5.2, LATEST, 5k, column stats ON + data_level=2 (Output Table profile)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52LatestStats5kD2"
+
+
+class DataflowSystemGPT52DeltaStats5kD2(_GPT52SweepD2):
+    """gpt-5.2, DELTA, 5k, column stats ON + data_level=2 (Output Table profile)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52DeltaStats5kD2"
+
+
+class DataflowSystemGPT52LatestStats10kD2(_GPT52SweepD2):
+    """gpt-5.2, LATEST, 10k result chars, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 10000
+    _NAME = "DataflowSystemGPT52LatestStats10kD2"
+
+
+class DataflowSystemGPT52DeltaStats10kD2(_GPT52SweepD2):
+    """gpt-5.2, DELTA, 10k result chars, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 10000
+    _NAME = "DataflowSystemGPT52DeltaStats10kD2"
+
+
+# Static-compaction demonstrator: byte-identical to DataflowSystemGPT52DeltaStats5k
+# (DELTA, 5k, column_stats ON, flow_level=1, data_level=1) EXCEPT static_compaction
+# is ON — so the accuracy/cost delta vs that baseline isolates the compaction flag.
+class DataflowSystemGPT52DeltaStats5kCompact(_GPT52StatsSweep):
+    """gpt-5.2, DELTA, 5k, column stats ON, data_level=1 + static compaction ON."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52DeltaStats5kCompact"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, static_compaction=True, *args, **kwargs)

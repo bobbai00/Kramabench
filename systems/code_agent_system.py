@@ -299,6 +299,16 @@ class CodeAgentSystemGpt52Chars5kGuided(CodeAgentSystem):
         )
 
 
+class CodeAgentSystemGpt52Chars10kGuided(CodeAgentSystem):
+    """Chars10k + CUSTOM_INSTRUCTIONS ON (10k stdout-preview cap, data-pitfalls guidance)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars10kGuided",
+            max_print_outputs_length=10000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
+        )
+
+
 class CodeAgentSystemGpt52FineGrained(CodeAgentSystem):
     """CodeAgentSystem using GPT-5.2 model with fine-grained (one-line-per-action) prompt."""
 

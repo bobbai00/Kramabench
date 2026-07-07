@@ -33,6 +33,11 @@ from .dataflow_system import (
     DataflowSystemGPT52DeltaStats5k,
     DataflowSystemGPT52Latest5kSchemaOnly,
     DataflowSystemGPT52Delta5kSchemaOnly,
+    DataflowSystemGPT52LatestStats5kD2,
+    DataflowSystemGPT52DeltaStats5kD2,
+    DataflowSystemGPT52LatestStats10kD2,
+    DataflowSystemGPT52DeltaStats10kD2,
+    DataflowSystemGPT52DeltaStats5kCompact,
     # parallel-tool-calls ablation (parallel OFF, window OFF, else identical)
     DataflowSystemGPT52DeltaColumnStatsDataHintsNoParallel,
     DataflowSystemGPT54DeltaSchemaConverge,
@@ -122,6 +127,6 @@ from .dataflow_system import (
     DataflowSystemLocalLlmReactText4,
     DataflowSystemLocalLlmReactText5,
 )
-from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52Chars2kGuided, CodeAgentSystemGpt52Chars5kGuided, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt54Proxy
+from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52Chars2kGuided, CodeAgentSystemGpt52Chars5kGuided, CodeAgentSystemGpt52Chars10kGuided, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt54Proxy
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem
 from .dataflow_agent_session import DataflowAgentSessionRunner, DataflowAgentSessionSystem

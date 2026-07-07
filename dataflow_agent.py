@@ -108,27 +108,25 @@ class AgentSettings:
     thought_replay: bool = False
     thought_replay_k: int = 10
     agent_turns: bool = False
-    collapse_superseded: bool = False
-    # DELTA context-budget watermark (tokens; est. chars/4). With
-    # collapse_superseded on, lossless delta is sent untouched while it fits this
-    # cap; superseded results are blanked oldest-first only once delta exceeds it.
-    # 0 = no cap (collapse_superseded alone = unconditional collapse).
-    context_budget_tokens: int = 0
-    # DELTA naive sliding-window baseline (comparator for collapse_superseded):
-    # below context_budget_tokens = lossless delta; above it, drop oldest whole
-    # agent events until it fits. Takes precedence over collapse when both on.
-    truncate_oldest: bool = False
+    # DELTA context-window budget (tokens; est. chars/4). 0 = unbounded (lossless
+    # delta). >0 = render "original" raw delta (schema-only) while it fits, then
+    # compact via compaction_strategy once it would overflow.
+    context_window_tokens: int = 0
+    # Static compaction rule (DELTA-only): auto-fold settled older events into the
+    # compact deck once the trajectory is long enough, keeping the last K raw.
+    static_compaction: bool = False
+    # How DELTA compacts over budget: "sliding" (drop oldest events) or "compress"
+    # (fold the prefix into a stats deck, resume raw delta). Default "compress".
+    compaction_strategy: str = "compress"
+    # compress-deck row sampling: fraction of each folded op's rows kept as a peek
+    # alongside its stats, clamped to [3, max_result_rows||20]. Default 0.10.
+    deck_sample_ratio: float = 0.10
     error_reflection: bool = False
     error_reflection_threshold: int = 3
     few_shot_prompt: bool = False
-    loader_escalation: bool = False
     flow_level: int = 0
     data_level: int = 0
     max_result_rows: int = 0
-    # Global loader-proliferation budget: max distinct loader ids per source
-    # path before a new loader for that path is rejected (plan5, lever F).
-    # 0 = disabled (no-op default).
-    max_loaders_per_source: int = 0
     # Inject an `Attempt reflection:` block on heavily-edited operators
     # (plan3, progress reflection). False = no-op default.
     attempt_reflection: bool = False
@@ -156,17 +154,16 @@ class AgentSettings:
             "thoughtReplay": self.thought_replay,
             "thoughtReplayK": self.thought_replay_k,
             "agentTurns": self.agent_turns,
-            "collapseSuperseded": self.collapse_superseded,
-            "contextBudgetTokens": self.context_budget_tokens,
-            "truncateOldest": self.truncate_oldest,
+            "contextWindowTokens": self.context_window_tokens,
+            "staticCompaction": self.static_compaction,
+            "compactionStrategy": self.compaction_strategy,
+            "deckSampleRatio": self.deck_sample_ratio,
             "errorReflection": self.error_reflection,
             "errorReflectionThreshold": self.error_reflection_threshold,
             "fewShotPrompt": self.few_shot_prompt,
-            "loaderEscalation": self.loader_escalation,
             "flowLevel": self.flow_level,
             "dataLevel": self.data_level,
             "maxResultRows": self.max_result_rows,
-            "maxLoadersPerSource": self.max_loaders_per_source,
             "attemptReflection": self.attempt_reflection,
             "columnStats": self.column_stats,
             "valueFormat": self.value_format,
@@ -794,17 +791,16 @@ class DataflowAgent:
             thought_replay: bool = False,
             thought_replay_k: int = 10,
             agent_turns: bool = False,
-            collapse_superseded: bool = False,
-            context_budget_tokens: int = 0,
-            truncate_oldest: bool = False,
+            context_window_tokens: int = 0,
+            static_compaction: bool = False,
+            compaction_strategy: str = "compress",
+            deck_sample_ratio: float = 0.10,
             error_reflection: bool = False,
             error_reflection_threshold: int = 3,
             few_shot_prompt: bool = False,
-            loader_escalation: bool = False,
             flow_level: int = 0,
             data_level: int = 0,
             max_result_rows: int = 0,
-            max_loaders_per_source: int = 0,
             attempt_reflection: bool = False,
             column_stats: bool = False,
             value_format: bool = False,
@@ -870,17 +866,16 @@ class DataflowAgent:
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
             agent_turns=agent_turns,
-            collapse_superseded=collapse_superseded,
-            context_budget_tokens=context_budget_tokens,
-            truncate_oldest=truncate_oldest,
+            context_window_tokens=context_window_tokens,
+            static_compaction=static_compaction,
+            compaction_strategy=compaction_strategy,
+            deck_sample_ratio=deck_sample_ratio,
             error_reflection=error_reflection,
             error_reflection_threshold=error_reflection_threshold,
             few_shot_prompt=few_shot_prompt,
-            loader_escalation=loader_escalation,
             flow_level=flow_level,
             data_level=data_level,
             max_result_rows=max_result_rows,
-            max_loaders_per_source=max_loaders_per_source,
             attempt_reflection=attempt_reflection,
             column_stats=column_stats,
             value_format=value_format,
