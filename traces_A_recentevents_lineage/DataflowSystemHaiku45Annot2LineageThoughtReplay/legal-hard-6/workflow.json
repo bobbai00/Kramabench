@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-15-8-1781033393906",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv', skiprows=2)\n    # The columns are: Year, Theft Type, # of Reports\n    df.columns = ['Year', 'Theft Type', '# of Reports']\n    # Remove rows with all NaN values\n    df = df.dropna(how='all')\n    # Remove rows where Year is not a valid year (contains text like \"The top...\")\n    df = df[pd.to_numeric(df['Year'], errors='coerce').notna()]\n    df['Year'] = pd.to_numeric(df['Year'])\n    df['# of Reports'] = df['# of Reports'].str.replace(',', '').astype(int)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and clean identity theft reports by year from CSV. Rename columns to Year, Theft Type, # of Reports. Remove metadata rows and convert Year/Reports to numeric types.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "credit_card_fraud_ratio",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data\n    cc_df = df[df['Theft Type'] == 'Credit Card']\n    \n    reports_2024 = cc_df[cc_df['Year'] == 2024]['# of Reports'].values[0]\n    reports_2020 = cc_df[cc_df['Year'] == 2020]['# of Reports'].values[0]\n    \n    ratio = reports_2024 / reports_2020\n    ratio_rounded = round(ratio, 4)\n    \n    return pd.DataFrame({'Year_2024_Reports': [reports_2024], 'Year_2020_Reports': [reports_2020], 'Ratio_2024_to_2020': [ratio_rounded]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract credit card fraud reports for 2024 and 2020, calculate ratio (2024/2020) rounded to 4 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 40
+      },
+      "credit_card_fraud_ratio": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->credit_card_fraud_ratio",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "credit_card_fraud_ratio",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

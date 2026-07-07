@@ -1,0 +1,223 @@
+{
+  "headId": "step-agent-100-20-1781149926868",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "new_england_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/new_england_states.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load new_england_states.csv to identify the states in New England.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identity_theft_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\nimport glob, os\n\ndef load() -> pd.DataFrame:\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, encoding='latin-1')\n        df['source_file'] = os.path.basename(f)\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv', concatenate them, and add source_file column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "new_england_identity_theft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(identity_theft_raw, new_england_states) -> pd.DataFrame:\n    from glob import glob\n    \n    ne_states = set(new_england_states['Name'].tolist())\n    \n    # Map state names to file patterns\n    all_files = glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    \n    results = []\n    for fpath in all_files:\n        fname = fpath.split('/')[-1].replace('.csv', '')\n        if fname not in ne_states:\n            continue\n        \n        # Read the raw file\n        df = pd.read_csv(fpath, header=None, encoding='latin-1')\n        \n        # Find header row index\n        for i, row in df.iterrows():\n            vals = [str(v).strip() for v in row.values]\n            if 'Metropolitan Area' in vals or any('Metropolitan Area' in str(v) for v in vals):\n                header_row = i\n                break\n        else:\n            continue\n        \n        # Data rows are after header\n        for i in range(header_row + 1, len(df)):\n            row = df.iloc[i]\n            name_val = str(row.iloc[0]).strip()\n            count_val = str(row.iloc[1]).strip() if len(row) > 1 else ''\n            \n            # Skip empty, NaN, or footer rows\n            if not name_val or name_val.lower() in ('nan', '') or name_val.startswith('Source:'):\n                continue\n            if 'Statistical Area' not in name_val and 'Division' not in name_val:\n                continue\n            \n            # Parse count\n            try:\n                count = int(str(count_val).replace(',', '').strip())\n            except:\n                continue\n            \n            results.append({'metro_area': name_val, 'reports': count, 'state': fname})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse New England state CSV files directly using glob. Reads each CSV file for New England states (Connecticut, Maine, Massachusetts, New Hampshire, Rhode Island, Vermont), extracts metro area rows and their report counts directly from the raw file content.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_missing_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob, os\n    results = []\n    for state in ['New Hampshire', 'Rhode Island']:\n        pattern = f\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/{state}.csv\"\n        files = glob.glob(pattern)\n        results.append({'state': state, 'files_found': str(files)})\n        for f in files:\n            with open(f, 'r', encoding='latin-1') as fh:\n                content = fh.read()\n            results.append({'state': state, 'files_found': f'CONTENT: {repr(content[:500])}'})\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug operator to check if New Hampshire and Rhode Island CSV files exist and show their raw content.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "debug_all_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    return pd.DataFrame({'filename': sorted(files)})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug: List all CSV files available in the State MSA Identity Theft data folder.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "top5_new_england_msa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(new_england_identity_theft) -> pd.DataFrame:\n    df = new_england_identity_theft.copy()\n    # Drop duplicates by metro_area (same MSA may appear in multiple state files)\n    df_unique = df.drop_duplicates(subset=['metro_area'])\n    # Sort by reports descending and get top 5\n    top5 = df_unique.nlargest(5, 'reports')[['metro_area', 'reports']].reset_index(drop=True)\n    return top5\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Get top 5 distinct Metropolitan Statistical Areas in New England by number of Identity Theft reports in 2024. Deduplicates by metro_area name first, then sorts by reports descending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "new_england_states": {
+        "x": 100,
+        "y": 220
+      },
+      "identity_theft_raw": {
+        "x": 100,
+        "y": 40
+      },
+      "new_england_identity_theft": {
+        "x": 380,
+        "y": 130
+      },
+      "debug_missing_states": {
+        "x": 100,
+        "y": 400
+      },
+      "debug_all_files": {
+        "x": 100,
+        "y": 580
+      },
+      "top5_new_england_msa": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "identity_theft_raw-->new_england_identity_theft",
+        "source": {
+          "operatorID": "identity_theft_raw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "new_england_identity_theft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "new_england_states-->new_england_identity_theft",
+        "source": {
+          "operatorID": "new_england_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "new_england_identity_theft",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "new_england_identity_theft-->top5_new_england_msa",
+        "source": {
+          "operatorID": "new_england_identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top5_new_england_msa",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

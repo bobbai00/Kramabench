@@ -1,0 +1,306 @@
+{
+  "headId": "step-agent-229-6-1781039723506",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "ej_populations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/environmental-justice-populations.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load environmental justice populations data from data/environment/input/environmental-justice-populations.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "water_testing",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2023.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water body testing 2023 data from data/environment/input/water-body-testing-2023.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marine_samples_2023",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(water_testing) -> pd.DataFrame:\n    df = water_testing[(water_testing['Beach Type Description'] == 'Marine') & \n                        (water_testing['Year'] == 2023)].copy()\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water testing data for marine beach samples collected in 2023",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "ej_high_low",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(ej_populations) -> pd.DataFrame:\n    df = ej_populations[['Municipality', 'Percent of population in EJ BGs']].copy()\n    df.rename(columns={'Municipality': 'Community'}, inplace=True)\n    df['EJ_category'] = df['Percent of population in EJ BGs'].apply(\n        lambda x: 'high' if x > 50 else ('low' if x < 25 else 'mid')\n    )\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Categorize communities by EJ population percentage: high (>50%), low (<25%), mid (25-50%)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "marine_with_ej",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(marine_samples_2023, ej_high_low) -> pd.DataFrame:\n    merged = marine_samples_2023.merge(ej_high_low, on='Community', how='left')\n    return merged\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join marine beach samples with EJ categorization by Community",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "exceedance_by_category",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(marine_with_ej) -> pd.DataFrame:\n    # Filter for high (>50%) and low (<25%) EJ categories only\n    filtered = marine_with_ej[marine_with_ej['EJ_category'].isin(['high', 'low'])].copy()\n    \n    # Calculate exceedance rate by EJ category\n    # Exceedance = Violation == 'Yes'\n    result = filtered.groupby('EJ_category').agg(\n        total_samples=('Violation', 'count'),\n        exceedances=('Violation', lambda x: (x == 'Yes').sum())\n    ).reset_index()\n    \n    result['exceedance_rate'] = (result['exceedances'] / result['total_samples'] * 100).round(2)\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate bacterial exceedance rate (Violation='Yes') by EJ category (high vs low)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "rate_difference",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(exceedance_by_category) -> pd.DataFrame:\n    high_rate = exceedance_by_category[exceedance_by_category['EJ_category'] == 'high']['exceedance_rate'].values[0]\n    low_rate = exceedance_by_category[exceedance_by_category['EJ_category'] == 'low']['exceedance_rate'].values[0]\n    \n    difference = high_rate - low_rate\n    \n    return pd.DataFrame({\n        'EJ_category_high': ['high'],\n        'exceedance_rate_high': [high_rate],\n        'EJ_category_low': ['low'],\n        'exceedance_rate_low': [low_rate],\n        'difference': [round(difference, 2)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the difference in exceedance rates between high (>50%) and low (<25%) EJ communities",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "ej_populations": {
+        "x": 100,
+        "y": 220
+      },
+      "water_testing": {
+        "x": 100,
+        "y": 40
+      },
+      "marine_samples_2023": {
+        "x": 380,
+        "y": 40
+      },
+      "ej_high_low": {
+        "x": 380,
+        "y": 220
+      },
+      "marine_with_ej": {
+        "x": 660,
+        "y": 130
+      },
+      "exceedance_by_category": {
+        "x": 940,
+        "y": 130
+      },
+      "rate_difference": {
+        "x": 1220,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "water_testing-->marine_samples_2023",
+        "source": {
+          "operatorID": "water_testing",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marine_samples_2023",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "ej_populations-->ej_high_low",
+        "source": {
+          "operatorID": "ej_populations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "ej_high_low",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "marine_samples_2023-->marine_with_ej",
+        "source": {
+          "operatorID": "marine_samples_2023",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marine_with_ej",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "ej_high_low-->marine_with_ej",
+        "source": {
+          "operatorID": "ej_high_low",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marine_with_ej",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "marine_with_ej-->exceedance_by_category",
+        "source": {
+          "operatorID": "marine_with_ej",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_by_category",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "exceedance_by_category-->rate_difference",
+        "source": {
+          "operatorID": "exceedance_by_category",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "rate_difference",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,226 @@
+{
+  "headId": "step-agent-48-7-1781073153837",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "categories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv', encoding='cp1252')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSV file data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv with encoding cp1252 (Windows-1252) to avoid UnicodeDecodeError.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "reports_by_age",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSV file data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Age.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "report_count",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSV file data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "age_parsed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(reports_by_age):\n    col0 = reports_by_age.columns[0]\n    col1 = reports_by_age.columns[1]\n    df = reports_by_age\n    df = df[df[col0].notna() | df[col1].notna()]\n    # find header row and take rows after it\n    header_idx = df.index[df[col0].astype(str).str.contains('Age Range', na=False)]\n    if len(header_idx):\n        df = df.loc[header_idx[0]+1:]\n    df = df[[col0, col1]]\n    df = df.rename(columns={col0: 'age_range', col1: 'count'})\n    # keep rows that look like age rows: age_range contains a digit and count contains a digit\n    mask = df['age_range'].astype(str).str.contains(r\"\\d\", na=False) & df['count'].astype(str).str.contains(r\"\\d\", na=False)\n    df = df[mask]\n    # parse counts\n    df['count'] = df['count'].astype(str).str.replace(',', '')\n    df['count'] = pd.to_numeric(df['count'].str.extract(r\"(\\d+)\")[0], errors='coerce').fillna(0).astype(int)\n    df = df.reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract age-range rows and numeric counts from 2024_CSN_Identity_Theft_Reports_by_Age.csv; output columns: age_range (str), count (int). Drops footers and non-age rows.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "report_count_parsed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(report_count):\n    cols = report_count.columns\n    year_col = cols[0]\n    count_col = cols[1]\n    df = report_count[[year_col, count_col]].dropna(how='all')\n    df = df[~df[year_col].astype(str).str.contains('Source', na=False)]\n    df = df[df[year_col].astype(str).str.match(r\"^\\s*\\d{4}\\s*$\")]\n    df['year'] = df[year_col].astype(int)\n    df['count'] = df[count_col].astype(str).str.replace(',', '').astype(int)\n    return df[['year','count']\n    ]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse 2024_CSN_Report_Count.csv into numeric columns: 'year' (int) and 'count' (int). Drops non-year footer rows and removes commas from counts. Uses input file data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "proportion_40plus",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(age_parsed):\n    bins = ['40 - 49','50 - 59','60 - 69','70 - 79','80 and Over']\n    mask = age_parsed['age_range'].isin(bins)\n    total_40_plus = int(age_parsed.loc[mask, 'count'].sum())\n    total_with_age = int(age_parsed['count'].sum())\n    proportion = total_40_plus / total_with_age if total_with_age else 0\n    return pd.DataFrame({'total_40_plus':[total_40_plus], 'total_with_age':[total_with_age], 'proportion':[proportion]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute number and proportion of 2024 identity-theft reports that are ages 40 or older. Inputs: age_parsed (age_range, count). Outputs: total_40_plus, total_with_age, proportion.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "categories": {
+        "x": 100,
+        "y": 40
+      },
+      "reports_by_age": {
+        "x": 100,
+        "y": 220
+      },
+      "report_count": {
+        "x": 100,
+        "y": 400
+      },
+      "age_parsed": {
+        "x": 380,
+        "y": 220
+      },
+      "report_count_parsed": {
+        "x": 380,
+        "y": 400
+      },
+      "proportion_40plus": {
+        "x": 660,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "reports_by_age-->age_parsed",
+        "source": {
+          "operatorID": "reports_by_age",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "age_parsed",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "report_count-->report_count_parsed",
+        "source": {
+          "operatorID": "report_count",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "report_count_parsed",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "age_parsed-->proportion_40plus",
+        "source": {
+          "operatorID": "age_parsed",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "proportion_40plus",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

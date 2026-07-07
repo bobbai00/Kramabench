@@ -1,0 +1,406 @@
+{
+  "headId": "step-agent-243-11-1781040465208",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/constitution_beach_datasheet.csv', skiprows=9)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Constitution Beach data from constitution_beach_datasheet.csv, skipping the first 9 rows to get proper headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/environment/input/constitution_beach_datasheet.csv', 'r') as f:\n        lines = [f.readline() for _ in range(15)]\n    return pd.DataFrame({'raw_lines': lines})"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Read first 15 raw lines from constitution_beach_datasheet.csv to understand file structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_data_corrected",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/constitution_beach_datasheet.csv', skiprows=2)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Constitution Beach data from constitution_beach_datasheet.csv, skipping the first 2 rows (title and location header) to get the proper column headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_data_corrected) -> pd.DataFrame:\n    df = load_data_corrected.copy()\n    \n    # Parse date column\n    df['Date'] = pd.to_datetime(df['Date'], format='%B %d, %Y', errors='coerce')\n    \n    # Extract year\n    df['Year'] = df['Date'].dt.year\n    \n    # Handle Enterococcus values - convert to numeric, treating '<' prefixed values\n    # The Tag columns contain '<' which means \"less than\", the actual value is in Enterococcus\n    def parse_enterococcus(val):\n        if pd.isna(val):\n            return pd.NA\n        try:\n            return float(val)\n        except:\n            return pd.NA\n    \n    df['North_Enterococcus'] = df['Enterococcus'].apply(parse_enterococcus)\n    df['Middle_Enterococcus'] = df['Enterococcus.1'].apply(parse_enterococcus)\n    df['South_Enterococcus'] = df['Enterococcus.2'].apply(parse_enterococcus)\n    \n    # Keep only needed columns\n    return df[['Date', 'Year', 'North_Enterococcus', 'Middle_Enterococcus', 'South_Enterococcus']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse dates and extract Enterococcus values for the three sampling points (North, Middle, South)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "convert_values",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_data) -> pd.DataFrame:\n    df = parse_data.copy()\n    \n    def parse_enterococcus(val):\n        if pd.isna(val):\n            return None\n        val = str(val).strip()\n        if val == '<' or val == '':\n            return None\n        try:\n            return float(val)\n        except:\n            return None\n    \n    df['North_Value'] = df['North_Enterococcus'].apply(parse_enterococcus)\n    df['Middle_Value'] = df['Middle_Enterococcus'].apply(parse_enterococcus)\n    df['South_Value'] = df['South_Enterococcus'].apply(parse_enterococcus)\n    \n    return df[['Date', 'Year', 'North_Value', 'Middle_Value', 'South_Value']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert Enterococcus string values to numeric, treating '<' and missing values as None",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(convert_values):\n    return convert_values[convert_values['Year'] == 2024].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter data to only 2024 records",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_standard",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_2024):\n    df = filter_2024.copy()\n    \n    # Standard: fewer than 104 counts per 100ml\n    # A point meets standard if value < 104 (or is NaN - missing data doesn't fail the standard)\n    df['North_Meets'] = (df['North_Value'] < 104)\n    df['Middle_Meets'] = (df['Middle_Value'] < 104)\n    df['South_Meets'] = (df['South_Value'] < 104)\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Determine if each sampling point meets the standard (value < 104)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "count_meeting_points",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(check_standard):\n    df = check_standard.copy()\n    \n    # Count how many points meet the standard for each day\n    # Only count non-null values\n    df['Points_Meeting_Standard'] = (\n        df['North_Meets'].astype(int) + \n        df['Middle_Meets'].astype(int) + \n        df['South_Meets'].astype(int)\n    )\n    \n    # Count how many points have data (non-null values)\n    df['Points_With_Data'] = (\n        df['North_Value'].notna().astype(int) +\n        df['Middle_Value'].notna().astype(int) +\n        df['South_Value'].notna().astype(int)\n    )\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count sampling points that meet standard and points with data for each day",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_mixed_days",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(count_meeting_points):\n    df = count_meeting_points.copy()\n    \n    # A day has \"one meets while another doesn't\" if:\n    # - At least 2 points have data\n    # - At least 1 point meets standard (value < 104)\n    # - At least 1 point doesn't meet standard (value >= 104)\n    \n    # Filter for days where we have at least 2 sampling points with data\n    df_with_data = df[df['Points_With_Data'] >= 2].copy()\n    \n    # A day meets our criteria if:\n    # - Some points meet the standard AND\n    # - Some points don't meet the standard\n    # This means: 0 < Points_Meeting_Standard < Points_With_Data\n    \n    mixed_days = df_with_data[\n        (df_with_data['Points_Meeting_Standard'] > 0) & \n        (df_with_data['Points_Meeting_Standard'] < df_with_data['Points_With_Data'])\n    ]\n    \n    return mixed_days\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find days where one sampling point meets standard while another does not (at least 2 points with data, some meet, some don't)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_count",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(find_mixed_days):\n    return pd.DataFrame({'count': [len(find_mixed_days)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count total number of days with mixed standards",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_data": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_raw": {
+        "x": 100,
+        "y": 220
+      },
+      "load_data_corrected": {
+        "x": 100,
+        "y": 400
+      },
+      "parse_data": {
+        "x": 380,
+        "y": 400
+      },
+      "convert_values": {
+        "x": 660,
+        "y": 400
+      },
+      "filter_2024": {
+        "x": 940,
+        "y": 400
+      },
+      "check_standard": {
+        "x": 1220,
+        "y": 400
+      },
+      "count_meeting_points": {
+        "x": 1500,
+        "y": 400
+      },
+      "find_mixed_days": {
+        "x": 1780,
+        "y": 400
+      },
+      "final_count": {
+        "x": 2060,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_data_corrected-->parse_data",
+        "source": {
+          "operatorID": "load_data_corrected",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_data-->convert_values",
+        "source": {
+          "operatorID": "parse_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "convert_values",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "convert_values-->filter_2024",
+        "source": {
+          "operatorID": "convert_values",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_2024-->check_standard",
+        "source": {
+          "operatorID": "filter_2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_standard",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "check_standard-->count_meeting_points",
+        "source": {
+          "operatorID": "check_standard",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_meeting_points",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "count_meeting_points-->find_mixed_days",
+        "source": {
+          "operatorID": "count_meeting_points",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_mixed_days",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "find_mixed_days-->final_count",
+        "source": {
+          "operatorID": "find_mixed_days",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_count",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

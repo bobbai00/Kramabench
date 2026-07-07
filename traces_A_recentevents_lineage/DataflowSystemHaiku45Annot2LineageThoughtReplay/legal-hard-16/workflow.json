@@ -1,0 +1,264 @@
+{
+  "headId": "step-agent-54-12-1781033895234",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_identity_theft_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = []\n    for file in sorted(files):\n        df = pd.read_csv(file, header=1)\n        df = df.dropna(how='all')\n        df.columns = ['Metropolitan Area', 'Reports']\n        df['State'] = file.split('/')[-1].replace('.csv', '')\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all State MSA Identity Theft CSV files from data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/ folder, setting header to row 1, standardizing column names to 'Metropolitan Area' and 'Reports', extracting state from filename, and concatenating all files into a single DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_identity_theft_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_identity_theft_data) -> pd.DataFrame:\n    df = load_identity_theft_data.copy()\n    \n    # Remove header row duplicates and footer notes\n    df = df[df['Metropolitan Area'] != 'Metropolitan Area']\n    df = df[~df['Metropolitan Area'].str.contains('Metropolitan Areas are defined|Source:', na=False)]\n    \n    # Remove rows with NaN Reports\n    df = df.dropna(subset=['Reports'])\n    \n    # Convert Reports to numeric\n    df['Reports'] = df['Reports'].str.replace(',', '').astype(int)\n    \n    return df.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the identity theft data by removing header/footer rows and converting Reports to numeric values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "states_with_multi_metro",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(clean_identity_theft_data) -> pd.DataFrame:\n    df = clean_identity_theft_data.copy()\n    \n    # Count number of metropolitan areas per state\n    metro_counts = df.groupby('State').size()\n    \n    # Filter to states with at least 2 metropolitan areas\n    states_with_2plus = metro_counts[metro_counts >= 2].index.tolist()\n    \n    # Filter the data to only include these states\n    result = df[df['State'].isin(states_with_2plus)]\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to states with at least 2 metropolitan areas, keeping all metropolitan areas in those states",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "metro_concentration",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(states_with_multi_metro) -> pd.DataFrame:\n    df = states_with_multi_metro.copy()\n    \n    state_totals = df.groupby('State')['Reports'].sum().reset_index()\n    state_totals.columns = ['State', 'State_Total_Reports']\n    \n    df = df.merge(state_totals, on='State')\n    df['Concentration'] = df['Reports'] / df['State_Total_Reports']\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the concentration (percentage) of identity theft reports for each metropolitan area within its state. Concentration = Metro Reports / Total State Reports.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "max_concentration_per_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metro_concentration) -> pd.DataFrame:\n    return metro_concentration.loc[metro_concentration.groupby('State')['Concentration'].idxmax()]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the metropolitan area with the highest concentration within each state",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "highest_concentration_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(max_concentration_per_state) -> pd.DataFrame:\n    result = max_concentration_per_state.loc[max_concentration_per_state['Concentration'].idxmax()]\n    return pd.DataFrame([result])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the state with the single highest metropolitan area concentration across all states",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_identity_theft_data": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_identity_theft_data": {
+        "x": 380,
+        "y": 40
+      },
+      "states_with_multi_metro": {
+        "x": 660,
+        "y": 40
+      },
+      "metro_concentration": {
+        "x": 940,
+        "y": 40
+      },
+      "max_concentration_per_state": {
+        "x": 1220,
+        "y": 40
+      },
+      "highest_concentration_state": {
+        "x": 1500,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_identity_theft_data-->clean_identity_theft_data",
+        "source": {
+          "operatorID": "load_identity_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_identity_theft_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_identity_theft_data-->states_with_multi_metro",
+        "source": {
+          "operatorID": "clean_identity_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "states_with_multi_metro",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "states_with_multi_metro-->metro_concentration",
+        "source": {
+          "operatorID": "states_with_multi_metro",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "metro_concentration",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metro_concentration-->max_concentration_per_state",
+        "source": {
+          "operatorID": "metro_concentration",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "max_concentration_per_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "max_concentration_per_state-->highest_concentration_state",
+        "source": {
+          "operatorID": "max_concentration_per_state",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "highest_concentration_state",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

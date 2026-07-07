@@ -1,0 +1,306 @@
+{
+  "headId": "step-agent-318-8-1781045856254",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "variable_desc",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='latin-1')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load variable descriptions from noaa_wildfires_variabledescrip.csv with latin-1 encoding to understand data structure and column meanings",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfires_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw NOAA wildfires data from noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "explore_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(wildfires_raw, variable_desc) -> pd.DataFrame:\n    df = wildfires_raw.copy()\n    var_desc = variable_desc.copy()\n    \n    # Check start_date format and extract month\n    print(\"Sample start_date values:\")\n    print(df['start_date'].head(10))\n    \n    # Check cause values\n    print(\"\\nUnique cause values:\")\n    print(df['cause'].unique())\n    print(\"\\nCause value counts:\")\n    print(df['cause'].value_counts(dropna=False))\n    \n    # Check region values\n    print(\"\\nRegion value counts:\")\n    print(df['region'].value_counts(dropna=False))\n    \n    # Check if start_date is parseable\n    print(\"\\nChecking start_date parsing...\")\n    df['parsed_date'] = pd.to_datetime(df['start_date'], errors='coerce')\n    print(f\"Null dates after parsing: {df['parsed_date'].isnull().sum()}\")\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Explore data structure: check start_date format, cause values, region values, and date parsing capability",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_jan_feb_mar",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(explore_data) -> pd.DataFrame:\n    df = explore_data.copy()\n    df['parsed_date'] = pd.to_datetime(df['parsed_date'])\n    df['month'] = df['parsed_date'].dt.month\n    df = df[df['month'].isin([1, 2, 3])]\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter wildfires to those starting in January, February, and March (months 1, 2, 3); extract month from parsed_date",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "known_causes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_jan_feb_mar) -> pd.DataFrame:\n    df = filter_jan_feb_mar.copy()\n    df = df[df['cause'] != 'U']\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to fires with known causes (exclude 'U' for Unknown)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cause_by_region",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(known_causes) -> pd.DataFrame:\n    df = known_causes.copy()\n    contingency = pd.crosstab(df['region'], df['cause'])\n    return contingency.reset_index()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Create contingency table: rows are regions, columns are causes (H, L, N); counts of fires",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "chi_square_test",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cause_by_region) -> pd.DataFrame:\n    from scipy.stats import chi2_contingency\n    \n    contingency_table = cause_by_region.set_index('region')[['H', 'L', 'N']].values\n    chi2, p_value, dof, expected = chi2_contingency(contingency_table)\n    \n    result = pd.DataFrame({\n        'chi_square_statistic': [chi2],\n        'p_value': [p_value]\n    })\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Perform chi-square test on the contingency table (regions vs causes H/L/N); return chi-square statistic and p-value",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "variable_desc": {
+        "x": 100,
+        "y": 220
+      },
+      "wildfires_raw": {
+        "x": 100,
+        "y": 40
+      },
+      "explore_data": {
+        "x": 380,
+        "y": 130
+      },
+      "filter_jan_feb_mar": {
+        "x": 660,
+        "y": 130
+      },
+      "known_causes": {
+        "x": 940,
+        "y": 130
+      },
+      "cause_by_region": {
+        "x": 1220,
+        "y": 130
+      },
+      "chi_square_test": {
+        "x": 1500,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "wildfires_raw-->explore_data",
+        "source": {
+          "operatorID": "wildfires_raw",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "explore_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "variable_desc-->explore_data",
+        "source": {
+          "operatorID": "variable_desc",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "explore_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "explore_data-->filter_jan_feb_mar",
+        "source": {
+          "operatorID": "explore_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_jan_feb_mar",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_jan_feb_mar-->known_causes",
+        "source": {
+          "operatorID": "filter_jan_feb_mar",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "known_causes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "known_causes-->cause_by_region",
+        "source": {
+          "operatorID": "known_causes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cause_by_region",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cause_by_region-->chi_square_test",
+        "source": {
+          "operatorID": "cause_by_region",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "chi_square_test",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

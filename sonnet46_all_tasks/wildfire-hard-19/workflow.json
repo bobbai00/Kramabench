@@ -1,0 +1,680 @@
+{
+  "headId": "step-agent-147-22-1781159324989",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_variable_descrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load variable description file: data/wildfire/input/noaa_wildfires_variabledescrip.csv with cp1252 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wildfire data: data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_weather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob, os\n    # Try multiple search strategies\n    patterns = [\n        'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv',\n        './data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv',\n        'WeatherEvents_Jan2016-Dec2022.csv',\n    ]\n    for p in patterns:\n        if os.path.exists(p):\n            return pd.read_csv(p, low_memory=False)\n    # Search recursively\n    found = glob.glob('**/WeatherEvents*.csv', recursive=True)\n    if found:\n        return pd.read_csv(found[0], low_memory=False)\n    # List directory to debug\n    dirs = []\n    for root, d, files in os.walk('.'):\n        for f in files:\n            if 'Weather' in f or 'weather' in f:\n                dirs.append(os.path.join(root, f))\n    return pd.DataFrame({'found_files': dirs})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load weather events data: data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv - tries multiple path strategies and searches recursively",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import os\n    results = []\n    for root, dirs, files in os.walk('.'):\n        for f in files:\n            full = os.path.join(root, f)\n            results.append({'path': full, 'size': os.path.getsize(full)})\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Walk the entire directory tree from '.' to find all files and their sizes.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_weather_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import os\n    results = []\n    for root, dirs, files in os.walk('.'):\n        for f in files:\n            if 'Weather' in f or 'weather' in f or 'wildfire' in f.lower():\n                full = os.path.join(root, f)\n                results.append({'path': full, 'size': os.path.getsize(full)})\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search directory tree for files containing 'Weather', 'weather', or 'wildfire' in their names.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "search_weather_in_files",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(find_files):\n    mask = find_files['path'].str.contains('Weather|weather|wildfire|WeatherEvent', case=False, na=False)\n    return find_files[mask].head(50)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter the full file list to find files containing 'Weather', 'weather', or 'wildfire' in their path names.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_wildfire_dir",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os\n    results = []\n    for root, dirs, files in os.walk('./data'):\n        for f in files:\n            full = os.path.join(root, f)\n            results.append({'path': full, 'size': os.path.getsize(full)})\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Walk the ./data directory tree to find all files and their sizes.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_wildfire_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os\n    rows = []\n    for root, dirs, files in os.walk('./data/wildfire'):\n        for f in files:\n            full = os.path.join(root, f)\n            rows.append({'path': full, 'size': os.path.getsize(full)})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Walk ./data/wildfire directory tree to find all files and sizes.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "check_cached_weather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os, glob\n    # Look for cached weather results from previous workflow runs\n    patterns = [\n        './amber/user-resources/workflow-results/operator-port-result/wid_856_eid_3582_opid_loadWeatherD*',\n        './amber/user-resources/workflow-results/operator-port-result/wid_3802_eid_24986_opid_load_weath*',\n    ]\n    rows = []\n    for p in patterns:\n        files = glob.glob(p)\n        for f in files:\n            rows.append({'path': f, 'size': os.path.getsize(f)})\n    # Also list all files in operator-port-result with 'weather' or 'Weather'\n    base = './amber/user-resources/workflow-results/operator-port-result/'\n    if os.path.exists(base):\n        for fname in os.listdir(base):\n            if 'weather' in fname.lower() or 'Weather' in fname:\n                rows.append({'path': os.path.join(base, fname), 'size': os.path.getsize(os.path.join(base, fname))})\n    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=['path','size'])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check for cached weather operator results in amber workflow results directory.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_fire_weather",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('./data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv', encoding='latin-1')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fire weather data from: data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv with latin-1 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_2016_fires",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_wildfires) -> pd.DataFrame:\n    df = load_wildfires[load_wildfires['start_year'] == 2016].copy()\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter wildfire data to only 2016 fire incidents. Returns all columns for 2016 fires.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_fire_weather_head",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import subprocess\n    result = subprocess.run(['head', '-5', 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'], capture_output=True, text=True)\n    lines = result.stdout.split('\\n')\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 5 lines of Fire_Weather_Data_2002-2014_2016.csv to understand its structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_cached_weather_results",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os\n    # Look for large cached operator results that might be the weather data\n    results = []\n    base = './amber/user-resources/workflow-results/operator-port-result'\n    for f in os.listdir(base):\n        full = os.path.join(base, f)\n        size = os.path.getsize(full)\n        if size > 100000:  # large files only\n            results.append({'path': full, 'size': size})\n    return pd.DataFrame(results).sort_values('size', ascending=False)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find large cached operator results in amber workflow results directory that might contain weather data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "check_rain_sum_desc",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_variable_descrip) -> pd.DataFrame:\n    # Find description of rain_sum\n    return load_variable_descrip[load_variable_descrip['Variable Name '].str.strip().isin(['rain_sum', 'latitude', 'longitude', 'controlled_date', 'control_day_of_year', 'station_verified_in_psa'])]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions for rain_sum, lat/lon, controlled_date, station_verified_in_psa columns to understand what data is available.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_weather_csv",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import subprocess\n    # Try to find the WeatherEvents file using find command\n    result = subprocess.run(['find', '/', '-name', 'WeatherEvents*', '-type', 'f'], \n                          capture_output=True, text=True, timeout=30)\n    lines = result.stdout.strip().split('\\n')\n    return pd.DataFrame({'path': [l for l in lines if l]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Use find command to search entire filesystem for WeatherEvents files.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_rain_sum_2016",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_2016_fires) -> pd.DataFrame:\n    df = filter_2016_fires.copy()\n    # Check rain_sum distribution and understand the data\n    stats = {\n        'total_fires_2016': len(df),\n        'rain_sum_null': df['rain_sum'].isna().sum(),\n        'rain_sum_zero': (df['rain_sum'] == 0).sum(),\n        'rain_sum_gt_0': (df['rain_sum'] > 0).sum(),\n        'rain_sum_gt_005': (df['rain_sum'] > 0.05).sum(),\n        'rain_sum_min': df['rain_sum'].min(),\n        'rain_sum_max': df['rain_sum'].max(),\n        'rain_sum_mean': df['rain_sum'].mean(),\n        'duration_min': df['duration'].min(),\n        'duration_max': df['duration'].max(),\n        'duration_mean': df['duration'].mean(),\n        'controlled_date_nulls': df['controlled_date'].isna().sum(),\n        'station_verified_nulls': df['station_verified_in_psa'].isna().sum(),\n    }\n    return pd.DataFrame([stats])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect rain_sum distribution for 2016 fires - check nulls, zeros, values > 0.05, and understand the field semantics alongside duration and control date availability.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_fire_weather_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import subprocess\n    # Read first 3 lines of the fire weather CSV to check structure\n    result = subprocess.run(['head', '-n', '3', 'data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv'],\n                          capture_output=True, text=True, timeout=10)\n    lines = result.stdout.strip().split('\\n')\n    return pd.DataFrame({'line': lines, 'len': [len(l) for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 3 raw lines of Fire_Weather_Data_2002-2014_2016.csv to understand its structure - checking if it has station-level daily data or is same as noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "check_weather_events_path",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os, glob\n    # Try various path strategies for WeatherEvents file\n    paths_to_try = [\n        'data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv',\n        './data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv',\n        '/data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv',\n    ]\n    results = []\n    for p in paths_to_try:\n        exists = os.path.exists(p)\n        results.append({'path': p, 'exists': exists})\n    \n    # Also check symlinks and alternate dirs\n    for p in glob.glob('/data/**/*.csv', recursive=True):\n        if 'Weather' in p or 'weather' in p:\n            results.append({'path': p, 'exists': True})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check if WeatherEvents_Jan2016-Dec2022.csv exists at various absolute and relative paths, and search /data for any weather CSV files.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_station_col",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_2016_fires) -> pd.DataFrame:\n    df = filter_2016_fires\n    # Check station_verified_in_psa values\n    print(\"station_verified_in_psa unique values sample:\", df['station_verified_in_psa'].value_counts().head(20))\n    print(\"\\nDtype:\", df['station_verified_in_psa'].dtype)\n    print(\"\\nSample rows with station info:\")\n    print(df[['incident_number', 'latitude', 'longitude', 'controlled_date', 'control_day_of_year', 'rain_sum', 'station_verified_in_psa']].head(10))\n    return df[['incident_number', 'latitude', 'longitude', 'controlled_date', 'control_day_of_year', 'rain_sum', 'station_verified_in_psa']].head(20)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect station_verified_in_psa column values and understand how rain_sum relates to control date for 2016 fires.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "load_weather_events",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    # The task says to use WeatherEvents_Jan2016-Dec2022.csv - try reading it directly as specified\n    try:\n        df = pd.read_csv('data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv', nrows=5)\n        return df\n    except Exception as e1:\n        # Try with different encodings\n        try:\n            df = pd.read_csv('data/wildfire/input/WeatherEvents_Jan2016-Dec2022.csv', \n                           encoding='latin-1', nrows=5)\n            return df\n        except Exception as e2:\n            return pd.DataFrame({'error': [str(e1), str(e2)]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Attempt to load WeatherEvents_Jan2016-Dec2022.csv - the file specified in the task data files list",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "search_large_cached",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os\n    base = './amber/user-resources/workflow-results/operator-port-result'\n    results = []\n    try:\n        for f in os.listdir(base):\n            full = os.path.join(base, f)\n            try:\n                size = os.path.getsize(full)\n                results.append({'path': full, 'size': size})\n            except:\n                pass\n    except Exception as e:\n        return pd.DataFrame({'error': [str(e)]})\n    df = pd.DataFrame(results)\n    if df.empty:\n        return pd.DataFrame({'msg': ['no results']})\n    return df.sort_values('size', ascending=False).head(30)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search amber workflow results for large cached operator result files (>100KB) that might contain weather data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "read_cached_large",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import os, pickle, json\n    # The search_large_cached showed all files are 4096 bytes (directory entries)\n    # Let's look for actual large files in amber results\n    base = './amber/user-resources/workflow-results/operator-port-result'\n    results = []\n    for f in os.listdir(base):\n        full = os.path.join(base, f)\n        if os.path.isdir(full):\n            # It's a directory - check files inside\n            try:\n                inner = os.listdir(full)\n                for ff in inner:\n                    fpath = os.path.join(full, ff)\n                    sz = os.path.getsize(fpath)\n                    results.append({'path': fpath, 'size': sz, 'name': ff})\n            except:\n                pass\n    df = pd.DataFrame(results)\n    if len(df) > 0:\n        df = df.sort_values('size', ascending=False).head(30)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Look inside amber workflow result directories to find large cached files that might contain weather data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "load_variable_descrip": {
+        "x": 100,
+        "y": 580
+      },
+      "load_wildfires": {
+        "x": 100,
+        "y": 220
+      },
+      "load_weather": {
+        "x": 100,
+        "y": 400
+      },
+      "find_files": {
+        "x": 100,
+        "y": 40
+      },
+      "find_weather_file": {
+        "x": 100,
+        "y": 760
+      },
+      "search_weather_in_files": {
+        "x": 380,
+        "y": 40
+      },
+      "find_wildfire_dir": {
+        "x": 100,
+        "y": 940
+      },
+      "find_wildfire_files": {
+        "x": 100,
+        "y": 1120
+      },
+      "check_cached_weather": {
+        "x": 100,
+        "y": 1300
+      },
+      "load_fire_weather": {
+        "x": 100,
+        "y": 1480
+      },
+      "filter_2016_fires": {
+        "x": 380,
+        "y": 220
+      },
+      "inspect_fire_weather_head": {
+        "x": 100,
+        "y": 1660
+      },
+      "find_cached_weather_results": {
+        "x": 100,
+        "y": 1840
+      },
+      "check_rain_sum_desc": {
+        "x": 380,
+        "y": 580
+      },
+      "find_weather_csv": {
+        "x": 100,
+        "y": 2020
+      },
+      "inspect_rain_sum_2016": {
+        "x": 660,
+        "y": 130
+      },
+      "inspect_fire_weather_raw": {
+        "x": 100,
+        "y": 2200
+      },
+      "check_weather_events_path": {
+        "x": 100,
+        "y": 2380
+      },
+      "inspect_station_col": {
+        "x": 660,
+        "y": 310
+      },
+      "load_weather_events": {
+        "x": 100,
+        "y": 2560
+      },
+      "search_large_cached": {
+        "x": 100,
+        "y": 2740
+      },
+      "read_cached_large": {
+        "x": 100,
+        "y": 2920
+      }
+    },
+    "links": [
+      {
+        "linkID": "find_files-->search_weather_in_files",
+        "source": {
+          "operatorID": "find_files",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "search_weather_in_files",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_wildfires-->filter_2016_fires",
+        "source": {
+          "operatorID": "load_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_2016_fires",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_variable_descrip-->check_rain_sum_desc",
+        "source": {
+          "operatorID": "load_variable_descrip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_rain_sum_desc",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_2016_fires-->inspect_rain_sum_2016",
+        "source": {
+          "operatorID": "filter_2016_fires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_rain_sum_2016",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_2016_fires-->inspect_station_col",
+        "source": {
+          "operatorID": "filter_2016_fires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_station_col",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

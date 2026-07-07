@@ -1,0 +1,459 @@
+{
+  "headId": "step-agent-131-12-1781158888233",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "climate_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_excel('data/archeology/input/climateMeasurements.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climate measurements from data/archeology/input/climateMeasurements.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "radiocarbon_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_excel('data/archeology/input/radiocarbon_database_regional.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load radiocarbon database from data/archeology/input/radiocarbon_database_regional.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    # Read the raw file to find the actual header row\n    xl = pd.ExcelFile('data/archeology/input/climateMeasurements.xlsx')\n    print(\"Sheets:\", xl.sheet_names)\n    # Read first 20 rows to inspect structure\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', header=None, nrows=20)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect raw climate measurements file structure - first 20 rows, no header parsing, to find actual column names and header row.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "radiocarbon_malta",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_excel('data/archeology/input/radiocarbon_database_regional.xlsx')\n    # Check for Malta references\n    malta_mask = df.apply(lambda col: col.astype(str).str.contains('Malta|malta|Maltese|maltese', na=False)).any(axis=1)\n    return df[malta_mask]\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load radiocarbon database and filter rows that mention Malta/Maltese in any column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "malta_dates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(radiocarbon_malta) -> pd.DataFrame:\n    df = radiocarbon_malta.copy()\n    # Show all columns and the date range for Malta\n    print(\"Columns:\", df.columns.tolist())\n    print(\"Date column stats:\")\n    print(df['date'].describe())\n    print(\"\\nCal BC columns:\")\n    print(df[['date', 'error', 'Cal. BC 1 sigma', 'Cal. BC 2 sigma', 'Cal. BC 1 sigma.1', 'Cal. BC 2 sigma.1']].to_string())\n    # The 'date' column is likely BP (Before Present) radiocarbon date\n    # First = oldest (largest BP), Last = most recent (smallest BP)\n    df_sorted = df.sort_values('date', ascending=False)\n    return df_sorted[['Region', 'Site', 'date', 'error', 'Cal. BC 1 sigma', 'Cal. BC 2 sigma', 'Cal. BC 1 sigma.1', 'Cal. BC 2 sigma.1']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sort Malta radiocarbon dates to find first (oldest, largest BP) and last (most recent, smallest BP) occurrences of people in Malta.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "climate_inspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import openpyxl\n    wb = openpyxl.load_workbook('data/archeology/input/climateMeasurements.xlsx', read_only=True)\n    print(\"Sheet names:\", wb.sheetnames)\n    ws = wb.active\n    rows = []\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        rows.append(row)\n        if i >= 25:\n            break\n    wb.close()\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 25 rows of climateMeasurements.xlsx to find the actual header structure and locate the Potassium column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "malta_date_range",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(malta_dates):\n    # Get first (oldest = largest BP) and last (most recent = smallest BP) dates\n    first_date = malta_dates['date'].max()\n    last_date = malta_dates['date'].min()\n    return pd.DataFrame({'first_bp': [first_date], 'last_bp': [last_date]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the first (largest BP = oldest) and last (smallest BP = most recent) radiocarbon dates for Malta occurrences.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "climate_header_search",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    # Read with no header to see all rows and find the header row and Potassium column\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', header=None, nrows=15)\n    # Convert everything to string for inspection\n    return df.astype(str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 15 rows of climateMeasurements.xlsx with no header to find the row containing column names and locate the Potassium column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_header_row",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', header=None, nrows=15)\n    # Print each row to find the header\n    rows_info = []\n    for i, row in df.iterrows():\n        non_null = row.dropna().tolist()\n        rows_info.append({'row_index': i, 'values': str(non_null[:10])})\n    return pd.DataFrame(rows_info)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 15 rows of climateMeasurements.xlsx to find which row contains the actual column headers (like Site, Hole, Core, Potassium, Age, etc.).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_row4",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import openpyxl\n    wb = openpyxl.load_workbook('data/archeology/input/climateMeasurements.xlsx', read_only=True, data_only=True)\n    ws = wb.active\n    rows = []\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        rows.append({'row_index': i, 'values': str(list(row)[:15])})\n        if i >= 7:\n            break\n    wb.close()\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect rows 0-7 of climateMeasurements.xlsx to find the header row with column names like Site, Hole, Core, Age, Potassium, etc.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_proper",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import openpyxl\n    wb = openpyxl.load_workbook('data/archeology/input/climateMeasurements.xlsx', read_only=True, data_only=True)\n    ws = wb.active\n    rows = list(ws.iter_rows(values_only=True))\n    # Row index 4 has units (ppm), row index 5 has actual header\n    header = rows[5]\n    data_rows = rows[6:]\n    df = pd.DataFrame(data_rows, columns=header)\n    wb.close()\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx using openpyxl, using row index 5 as the actual column header row (contains Site, Hole, Core, Section, Interval_cm, Depth below seafloor_m, Splice depth_m, Age_ka, and element columns in ppm). Returns the full dataset.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "potassium_interpolated",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\nimport numpy as np\n\ndef process(climate_proper, malta_date_range):\n    # Get the climate data with K and Age_ky columns\n    df = climate_proper[['Age_ky', 'K']].dropna()\n    df = df.sort_values('Age_ky').reset_index(drop=True)\n    \n    # Malta BP dates: 6412 BP and 6005 BP\n    # BP = years before 1950; ka = thousands of years before 1950\n    # So 6412 BP = 6.412 ka, 6005 BP = 6.005 ka\n    first_bp = malta_date_range['first_bp'].iloc[0]\n    last_bp = malta_date_range['last_bp'].iloc[0]\n    \n    first_ka = first_bp / 1000.0\n    last_ka = last_bp / 1000.0\n    \n    # Linearly interpolate K at these two time points\n    k_first = float(np.interp(first_ka, df['Age_ky'].values, df['K'].values))\n    k_last = float(np.interp(last_ka, df['Age_ky'].values, df['K'].values))\n    \n    avg_k = (k_first + k_last) / 2.0\n    \n    return pd.DataFrame({\n        'first_ka': [first_ka],\n        'last_ka': [last_ka],\n        'K_at_first': [round(k_first, 6)],\n        'K_at_last': [round(k_last, 6)],\n        'average_K': [round(avg_k, 4)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Interpolate Potassium (K in ppm) values at the first (6412 BP = 6.412 ka) and last (6005 BP = 6.005 ka) Malta radiocarbon dates using linear interpolation on the climate dataset (Age_ky vs K columns). Computes the average of the two interpolated K values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "potassium_final",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climate_proper, malta_date_range):\n    import numpy as np\n    \n    df = climate_proper[['Age_ky', 'K']].dropna()\n    df = df.sort_values('Age_ky')\n    \n    first_bp = malta_date_range['first_bp'].iloc[0]\n    last_bp = malta_date_range['last_bp'].iloc[0]\n    \n    # Convert BP to ka (1 BP = 0.001 ka)\n    first_ka = first_bp / 1000.0\n    last_ka = last_bp / 1000.0\n    \n    # Linear interpolation\n    K_first = np.interp(first_ka, df['Age_ky'].values, df['K'].values)\n    K_last = np.interp(last_ka, df['Age_ky'].values, df['K'].values)\n    \n    avg_K = (K_first + K_last) / 2.0\n    avg_K_rounded = round(avg_K, 4)\n    \n    return pd.DataFrame({\n        'first_ka': [first_ka],\n        'last_ka': [last_ka],\n        'K_at_first': [K_first],\n        'K_at_last': [K_last],\n        'average_K': [avg_K],\n        'average_K_rounded': [avg_K_rounded]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Interpolate Potassium (K in ppm) at first (6412 BP = 6.412 ka) and last (6005 BP = 6.005 ka) Malta dates using numpy linear interpolation on Age_ky vs K from climate data. Computes and rounds average to 4 decimal places.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "climate_data": {
+        "x": 100,
+        "y": 40
+      },
+      "radiocarbon_data": {
+        "x": 100,
+        "y": 220
+      },
+      "climate_raw": {
+        "x": 100,
+        "y": 400
+      },
+      "radiocarbon_malta": {
+        "x": 100,
+        "y": 580
+      },
+      "malta_dates": {
+        "x": 380,
+        "y": 580
+      },
+      "climate_inspect": {
+        "x": 100,
+        "y": 760
+      },
+      "malta_date_range": {
+        "x": 660,
+        "y": 580
+      },
+      "climate_header_search": {
+        "x": 100,
+        "y": 940
+      },
+      "climate_header_row": {
+        "x": 100,
+        "y": 1120
+      },
+      "climate_row4": {
+        "x": 100,
+        "y": 1300
+      },
+      "climate_proper": {
+        "x": 660,
+        "y": 400
+      },
+      "potassium_interpolated": {
+        "x": 940,
+        "y": 325
+      },
+      "potassium_final": {
+        "x": 940,
+        "y": 655
+      }
+    },
+    "links": [
+      {
+        "linkID": "radiocarbon_malta-->malta_dates",
+        "source": {
+          "operatorID": "radiocarbon_malta",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "malta_dates",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_dates-->malta_date_range",
+        "source": {
+          "operatorID": "malta_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "malta_date_range",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "climate_proper-->potassium_interpolated",
+        "source": {
+          "operatorID": "climate_proper",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "potassium_interpolated",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_date_range-->potassium_interpolated",
+        "source": {
+          "operatorID": "malta_date_range",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "potassium_interpolated",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "climate_proper-->potassium_final",
+        "source": {
+          "operatorID": "climate_proper",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "potassium_final",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_date_range-->potassium_final",
+        "source": {
+          "operatorID": "malta_date_range",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "potassium_final",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,235 @@
+{
+  "headId": "step-agent-353-10-1781051620564",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_all_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = sorted(glob.glob('data/environment/input/water-body-testing-*.csv'))\n    dfs = []\n    for file in files:\n        df = pd.read_csv(file)\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water body testing CSV files from 2002-2023 using glob pattern and concatenate them into a single DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "freshwater_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_all_data) -> pd.DataFrame:\n    return load_all_data[load_all_data['Beach Type Description'] == 'Fresh'].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter for freshwater beach samples only from the combined water body testing data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "exceedance_by_year",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(freshwater_samples) -> pd.DataFrame:\n    df = freshwater_samples.copy()\n    df['is_exceedance'] = df['Violation'].str.lower() == 'yes'\n    \n    yearly_stats = df.groupby('Year').agg(\n        total_samples=('is_exceedance', 'count'),\n        exceedances=('is_exceedance', 'sum')\n    ).reset_index()\n    \n    yearly_stats['exceedance_rate'] = (yearly_stats['exceedances'] / yearly_stats['total_samples'] * 100).round(2)\n    \n    return yearly_stats.sort_values('Year')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate bacterial exceedance rate by year for freshwater beaches. Normalizes Violation values to lowercase 'yes' for comparison, counts exceedances per year, and calculates exceedance_rate as percentage.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "average_exceedance",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(exceedance_by_year) -> pd.DataFrame:\n    avg_rate = exceedance_by_year['exceedance_rate'].mean()\n    return pd.DataFrame({'average_exceedance_rate': [round(avg_rate, 2)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the average bacterial exceedance rate across all years (2002-2023) for freshwater beaches, rounded to 2 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "years_above_average",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(exceedance_by_year, average_exceedance) -> pd.DataFrame:\n    avg_rate = average_exceedance['average_exceedance_rate'].iloc[0]\n    above_avg = exceedance_by_year[exceedance_by_year['exceedance_rate'] > avg_rate].copy()\n    above_avg = above_avg[['Year']].sort_values('Year')\n    return above_avg"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter years where freshwater beach bacterial exceedance rate exceeds the average rate of 4.04%, returning list of years sorted in ascending order",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_all_data": {
+        "x": 100,
+        "y": 40
+      },
+      "freshwater_samples": {
+        "x": 380,
+        "y": 40
+      },
+      "exceedance_by_year": {
+        "x": 660,
+        "y": 40
+      },
+      "average_exceedance": {
+        "x": 940,
+        "y": 122.5
+      },
+      "years_above_average": {
+        "x": 1220,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_all_data-->freshwater_samples",
+        "source": {
+          "operatorID": "load_all_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "freshwater_samples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "freshwater_samples-->exceedance_by_year",
+        "source": {
+          "operatorID": "freshwater_samples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_by_year",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "exceedance_by_year-->average_exceedance",
+        "source": {
+          "operatorID": "exceedance_by_year",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "average_exceedance",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "exceedance_by_year-->years_above_average",
+        "source": {
+          "operatorID": "exceedance_by_year",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "years_above_average",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "average_exceedance-->years_above_average",
+        "source": {
+          "operatorID": "average_exceedance",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "years_above_average",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

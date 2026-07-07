@@ -1,0 +1,441 @@
+{
+  "headId": "step-agent-114-11-1781150034109",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "noaa_wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load noaa_wildfires.csv from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "variable_descrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv with cp1252 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "raws_stations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/PublicView_RAWS_-3515561676727363726.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load RAWS weather stations data from data/wildfire/input/PublicView_RAWS_-3515561676727363726.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "check_variable_descrip",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(variable_descrip):\n    # Show all variable descriptions to find station-related columns\n    pd.set_option('display.max_colwidth', 200)\n    return variable_descrip[variable_descrip['Variable Name '].str.contains('stat', case=False, na=False) | \n                            variable_descrip['Young et al. 2020, Table 1'].str.contains('stat', case=False, na=False) |\n                            variable_descrip['Alternative description'].str.contains('stat', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions to find all station-related variable descriptions in the NOAA dataset",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_station_id",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaa_wildfires, raws_stations):\n    # Check station_verified_in_psa values in NOAA dataset\n    noaa_ids = noaa_wildfires['station_verified_in_psa'].dropna().unique()\n    raws_wx_ids = raws_stations['WX ID'].dropna().unique()\n    raws_station_ids = raws_stations['Station ID'].dropna().unique()\n    \n    return pd.DataFrame({\n        'noaa_station_ids_sample': list(sorted(noaa_ids[:20])),\n        'raws_wx_ids_sample': list(sorted(raws_wx_ids[:20])),\n        'raws_station_ids_sample': list(sorted(raws_station_ids[:20]))\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check sample values of station_verified_in_psa in NOAA dataset vs WX ID and Station ID in RAWS stations to find the correct join key",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_join_overlap",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaa_wildfires, raws_stations):\n    noaa_ids = set(noaa_wildfires['station_verified_in_psa'].dropna().astype(int))\n    raws_wx = set(raws_stations['WX ID'].dropna().astype(int))\n    raws_station = set(raws_stations['Station ID'].dropna().astype(int))\n    \n    overlap_wx = noaa_ids & raws_wx\n    overlap_station = noaa_ids & raws_station\n    \n    return pd.DataFrame({\n        'noaa_unique_station_ids': [len(noaa_ids)],\n        'raws_wx_ids_count': [len(raws_wx)],\n        'raws_station_ids_count': [len(raws_station)],\n        'overlap_with_wx_id': [len(overlap_wx)],\n        'overlap_with_station_id': [len(overlap_station)],\n        'sample_noaa_ids': [sorted(list(noaa_ids))[:10]],\n        'sample_raws_wx': [sorted(list(raws_wx))[:10]],\n        'sample_raws_station': [sorted(list(raws_station))[:10]],\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check overlap between NOAA station_verified_in_psa values and RAWS WX ID / Station ID columns to find the correct join key",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_raws_columns",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(raws_stations, noaa_wildfires):\n    # Check all numeric columns and their ranges in RAWS\n    noaa_ids = noaa_wildfires['station_verified_in_psa'].dropna().unique()\n    print(f\"NOAA station IDs range: {noaa_ids.min():.0f} to {noaa_ids.max():.0f}\")\n    print(f\"NOAA sample IDs: {sorted(noaa_ids)[:10]}\")\n    \n    # Check RAWS numeric columns\n    numeric_cols = raws_stations.select_dtypes(include='number').columns.tolist()\n    print(f\"\\nRAWS numeric columns: {numeric_cols}\")\n    for col in numeric_cols:\n        vals = raws_stations[col].dropna()\n        if len(vals) > 0:\n            print(f\"  {col}: min={vals.min():.0f}, max={vals.max():.0f}, sample={sorted(vals.unique())[:5]}\")\n    \n    return pd.DataFrame({'info': ['see console']})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug: check the range of NOAA station IDs and all numeric columns in RAWS stations to find the correct join key",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_raws_all_ids",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(raws_stations, noaa_wildfires):\n    noaa_ids = set(noaa_wildfires['station_verified_in_psa'].dropna().astype(int))\n    noaa_min, noaa_max = min(noaa_ids), max(noaa_ids)\n    \n    results = []\n    results.append(f\"NOAA station ID range: {noaa_min} to {noaa_max}, count={len(noaa_ids)}\")\n    \n    # Check all columns in RAWS for overlap\n    for col in raws_stations.columns:\n        try:\n            vals = pd.to_numeric(raws_stations[col], errors='coerce').dropna()\n            if len(vals) == 0:\n                continue\n            col_min, col_max = vals.min(), vals.max()\n            # Check range overlap\n            if col_min <= noaa_max and col_max >= noaa_min:\n                overlap = len(set(vals.astype(int)) & noaa_ids)\n                results.append(f\"Column '{col}': range {col_min:.0f}-{col_max:.0f}, overlap={overlap}\")\n        except:\n            pass\n    \n    # Also check NESS ID as string-based numeric\n    ness = raws_stations['NESS ID'].dropna()\n    results.append(f\"NESS ID sample: {ness.head(5).tolist()}\")\n    results.append(f\"NWS ID sample: {raws_stations['NWS ID'].dropna().head(5).tolist()}\")\n    results.append(f\"MesoWest Station ID sample: {raws_stations['MesoWest Station ID'].dropna().head(5).tolist()}\")\n    \n    return pd.DataFrame({'info': results})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check all RAWS columns for numeric overlap with NOAA station_verified_in_psa values (range ~20K-45K), and sample string ID columns",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avg_elevation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaa_wildfires, raws_stations):\n    # NWS ID in RAWS overlaps with station_verified_in_psa in NOAA\n    # NWS ID is a string like '227701', station_verified_in_psa is numeric\n    raws = raws_stations.copy()\n    raws['nws_id_num'] = pd.to_numeric(raws['NWS ID'], errors='coerce')\n    \n    # Get unique station IDs used in NOAA fires\n    noaa_stations = noaa_wildfires[['station_verified_in_psa']].drop_duplicates()\n    \n    # Join NOAA station IDs with RAWS on NWS ID\n    merged = noaa_stations.merge(\n        raws[['nws_id_num', 'Elevation']],\n        left_on='station_verified_in_psa',\n        right_on='nws_id_num',\n        how='inner'\n    )\n    \n    avg_elev = merged['Elevation'].mean()\n    return pd.DataFrame({'avg_elevation_ft': [round(avg_elev, 1)], 'matched_stations': [len(merged)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join NOAA station_verified_in_psa with RAWS NWS ID (numeric) to find matched weather stations used for fire site monitoring, then compute average elevation in feet.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "noaa_wildfires": {
+        "x": 100,
+        "y": 40
+      },
+      "variable_descrip": {
+        "x": 100,
+        "y": 1345
+      },
+      "raws_stations": {
+        "x": 100,
+        "y": 850
+      },
+      "check_variable_descrip": {
+        "x": 380,
+        "y": 1345
+      },
+      "check_station_id": {
+        "x": 380,
+        "y": 85
+      },
+      "check_join_overlap": {
+        "x": 380,
+        "y": 265
+      },
+      "check_raws_columns": {
+        "x": 380,
+        "y": 445
+      },
+      "check_raws_all_ids": {
+        "x": 380,
+        "y": 625
+      },
+      "avg_elevation": {
+        "x": 380,
+        "y": 805
+      }
+    },
+    "links": [
+      {
+        "linkID": "variable_descrip-->check_variable_descrip",
+        "source": {
+          "operatorID": "variable_descrip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_variable_descrip",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_wildfires-->check_station_id",
+        "source": {
+          "operatorID": "noaa_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_station_id",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "raws_stations-->check_station_id",
+        "source": {
+          "operatorID": "raws_stations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_station_id",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "noaa_wildfires-->check_join_overlap",
+        "source": {
+          "operatorID": "noaa_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_join_overlap",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "raws_stations-->check_join_overlap",
+        "source": {
+          "operatorID": "raws_stations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_join_overlap",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "raws_stations-->check_raws_columns",
+        "source": {
+          "operatorID": "raws_stations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_raws_columns",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_wildfires-->check_raws_columns",
+        "source": {
+          "operatorID": "noaa_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_raws_columns",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "raws_stations-->check_raws_all_ids",
+        "source": {
+          "operatorID": "raws_stations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_raws_all_ids",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_wildfires-->check_raws_all_ids",
+        "source": {
+          "operatorID": "noaa_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_raws_all_ids",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "noaa_wildfires-->avg_elevation",
+        "source": {
+          "operatorID": "noaa_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avg_elevation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "raws_stations-->avg_elevation",
+        "source": {
+          "operatorID": "raws_stations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avg_elevation",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

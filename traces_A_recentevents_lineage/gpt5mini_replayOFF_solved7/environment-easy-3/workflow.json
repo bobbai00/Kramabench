@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-16-5-1781072800740",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wb2012",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2012.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSV file data/environment/input/water-body-testing-2012.csv (water body testing samples for 2012).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wb2013",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2013.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSV file data/environment/input/water-body-testing-2013.csv (water body testing samples for 2013).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compare_rates_2012_2013",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wb2012, wb2013):\n    g2012 = wb2012.groupby([\"Community\",\"Beach Name\"]).agg(samples_2012=(\"Violation\",\"size\"), violations_2012=(\"Violation\", lambda s: (s.str.lower()==\"yes\").sum())).reset_index()\n    g2012[\"rate_2012\"] = g2012[\"violations_2012\"]/g2012[\"samples_2012\"]\n    g2013 = wb2013.groupby([\"Community\",\"Beach Name\"]).agg(samples_2013=(\"Violation\",\"size\"), violations_2013=(\"Violation\", lambda s: (s.str.lower()==\"yes\").sum())).reset_index()\n    g2013[\"rate_2013\"] = g2013[\"violations_2013\"]/g2013[\"samples_2013\"]\n    merged = g2012.merge(g2013, on=[\"Community\",\"Beach Name\"], how=\"left\")\n    merged[\"rate_2013\"] = merged[\"rate_2013\"].fillna(0)\n    result = merged[(merged[\"samples_2012\"]>0) & (merged[\"rate_2013\"]>merged[\"rate_2012\"])].copy()\n    result = result.sort_values([\"Community\",\"Beach Name\"]).reset_index(drop=True)\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For each (Community, Beach Name) compute sample counts and violation counts for 2012 and 2013, calculate exceedance rates (violations/samples), merge by Community+Beach Name, exclude beaches with 0 samples in 2012, and keep rows where 2013 rate > 2012 rate. Outputs one row per beach with columns: Community, Beach Name, samples_2012, violations_2012, rate_2012, samples_2013, violations_2013, rate_2013.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wb2012": {
+        "x": 100,
+        "y": 40
+      },
+      "wb2013": {
+        "x": 100,
+        "y": 220
+      },
+      "compare_rates_2012_2013": {
+        "x": 380,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "wb2012-->compare_rates_2012_2013",
+        "source": {
+          "operatorID": "wb2012",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_rates_2012_2013",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wb2013-->compare_rates_2012_2013",
+        "source": {
+          "operatorID": "wb2013",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_rates_2012_2013",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

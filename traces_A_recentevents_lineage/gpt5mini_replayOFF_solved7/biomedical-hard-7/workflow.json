@@ -1,0 +1,335 @@
+{
+  "headId": "step-agent-38-15-1781073028487",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_biomed_xlsx",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    x = pd.read_excel(path, sheet_name=None)\n    parts = []\n    for name, df in x.items():\n        df = df.copy()\n        df['__sheet'] = name\n        parts.append(df)\n    return pd.concat(parts, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all sheets from data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx and concatenate into one DataFrame with a column '__sheet' containing the sheet name.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "acetyl_significant_genes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_biomed_xlsx):\n    df = load_biomed_xlsx\n    mask = (df.get('__sheet') == 'D-SE-acetyl') | df.get('Description', '').astype(str).str.contains('acetyl', case=False, na=False) | df.get('Sheet', '').astype(str).str.contains('acetyl', case=False, na=False)\n    sub = df[mask]\n    cols = ['Gene', 'ID', 'Feature', 'REF', 'Description']\n    vals = []\n    for c in cols:\n        if c in sub.columns:\n            s = sub[c].dropna().astype(str)\n            vals.extend(s.tolist())\n    import re\n    genes = set()\n    for v in vals:\n        parts = re.split(r'[;,\\|/]+\\s*', v)\n        for p in parts:\n            p = p.strip()\n            if not p:\n                continue\n            if '-' in p:\n                left = p.split('-', 1)[0]\n            else:\n                left = p\n            left = left.split()[0]\n            if re.match(r'^[A-Za-z0-9_-]+$', left):\n                if left.upper() not in ('NAN', 'NA', 'README'):\n                    genes.add(left)\n    return pd.DataFrame({'significant_gene': sorted(genes)})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter rows where __sheet == 'D-SE-acetyl' OR Description/Sheet mentions 'acetyl' (case-insensitive); inspect columns Gene, ID, Feature, REF, Description for gene-like tokens, split on ; , | /, trim trailing site suffix after '-' (e.g., ZNF592-S460 -> ZNF592), deduplicate and return one gene per row as column 'significant_gene'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_sheet_desc",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_biomed_xlsx):\n    df = load_biomed_xlsx\n    cols = ['Sheet','Description','__sheet']\n    parts = []\n    for c in cols:\n        if c in df.columns:\n            vc = df[c].fillna('<<NA>>').astype(str).value_counts(dropna=False)\n            parts.append(pd.DataFrame({'column': c, 'value': vc.index.tolist(), 'count': vc.values.tolist()}))\n    out = pd.concat(parts, ignore_index=True)\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Show value counts for columns Sheet, Description, and __sheet to inspect how acetyl information is recorded.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "acetyl_candidates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_biomed_xlsx):\n    df = load_biomed_xlsx\n    cond = df['__sheet'].astype(str).str.contains('acetyl', case=False, na=False) | df['Description'].astype(str).str.contains('acetyl', case=False, na=False)\n    return df.loc[cond, ['__sheet','Description','Gene']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter rows where __sheet or Description mentions 'acetyl' (case-insensitive) and return columns __sheet, Description, Gene for inspection.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_acetyl_genes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_biomed_xlsx):\n    import re\n    df = load_biomed_xlsx\n    sel = (df.get('__sheet') == 'D-SE-acetyl') | df.get('Description', '').str.contains('acetyl', case=False, na=False) | df.get('Sheet', '').str.contains('acetyl', case=False, na=False)\n    sub = df[sel]\n    cols = ['Gene', 'ID', 'Feature', 'Description', 'REF']\n    tokens = []\n    for col in cols:\n        if col not in sub.columns:\n            continue\n        for val in sub[col].dropna().astype(str):\n            parts = re.split(r'[;,|/\\\\\\s]+', val)\n            for part in parts:\n                t = part.strip()\n                if not t:\n                    continue\n                t = re.sub(r'[-_]\\s*$', '', t)\n                t = re.sub(r'[-_][A-Za-z]\\d+.*$', '', t)\n                t = t.strip()\n                if not t:\n                    continue\n                if t.lower().startswith('signif') or t.lower().startswith('na'):\n                    continue\n                if len(t) < 2 or len(t) > 20:\n                    continue\n                if not re.search(r'[A-Za-z]', t):\n                    continue\n                tokens.append(t)\n    seen = set()\n    out = []\n    for t in tokens:\n        if t not in seen:\n            seen.add(t)\n            out.append(t)\n    import pandas as pd\n    return pd.DataFrame({'significant_gene': out})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract gene symbols from sheet D-SE-acetyl and any rows mentioning 'acetyl' by scanning columns Gene, ID, Feature, Description, REF; split on common delimiters, strip site suffixes like '-K27' or '-S460', filter non-gene tokens, deduplicate preserving order, and return one gene symbol per row as 'significant_gene'. This reads from load_biomed_xlsx.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_acetyl_rows",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_biomed_xlsx):\n    df = load_biomed_xlsx\n    mask = (\n        df['__sheet'].astype(str).str.contains('D-SE-acetyl', na=False)\n        | df['Description'].astype(str).str.contains('acetyl', case=False, na=False)\n        | df['Sheet'].astype(str).str.contains('acetyl', na=False)\n    )\n    cols = ['__sheet','Sheet','Description','idx','Gene','ID','Feature','REF','ALT']\n    return df.loc[mask, cols].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter rows for D-SE-acetyl or any Description/Sheet mentioning 'acetyl' and return columns __sheet, Sheet, Description, idx, Gene, ID, Feature, REF, ALT for inspection.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "load_acetyl_sheet",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx', sheet_name='D-SE-acetyl', header=None)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the Excel sheet 'D-SE-acetyl' from data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx with no header to inspect raw rows.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "count_acetyl_genes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_acetyl_sheet) -> pd.DataFrame:\n    col = load_acetyl_sheet.columns[0]\n    s = load_acetyl_sheet[col].dropna().astype(str).str.strip()\n    s = s[s != '']\n    n = s.nunique()\n    return pd.DataFrame({'count':[int(n)]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count unique non-null gene symbols from the raw D-SE-acetyl sheet loaded by load_acetyl_sheet; drop empty strings and NA, return single-row DataFrame with column 'count'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_biomed_xlsx": {
+        "x": 100,
+        "y": 400
+      },
+      "acetyl_significant_genes": {
+        "x": 380,
+        "y": 400
+      },
+      "inspect_sheet_desc": {
+        "x": 380,
+        "y": 40
+      },
+      "acetyl_candidates": {
+        "x": 380,
+        "y": 220
+      },
+      "extract_acetyl_genes": {
+        "x": 380,
+        "y": 580
+      },
+      "inspect_acetyl_rows": {
+        "x": 380,
+        "y": 760
+      },
+      "load_acetyl_sheet": {
+        "x": 100,
+        "y": 940
+      },
+      "count_acetyl_genes": {
+        "x": 380,
+        "y": 940
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_biomed_xlsx-->inspect_sheet_desc",
+        "source": {
+          "operatorID": "load_biomed_xlsx",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_sheet_desc",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_biomed_xlsx-->acetyl_candidates",
+        "source": {
+          "operatorID": "load_biomed_xlsx",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "acetyl_candidates",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_biomed_xlsx-->acetyl_significant_genes",
+        "source": {
+          "operatorID": "load_biomed_xlsx",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "acetyl_significant_genes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_biomed_xlsx-->extract_acetyl_genes",
+        "source": {
+          "operatorID": "load_biomed_xlsx",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_acetyl_genes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_biomed_xlsx-->inspect_acetyl_rows",
+        "source": {
+          "operatorID": "load_biomed_xlsx",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_acetyl_rows",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_acetyl_sheet-->count_acetyl_genes",
+        "source": {
+          "operatorID": "load_acetyl_sheet",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_acetyl_genes",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

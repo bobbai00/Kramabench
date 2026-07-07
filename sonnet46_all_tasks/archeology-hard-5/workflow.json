@@ -1,0 +1,452 @@
+{
+  "headId": "step-agent-149-11-1781159136057",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "climate_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_excel('data/archeology/input/climateMeasurements.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climate measurements from data/archeology/input/climateMeasurements.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "radiocarbon_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_excel('data/archeology/input/radiocarbon_database_regional.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load radiocarbon database from data/archeology/input/radiocarbon_database_regional.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    # Load with no header to inspect raw structure\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', header=None)\n    return df.head(30)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 30 rows of climateMeasurements.xlsx with no header to inspect raw structure and find the real header row.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "malta_filter",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(radiocarbon_data) -> pd.DataFrame:\n    # Look for Malta in Region or Site columns\n    malta = radiocarbon_data[\n        radiocarbon_data['Region'].str.contains('Malta', case=False, na=False) |\n        radiocarbon_data['Site'].str.contains('Malta', case=False, na=False)\n    ]\n    return malta\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter radiocarbon_data for Malta entries by checking Region and Site columns for 'Malta'.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "malta_neolithic_north",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(malta_filter):\n    neo = malta_filter[malta_filter['Culture'] == 'Neolithic'].copy()\n    # Most northern = highest latitude; tie-break by later year (higher date value)\n    neo_sorted = neo.sort_values(['Latitude', 'date'], ascending=[False, False])\n    top = neo_sorted.iloc[0]\n    return neo_sorted[['Site', 'Culture', 'Latitude', 'Longitude', 'date', 'error']].head(10)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter Malta Neolithic samples, sort by Latitude descending then date descending to find most northern sample with tie-break on later year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "climate_inspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load():\n    import pandas as pd\n    # Load with no header to inspect all rows\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', header=None, nrows=15)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 15 rows of climateMeasurements.xlsx with no header to inspect the raw structure and find the real header row and aluminum column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_header_check",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import openpyxl\n    wb = openpyxl.load_workbook('data/archeology/input/climateMeasurements.xlsx', read_only=True)\n    ws = wb.active\n    rows = []\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        rows.append(row)\n        if i >= 6:\n            break\n    wb.close()\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 7 rows of climateMeasurements.xlsx using openpyxl to find the real header row and aluminum column index.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "malta_top_sample",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(malta_neolithic_north):\n    # All samples have same lat/lon. The columns appear swapped (14.377752 is longitude, 35.920878 is latitude for Malta)\n    # But since all are the same, we just break ties by later year (higher date value)\n    # Sort by Latitude desc (they're all the same), then date desc for tie-breaking\n    # The most northern = highest latitude value in the actual lat column\n    # malta_neolithic_north already sorted by latitude desc, date desc\n    top = malta_neolithic_north.iloc[0]\n    return malta_neolithic_north.iloc[[0]][['Site', 'Culture', 'Latitude', 'Longitude', 'date', 'error']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Get the top row (most northern Neolithic Malta sample, tie-broken by latest date). Returns the single row with date=6412.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "climate_full",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import openpyxl\n    # Read the raw file to find the header row\n    wb = openpyxl.load_workbook('data/archeology/input/climateMeasurements.xlsx', read_only=True, data_only=True)\n    ws = wb.active\n    rows = []\n    for i, row in enumerate(ws.iter_rows(values_only=True)):\n        rows.append(row)\n        if i >= 5:\n            break\n    wb.close()\n    # Print first 6 rows to inspect\n    result = pd.DataFrame(rows)\n    return result\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 6 rows of climateMeasurements.xlsx using openpyxl to find header row and aluminum column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_clean",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', header=5)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx with header at row 5 (0-indexed) to get proper column names including Age_ky and Al.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "climate_al_result",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climate_clean, malta_top_sample):\n    target_year = malta_top_sample['date'].iloc[0]  # 6412 (years BP)\n    # Age_ky is in kiloyears BP, so convert target to ky\n    target_ky = target_year / 1000.0  # 6.412 ky\n    \n    # Get rows with valid Age_ky and Al values\n    df = climate_clean[['Age_ky', 'Al']].dropna(subset=['Age_ky'])\n    \n    # Find absolute difference to target\n    df = df.copy()\n    df['diff'] = (df['Age_ky'] - target_ky).abs()\n    \n    min_diff = df['diff'].min()\n    closest = df[df['diff'] == min_diff]\n    \n    max_al = closest['Al'].max()\n    \n    return pd.DataFrame({\n        'target_year_BP': [target_year],\n        'target_ky': [target_ky],\n        'min_diff': [min_diff],\n        'closest_Age_ky': [closest['Age_ky'].tolist()],\n        'max_Al': [round(max_al, 4)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the closest Age_ky value in climate data to 6412 BP (= 6.412 ky), then get max Al value among all rows at that closest year. Returns target year, min difference, closest Age_ky values, and max Al rounded to 4 decimals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(climate_clean, malta_top_sample):\n    target_bp = malta_top_sample['date'].iloc[0]\n    target_ky = target_bp / 1000.0\n    \n    df = climate_clean[['Age_ky', 'Al']].dropna(subset=['Age_ky', 'Al'])\n    diff = (df['Age_ky'] - target_ky).abs()\n    min_diff = diff.min()\n    closest = df[diff == min_diff]\n    \n    max_al = closest['Al'].max()\n    result = round(max_al, 4)\n    \n    return pd.DataFrame({\n        'target_year_BP': [target_bp],\n        'target_ky': [target_ky],\n        'min_diff': [min_diff],\n        'closest_Age_ky': [closest['Age_ky'].tolist()],\n        'max_Al_raw': [max_al],\n        'max_Al_rounded': [result]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Final computation: find closest Age_ky to target year (6412 BP = 6.412 ky) in climate data, get max Al value, and round to 4 decimal places.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "climate_data": {
+        "x": 100,
+        "y": 115
+      },
+      "radiocarbon_data": {
+        "x": 100,
+        "y": 295
+      },
+      "climate_raw": {
+        "x": 100,
+        "y": 475
+      },
+      "malta_filter": {
+        "x": 380,
+        "y": 295
+      },
+      "malta_neolithic_north": {
+        "x": 660,
+        "y": 295
+      },
+      "climate_inspect": {
+        "x": 100,
+        "y": 655
+      },
+      "climate_header_check": {
+        "x": 100,
+        "y": 835
+      },
+      "malta_top_sample": {
+        "x": 940,
+        "y": 295
+      },
+      "climate_full": {
+        "x": 100,
+        "y": 1015
+      },
+      "climate_clean": {
+        "x": 940,
+        "y": 115
+      },
+      "climate_al_result": {
+        "x": 1220,
+        "y": 40
+      },
+      "final_answer": {
+        "x": 1220,
+        "y": 370
+      }
+    },
+    "links": [
+      {
+        "linkID": "radiocarbon_data-->malta_filter",
+        "source": {
+          "operatorID": "radiocarbon_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "malta_filter",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_filter-->malta_neolithic_north",
+        "source": {
+          "operatorID": "malta_filter",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "malta_neolithic_north",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_neolithic_north-->malta_top_sample",
+        "source": {
+          "operatorID": "malta_neolithic_north",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "malta_top_sample",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "climate_clean-->climate_al_result",
+        "source": {
+          "operatorID": "climate_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "climate_al_result",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_top_sample-->climate_al_result",
+        "source": {
+          "operatorID": "malta_top_sample",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "climate_al_result",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "climate_clean-->final_answer",
+        "source": {
+          "operatorID": "climate_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "malta_top_sample-->final_answer",
+        "source": {
+          "operatorID": "malta_top_sample",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

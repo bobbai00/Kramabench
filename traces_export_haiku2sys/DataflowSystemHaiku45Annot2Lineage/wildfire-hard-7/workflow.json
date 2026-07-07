@@ -1,0 +1,526 @@
+{
+  "headId": "step-agent-199-14-1781039191621",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "human_caused",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/nifc_human_caused_acres.csv', sep='\\t', engine='python', on_bad_lines='skip')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load human-caused acres burned data from nifc_human_caused_acres.csv using tab delimiter",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "lightning_caused",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/nifc_lightning_caused_acres.csv', sep='\\t', engine='python', on_bad_lines='skip')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load lightning-caused acres burned data from nifc_lightning_caused_acres.csv using tab delimiter",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_human",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_human_caused_acres.csv', 'r') as f:\n        lines = [f.readline() for _ in range(20)]\n    return pd.DataFrame({'raw_lines': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 20 raw lines of human-caused acres file to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_lightning",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_lightning_caused_acres.csv', 'r') as f:\n        lines = [f.readline() for _ in range(20)]\n    return pd.DataFrame({'raw_lines': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 20 raw lines of lightning-caused acres file to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "combine_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(human_caused, lightning_caused) -> pd.DataFrame:\n    human = human_caused.copy()\n    lightning = lightning_caused.copy()\n    \n    # Clean numeric columns - remove commas and convert to numeric\n    for col in human.columns:\n        if col != 'Year':\n            human[col] = human[col].astype(str).str.replace(',', '', regex=False)\n            human[col] = pd.to_numeric(human[col], errors='coerce')\n    \n    for col in lightning.columns:\n        if col != 'Year':\n            lightning[col] = lightning[col].astype(str).str.replace(',', '', regex=False)\n            lightning[col] = pd.to_numeric(lightning[col], errors='coerce')\n    \n    # Get geographic areas - exclude Year and Total\n    human_areas = [col for col in human.columns if col not in ['Year', 'Total']]\n    lightning_areas = [col for col in lightning.columns if col not in ['Year', 'Total']]\n    \n    combined = human[['Year']].copy()\n    \n    # Match columns between datasets, accounting for 'Western Great Basin' vs 'Western Great Basin*'\n    for area in human_areas:\n        human_val = human[area].fillna(0)\n        # For lightning, check if the column exists as-is or with asterisk\n        if area in lightning.columns:\n            lightning_val = lightning[area].fillna(0)\n        elif area + '*' in lightning.columns:\n            lightning_val = lightning[area + '*'].fillna(0)\n        else:\n            lightning_val = 0\n        combined[area] = human_val + lightning_val\n    \n    combined['Total'] = combined[[col for col in combined.columns if col != 'Year']].sum(axis=1)\n    \n    return combined\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Combine human and lightning caused acres by geographic area and year; clean numeric columns (remove commas), convert to numeric, and sum by area to get total acres burned per area per year",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "prepare_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(combine_data):\n    df = combine_data.copy()\n    \n    # Get all geographic areas (excluding Year and Total columns)\n    areas = [col for col in df.columns if col not in ['Year', 'Total']]\n    \n    # Melt the dataframe to have (Year, Area, Acres) format\n    melted = df.melt(id_vars=['Year'], value_vars=areas, \n                     var_name='Area', value_name='Acres')\n    \n    # Convert Acres to numeric if not already\n    melted['Acres'] = pd.to_numeric(melted['Acres'], errors='coerce')\n    \n    # Drop any NaN values\n    melted = melted.dropna()\n    \n    return melted\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Reshape combined data from wide format (areas as columns) to long format (Area, Year, Acres); exclude Year and Total columns; convert Acres to numeric and drop nulls",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_mean_acres",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(prepare_analysis) -> pd.DataFrame:\n    df = prepare_analysis.groupby('Area')['Acres'].mean().reset_index()\n    df.columns = ['Area', 'Mean_Acres']\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate historical mean acres burned per geographic area across all years in dataset",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_std_acres",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(prepare_analysis) -> pd.DataFrame:\n    df = prepare_analysis.groupby('Area')['Acres'].std().reset_index()\n    df.columns = ['Area', 'Std_Acres']\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate historical standard deviation of acres burned per geographic area across all years",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_zscore",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(prepare_analysis, calculate_mean_acres, calculate_std_acres):\n    data = prepare_analysis.copy()\n    means = calculate_mean_acres.set_index('Area')['Mean_Acres']\n    stds = calculate_std_acres.set_index('Area')['Std_Acres']\n    \n    data['Mean'] = data['Area'].map(means)\n    data['Std'] = data['Area'].map(stds)\n    data['ZScore'] = (data['Acres'] - data['Mean']) / data['Std']\n    \n    return data[['Year', 'Area', 'Acres', 'Mean', 'Std', 'ZScore']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate Z-score for each year-area combination as (Acres - Historical_Mean) / Historical_Std",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_anomaly",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(calculate_zscore) -> pd.DataFrame:\n    df = calculate_zscore.copy()\n    df['AbsZScore'] = df['ZScore'].abs()\n    max_idx = df['AbsZScore'].idxmax()\n    result = df.loc[[max_idx], ['Area', 'Year', 'ZScore', 'AbsZScore', 'Acres', 'Mean', 'Std']]\n    return result"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the year-area combination with the maximum absolute Z-score (most anomalous); return the area, year, and Z-score statistics",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_result",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(find_max_anomaly):\n    result = find_max_anomaly.copy()\n    area = result['Area'].iloc[0]\n    year = int(result['Year'].iloc[0])\n    zscore = result['ZScore'].iloc[0]\n    \n    return pd.DataFrame({\n        'Geographic_Area': [area],\n        'Year': [year],\n        'ZScore': [zscore],\n        'Answer': [f\"{area},{year}\"]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract the final answer: geographic area and year with highest absolute Z-score anomaly",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_calculation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_zscore) -> pd.DataFrame:\n    df = calculate_zscore\n    max_abs_z = df['ZScore'].abs().max()\n    result = df.loc[df['ZScore'].abs().idxmax()]\n    \n    return pd.DataFrame([{\n        'Area': result['Area'],\n        'Year': int(result['Year']),\n        'Acres': int(result['Acres']),\n        'Mean': result['Mean'],\n        'Std': result['Std'],\n        'ZScore': result['ZScore'],\n        'AbsZScore': abs(result['ZScore']),\n        'Calculation': f\"({result['Acres']} - {result['Mean']:.2f}) / {result['Std']:.2f}\"\n    }])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Verify the maximum Z-score anomaly by extracting the row with highest absolute Z-score and showing the calculation",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "human_caused": {
+        "x": 100,
+        "y": 40
+      },
+      "lightning_caused": {
+        "x": 100,
+        "y": 220
+      },
+      "inspect_human": {
+        "x": 100,
+        "y": 400
+      },
+      "inspect_lightning": {
+        "x": 100,
+        "y": 580
+      },
+      "combine_data": {
+        "x": 380,
+        "y": 212.5
+      },
+      "prepare_analysis": {
+        "x": 660,
+        "y": 212.5
+      },
+      "calculate_mean_acres": {
+        "x": 940,
+        "y": 205
+      },
+      "calculate_std_acres": {
+        "x": 940,
+        "y": 385
+      },
+      "calculate_zscore": {
+        "x": 1220,
+        "y": 122.5
+      },
+      "find_max_anomaly": {
+        "x": 1500,
+        "y": 122.5
+      },
+      "verify_result": {
+        "x": 1780,
+        "y": 122.5
+      },
+      "verify_calculation": {
+        "x": 1500,
+        "y": 302.5
+      }
+    },
+    "links": [
+      {
+        "linkID": "human_caused-->combine_data",
+        "source": {
+          "operatorID": "human_caused",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combine_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "lightning_caused-->combine_data",
+        "source": {
+          "operatorID": "lightning_caused",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combine_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "combine_data-->prepare_analysis",
+        "source": {
+          "operatorID": "combine_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prepare_analysis",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "prepare_analysis-->calculate_mean_acres",
+        "source": {
+          "operatorID": "prepare_analysis",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_mean_acres",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "prepare_analysis-->calculate_std_acres",
+        "source": {
+          "operatorID": "prepare_analysis",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_std_acres",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "prepare_analysis-->calculate_zscore",
+        "source": {
+          "operatorID": "prepare_analysis",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_zscore",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_mean_acres-->calculate_zscore",
+        "source": {
+          "operatorID": "calculate_mean_acres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_zscore",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "calculate_std_acres-->calculate_zscore",
+        "source": {
+          "operatorID": "calculate_std_acres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_zscore",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "calculate_zscore-->find_max_anomaly",
+        "source": {
+          "operatorID": "calculate_zscore",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_anomaly",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "find_max_anomaly-->verify_result",
+        "source": {
+          "operatorID": "find_max_anomaly",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_result",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_zscore-->verify_calculation",
+        "source": {
+          "operatorID": "calculate_zscore",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_calculation",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,261 @@
+{
+  "headId": "step-agent-111-9-1781034776876",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "identity_theft_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv', encoding='cp1252')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Identity Theft Reports by Type from CSV file with cp1252 encoding: data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "report_type",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv', encoding='cp1252', header=1, skiprows=[0])"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Report Type from CSV file with cp1252 encoding and proper header handling: data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identity_theft_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(identity_theft_reports) -> pd.DataFrame:\n    df = identity_theft_reports.copy()\n    # Skip header rows and clean up\n    df = df.iloc[1:].copy()\n    df.columns = ['Theft_Type', 'Theft_Subtype', 'Num_Reports', 'Pct_Diff']\n    # Remove all-null and source rows\n    df = df.dropna(how='all')\n    df = df[~df['Theft_Type'].str.contains('Source:', case=False, na=False)]\n    # Clean up the number format (remove commas)\n    df['Num_Reports'] = df['Num_Reports'].str.replace(',', '')\n    df['Num_Reports'] = pd.to_numeric(df['Num_Reports'], errors='coerce')\n    return df.dropna(subset=['Num_Reports'])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft reports: rename columns, remove metadata rows, parse numeric reports column",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "report_type_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(report_type) -> pd.DataFrame:\n    df = report_type.copy()\n    # Keep only the first row which has the data\n    df = df.iloc[0:2].copy()\n    df.columns = ['Report_Type', 'Num_Reports', 'col2', 'col3', 'col4', 'col5']\n    # Keep only relevant columns and first row (Identity Theft)\n    df = df[['Report_Type', 'Num_Reports']].iloc[1:].copy()\n    df['Num_Reports'] = df['Num_Reports'].str.replace(',', '')\n    df['Num_Reports'] = pd.to_numeric(df['Num_Reports'], errors='coerce')\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean report type data: extract Identity Theft total reports count",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_bank_new_accounts",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(identity_theft_clean) -> pd.DataFrame:\n    return identity_theft_clean[\n        (identity_theft_clean['Theft_Type'] == 'Bank Account') &\n        (identity_theft_clean['Theft_Subtype'] == 'New Accounts')\n    ]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter identity theft reports for Bank Account theft type with New Accounts subtype",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_proportion",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_bank_new_accounts, report_type_clean) -> pd.DataFrame:\n    bank_new = filter_bank_new_accounts['Num_Reports'].iloc[0]\n    total_identity_theft = report_type_clean['Num_Reports'].iloc[0]\n    proportion = bank_new / total_identity_theft\n    return pd.DataFrame({'Proportion': [round(proportion, 4)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate proportion of Bank Account New Accounts reports to total Identity Theft reports, rounded to 4 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "identity_theft_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "report_type": {
+        "x": 380,
+        "y": 220
+      },
+      "identity_theft_clean": {
+        "x": 380,
+        "y": 40
+      },
+      "report_type_clean": {
+        "x": 660,
+        "y": 220
+      },
+      "filter_bank_new_accounts": {
+        "x": 660,
+        "y": 40
+      },
+      "calculate_proportion": {
+        "x": 940,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "identity_theft_reports-->identity_theft_clean",
+        "source": {
+          "operatorID": "identity_theft_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identity_theft_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "report_type-->report_type_clean",
+        "source": {
+          "operatorID": "report_type",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "report_type_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identity_theft_clean-->filter_bank_new_accounts",
+        "source": {
+          "operatorID": "identity_theft_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_bank_new_accounts",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_bank_new_accounts-->calculate_proportion",
+        "source": {
+          "operatorID": "filter_bank_new_accounts",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_proportion",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "report_type_clean-->calculate_proportion",
+        "source": {
+          "operatorID": "report_type_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_proportion",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

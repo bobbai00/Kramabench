@@ -1,0 +1,444 @@
+{
+  "headId": "step-agent-389-13-1781053941542",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/constitution_beach_datasheet.csv', skiprows=2)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Constitution Beach data from CSV file: constitution_beach_datasheet.csv, skipping first 2 rows to use proper headers for Date, rainfall, and sampling locations (North, Middle, South) with Enterococcus counts",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_data) -> pd.DataFrame:\n    df = load_data.copy()\n    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')\n    \n    # Check what tags and columns we have\n    print(\"Columns:\", df.columns.tolist())\n    print(\"\\nUnique tags:\")\n    print(\"Tag:\", df['Tag'].unique())\n    print(\"Tag.1:\", df['Tag.1'].unique())\n    print(\"Tag.2:\", df['Tag.2'].unique())\n    print(\"\\nDate range:\", df['Date'].min(), \"to\", df['Date'].max())\n    print(\"\\nSample of data:\")\n    print(df.head(10))\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the data structure to understand sampling locations and Enterococcus columns",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "explore_structure",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(inspect_data):\n    df = inspect_data.copy()\n    print(\"Column names:\", df.columns.tolist())\n    print(\"\\nFirst few rows:\")\n    print(df.head())\n    print(\"\\nData types:\")\n    print(df.dtypes)\n    print(\"\\nUnique Date samples (first 10):\")\n    print(df['Date'].head(10))\n    print(\"\\nTag values:\")\n    print(df['Tag'].unique())\n    print(df['Tag.1'].unique())\n    print(df['Tag.2'].unique())\n    print(\"\\nEnterococcus columns summary:\")\n    print(\"Enterococcus:\", df['Enterococcus'].describe())\n    print(\"Enterococcus.1:\", df['Enterococcus.1'].describe())\n    print(\"Enterococcus.2:\", df['Enterococcus.2'].describe())\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Explore data structure to understand column meanings and sampling locations",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_2024",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(explore_structure) -> pd.DataFrame:\n    df = explore_structure.copy()\n    df['year'] = df['Date'].dt.year\n    return df[df['year'] == 2024]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter data to only 2024 records. Extracts year from Date column and filters to year == 2024.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "analyze_standard",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_2024) -> pd.DataFrame:\n    df = filter_2024.copy()\n    \n    # For each Enterococcus column, determine if it meets the standard (<104)\n    # Tag '<' means below 104, Tag '>' means above 104\n    # Create binary columns: 1 if meets standard (< 104), 0 if does not meet standard (>= 104), NaN if no data\n    \n    def meets_standard(tag, value):\n        if pd.isna(value):\n            return None\n        if tag == '<':\n            return 1\n        elif tag == '>':\n            return 0\n        return None\n    \n    df['meets_std_1'] = df.apply(lambda row: meets_standard(row['Tag'], row['Enterococcus']), axis=1)\n    df['meets_std_2'] = df.apply(lambda row: meets_standard(row['Tag.1'], row['Enterococcus.1']), axis=1)\n    df['meets_std_3'] = df.apply(lambda row: meets_standard(row['Tag.2'], row['Enterococcus.2']), axis=1)\n    \n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Create binary columns (1=meets standard <104, 0=does not meet standard >=104, NaN=no data) for each of the three sampling locations based on Tag and Enterococcus values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_mixed_days",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(analyze_standard) -> pd.DataFrame:\n    df = analyze_standard.copy()\n    \n    # Group by date to check if one sampling point meets standard while another doesn't\n    # A day qualifies if:\n    # - At least one sampling point meets the standard (value = 1)\n    # - At least one sampling point does NOT meet the standard (value = 0)\n    # - Ignore NaN values (missing data)\n    \n    def has_mixed_results(row):\n        values = [row['meets_std_1'], row['meets_std_2'], row['meets_std_3']]\n        # Remove NaN values\n        valid_values = [v for v in values if pd.notna(v)]\n        \n        if len(valid_values) < 2:\n            # Need at least 2 valid measurements to have \"one meets, one doesn't\"\n            return False\n        \n        # Check if we have both 0 and 1 (one meets standard, one doesn't)\n        has_meets = 1 in valid_values\n        has_not_meets = 0 in valid_values\n        \n        return has_meets and has_not_meets\n    \n    df['is_mixed'] = df.apply(has_mixed_results, axis=1)\n    \n    # Count unique dates where mixed results occurred\n    mixed_dates = df[df['is_mixed']]['Date'].dt.date.unique()\n    \n    return pd.DataFrame({\n        'mixed_dates_count': [len(mixed_dates)]\n    })"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify days where one sampling point meets the Enterococcus standard (<104) while another does not. For each day, check if there are at least 2 valid measurements and if at least one meets the standard and at least one does not meet the standard.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_values",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(analyze_standard) -> pd.DataFrame:\n    df = analyze_standard.copy()\n    \n    # Check the actual Enterococcus values and their distribution\n    result = df[['Date', 'Enterococcus', 'Enterococcus.1', 'Enterococcus.2', 'meets_std_1', 'meets_std_2', 'meets_std_3']].copy()\n    \n    # Show some sample rows with actual values >= 104 or close to it\n    result['max_value'] = result[['Enterococcus', 'Enterococcus.1', 'Enterococcus.2']].max(axis=1)\n    result_sorted = result.sort_values('max_value', ascending=False).head(20)\n    \n    return result_sorted\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug: Show actual Enterococcus values sorted by maximum to check if any are >= 104",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_tag_values",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(analyze_standard):\n    df = analyze_standard.copy()\n    \n    # Check what the Tag values actually mean\n    # Show samples with different tags and their enterococcus values\n    return df[['Date', 'Tag', 'Enterococcus', 'Tag.1', 'Enterococcus.1', 'Tag.2', 'Enterococcus.2']].head(30)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check the relationship between Tag and Enterococcus values to understand data structure",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "analyze_standard_correct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_2024) -> pd.DataFrame:\n    df = filter_2024.copy()\n    \n    # For each sampling point, check if Enterococcus value meets standard (<104)\n    # Handle NaN values explicitly\n    df['meets_std_1'] = df['Enterococcus'].apply(lambda x: 1 if pd.notna(x) and x < 104 else (0 if pd.notna(x) else None))\n    df['meets_std_2'] = df['Enterococcus.1'].apply(lambda x: 1 if pd.notna(x) and x < 104 else (0 if pd.notna(x) else None))\n    df['meets_std_3'] = df['Enterococcus.2'].apply(lambda x: 1 if pd.notna(x) and x < 104 else (0 if pd.notna(x) else None))\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Correct standard analysis: For each of the three sampling points, check if Enterococcus value meets standard (<104). 1=meets, 0=does not meet, NaN=no data. Uses numeric comparison on actual values, not Tag indicators.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_mixed_days_correct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(analyze_standard_correct):\n    df = analyze_standard_correct.copy()\n    \n    # For each day, check which sampling points have valid data and their standard status\n    mixed_count = 0\n    \n    for idx, row in df.iterrows():\n        meets_std_1 = row['meets_std_1']\n        meets_std_2 = row['meets_std_2']\n        meets_std_3 = row['meets_std_3']\n        \n        # Collect valid (non-NaN) measurements for this day\n        valid_measurements = []\n        if pd.notna(meets_std_1):\n            valid_measurements.append(meets_std_1)\n        if pd.notna(meets_std_2):\n            valid_measurements.append(meets_std_2)\n        if pd.notna(meets_std_3):\n            valid_measurements.append(meets_std_3)\n        \n        # Check if we have at least 2 measurements and if they're mixed (one meets, one doesn't)\n        if len(valid_measurements) >= 2:\n            has_meets = any(m == 1 for m in valid_measurements)\n            has_not_meets = any(m == 0 for m in valid_measurements)\n            \n            if has_meets and has_not_meets:\n                mixed_count += 1\n    \n    return pd.DataFrame({'mixed_days_count': [mixed_count]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count days in 2024 where at least one sampling point meets the Enterococcus standard (<104) and at least one does not. Only consider days with at least 2 valid measurements.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_data": {
+        "x": 100,
+        "y": 400
+      },
+      "inspect_data": {
+        "x": 380,
+        "y": 400
+      },
+      "explore_structure": {
+        "x": 660,
+        "y": 400
+      },
+      "filter_2024": {
+        "x": 940,
+        "y": 400
+      },
+      "analyze_standard": {
+        "x": 1220,
+        "y": 220
+      },
+      "find_mixed_days": {
+        "x": 1500,
+        "y": 40
+      },
+      "debug_values": {
+        "x": 1500,
+        "y": 220
+      },
+      "check_tag_values": {
+        "x": 1500,
+        "y": 400
+      },
+      "analyze_standard_correct": {
+        "x": 1220,
+        "y": 580
+      },
+      "find_mixed_days_correct": {
+        "x": 1500,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_data-->inspect_data",
+        "source": {
+          "operatorID": "load_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "inspect_data-->explore_structure",
+        "source": {
+          "operatorID": "inspect_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "explore_structure",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "explore_structure-->filter_2024",
+        "source": {
+          "operatorID": "explore_structure",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_2024",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_2024-->analyze_standard",
+        "source": {
+          "operatorID": "filter_2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "analyze_standard",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_standard-->find_mixed_days",
+        "source": {
+          "operatorID": "analyze_standard",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_mixed_days",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_standard-->debug_values",
+        "source": {
+          "operatorID": "analyze_standard",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_values",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_standard-->check_tag_values",
+        "source": {
+          "operatorID": "analyze_standard",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_tag_values",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_2024-->analyze_standard_correct",
+        "source": {
+          "operatorID": "filter_2024",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "analyze_standard_correct",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_standard_correct-->find_mixed_days_correct",
+        "source": {
+          "operatorID": "analyze_standard_correct",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_mixed_days_correct",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

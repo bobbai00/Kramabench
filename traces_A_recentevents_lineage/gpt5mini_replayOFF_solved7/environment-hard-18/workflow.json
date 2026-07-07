@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-68-6-1781073917250",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "precipitations_all",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    paths = sorted(glob.glob('data/environment/input/monthly_precipitations_*.csv'))\n    dfs = [pd.read_csv(p) for p in paths]\n    return pd.concat(dfs, ignore_index=True)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all monthly precipitation files: data/environment/input/monthly_precipitations_chatham.csv, monthly_precipitations_amherst.csv, monthly_precipitations_boston.csv, monthly_precipitations_ashburnham.csv. Concatenate into one table.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "water_testing_all",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    paths = sorted(glob.glob('data/environment/input/water-body-testing-*.csv'))\n    dfs = [pd.read_csv(p) for p in paths]\n    return pd.concat(dfs, ignore_index=True)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water body testing files: data/environment/input/water-body-testing-2020.csv, water-body-testing-2021.csv, water-body-testing-2022.csv, water-body-testing-2023.csv. Concatenate into one table.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "precip_2020_2023",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(precipitations_all):\n    df = precipitations_all\n    months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'].notnull()]\n    df['Year'] = df['Year'].astype(int)\n    df = df[df['Year'].between(1900,2100)]\n    for m in months:\n        df[m] = pd.to_numeric(df[m], errors='coerce')\n    medians = {m: df[m].median(skipna=True) for m in months}\n    mask = df['Year'].between(2020,2023)\n    df.loc[mask, months] = df.loc[mask, months].fillna(value=medians)\n    df['Annual_calc'] = df[months].sum(axis=1)\n    out = df[df['Year'].between(2020,2023)].groupby('Year', as_index=False).agg(mean_annual=('Annual_calc','mean'))\n    return out"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Select rows with numeric Year; convert monthly columns to numeric; compute month medians and impute missing month values for years 2020-2023 with the month medians; compute Annual as sum of months; output mean annual precipitation across stations for each Year in [2020,2023].",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fresh_exceedance_2020_2023",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(water_testing_all):\n    df = water_testing_all\n    df = df[df['Beach Type Description'].str.lower() == 'fresh']\n    df = df[df['Year'].isin([2020,2021,2022,2023])]\n    is_exceed = (df['Violation'].fillna('no').astype(str).str.strip().str.lower() == 'yes').astype(int)\n    out = df.assign(is_exceed=is_exceed).groupby('Year', as_index=False).agg(total_samples=('is_exceed','size'), exceedances=('is_exceed','sum'))\n    out['exceedance_rate'] = out['exceedances'] / out['total_samples']\n    return out[['Year','exceedance_rate']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water_testing_all to Fresh beaches and years 2020-2023; normalize Violation to lower-case, treat missing as 'no'; compute per-year exceedance_rate = exceedances / total samples; return Year and exceedance_rate.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "precipitations_all": {
+        "x": 100,
+        "y": 40
+      },
+      "water_testing_all": {
+        "x": 100,
+        "y": 220
+      },
+      "precip_2020_2023": {
+        "x": 380,
+        "y": 40
+      },
+      "fresh_exceedance_2020_2023": {
+        "x": 380,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "precipitations_all-->precip_2020_2023",
+        "source": {
+          "operatorID": "precipitations_all",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "precip_2020_2023",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "water_testing_all-->fresh_exceedance_2020_2023",
+        "source": {
+          "operatorID": "water_testing_all",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fresh_exceedance_2020_2023",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

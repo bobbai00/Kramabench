@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-45-11-1781033768078",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_new_england_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/new_england_states.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load New England states reference data from new_england_states.csv to identify which states are in the New England region.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_identity_theft_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = []\n    for file in files:\n        df = pd.read_csv(file, header=1)\n        dfs.append(df)\n    result = pd.concat(dfs, ignore_index=True)\n    return result.dropna(how='all')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all Identity Theft data CSV files from State MSA Identity Theft data folder using header=1 to skip the source rows, concatenate all files, and drop empty rows.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_identity_theft_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_identity_theft_data) -> pd.DataFrame:\n    df = load_identity_theft_data.copy()\n    df.columns = ['Metropolitan_Area', 'Reports']\n    df = df[df['Metropolitan_Area'] != 'Metropolitan Area'].copy()\n    df = df.dropna(subset=['Reports'])\n    df = df[~df['Reports'].astype(str).str.contains('Metropolitan Areas are defined|Source:', na=False)]\n    df['Reports'] = df['Reports'].astype(str).str.replace(',', '').astype(int)\n    return df.drop_duplicates()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean Identity Theft data: rename columns, remove header row, drop rows with metadata/sources, convert Reports to integer by removing commas, and drop duplicates.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_new_england_metros",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(clean_identity_theft_data, load_new_england_states) -> pd.DataFrame:\n    ne_states = set(load_new_england_states['Name'].values)\n    state_abbrev = {'Connecticut': 'CT', 'Maine': 'ME', 'Massachusetts': 'MA', \n                    'New Hampshire': 'NH', 'Rhode Island': 'RI', 'Vermont': 'VT'}\n    ne_abbrev = set(state_abbrev[state] for state in ne_states)\n    \n    def has_ne_state(metro_name):\n        for abbrev in ne_abbrev:\n            if f', {abbrev}' in metro_name or f', {abbrev} ' in metro_name:\n                return True\n        return False\n    \n    filtered = clean_identity_theft_data[clean_identity_theft_data['Metropolitan_Area'].apply(has_ne_state)]\n    return filtered.sort_values('Reports', ascending=False).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter Identity Theft data to only include metropolitan areas in New England states (CT, ME, MA, NH, RI, VT) by checking for state abbreviations in the metro area name, then sort by Reports descending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "top_5_metros",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_new_england_metros) -> pd.DataFrame:\n    return filter_new_england_metros.nlargest(5, 'Reports')[['Metropolitan_Area']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract the top 5 metropolitan areas with the most Identity Theft reports from the filtered New England data, sorted by Reports descending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_new_england_states": {
+        "x": 380,
+        "y": 220
+      },
+      "load_identity_theft_data": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_identity_theft_data": {
+        "x": 380,
+        "y": 40
+      },
+      "filter_new_england_metros": {
+        "x": 660,
+        "y": 130
+      },
+      "top_5_metros": {
+        "x": 940,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_identity_theft_data-->clean_identity_theft_data",
+        "source": {
+          "operatorID": "load_identity_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_identity_theft_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_identity_theft_data-->filter_new_england_metros",
+        "source": {
+          "operatorID": "clean_identity_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_new_england_metros",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_new_england_states-->filter_new_england_metros",
+        "source": {
+          "operatorID": "load_new_england_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_new_england_metros",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "filter_new_england_metros-->top_5_metros",
+        "source": {
+          "operatorID": "filter_new_england_metros",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "top_5_metros",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

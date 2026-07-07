@@ -1,0 +1,300 @@
+{
+  "headId": "step-agent-155-11-1781159272344",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\")\n    dfs = []\n    for f in files[:3]:\n        df = pd.read_csv(f, nrows=5)\n        df['_file'] = f\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 3 fraud CSV files (5 rows each) from State MSA Fraud and Other data folder to inspect structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_identity",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    dfs = []\n    for f in files[:3]:\n        df = pd.read_csv(f, nrows=5)\n        df['_file'] = f\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 3 identity theft CSV files (5 rows each) from State MSA Identity Theft data folder to inspect structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "all_fraud",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\")\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, skiprows=1, header=0)\n        df.columns = ['Metropolitan Area', 'Fraud_Reports']\n        df['_file'] = f\n        dfs.append(df)\n    result = pd.concat(dfs, ignore_index=True)\n    result = result.dropna(subset=['Metropolitan Area'])\n    result = result[result['Metropolitan Area'] != 'Metropolitan Area']\n    result['Fraud_Reports'] = pd.to_numeric(result['Fraud_Reports'], errors='coerce')\n    return result.dropna(subset=['Fraud_Reports'])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all fraud CSV files from 'State MSA Fraud and Other data' folder using skiprows=1 to skip the blank header row. Columns renamed to 'Metropolitan Area' and 'Fraud_Reports'. Filters out header rows and non-numeric entries.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "all_identity",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, skiprows=1, header=0)\n        df.columns = ['Metropolitan Area', 'Identity_Reports']\n        df['_file'] = f\n        dfs.append(df)\n    result = pd.concat(dfs, ignore_index=True)\n    result = result.dropna(subset=['Metropolitan Area'])\n    result = result[result['Metropolitan Area'] != 'Metropolitan Area']\n    result['Identity_Reports'] = pd.to_numeric(result['Identity_Reports'], errors='coerce')\n    return result.dropna(subset=['Identity_Reports'])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all identity theft CSV files from 'State MSA Identity Theft data' folder using skiprows=1 to skip the blank header row. Columns renamed to 'Metropolitan Area' and 'Identity_Reports'. Filters out header rows and non-numeric entries.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compare",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(all_fraud, all_identity):\n    fraud = all_fraud[['Metropolitan Area', 'Fraud_Reports']].copy()\n    identity = all_identity[['Metropolitan Area', 'Identity_Reports']].copy()\n    \n    fraud['Metropolitan Area'] = fraud['Metropolitan Area'].astype(str).str.strip()\n    identity['Metropolitan Area'] = identity['Metropolitan Area'].astype(str).str.strip()\n    \n    fraud['Fraud_Reports'] = pd.to_numeric(fraud['Fraud_Reports'], errors='coerce')\n    identity['Identity_Reports'] = pd.to_numeric(identity['Identity_Reports'], errors='coerce')\n    \n    merged = identity.merge(fraud, on='Metropolitan Area', how='inner')\n    \n    result = merged[merged['Identity_Reports'] > merged['Fraud_Reports']]\n    \n    return result if len(result) > 0 else pd.DataFrame({'answer': ['No matching rows \u2014 identity > fraud not found'], 'merged_count': [len(merged)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge identity theft and fraud data on 'Metropolitan Area' (inner join after stripping whitespace), convert both report columns to numeric, then filter to rows where Identity_Reports > Fraud_Reports. Returns matching rows or diagnostic info if none found.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_keys",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(all_fraud, all_identity):\n    fraud_keys = set(all_fraud['Metropolitan Area'].str.strip())\n    identity_keys = set(all_identity['Metropolitan Area'].str.strip())\n    common = fraud_keys & identity_keys\n    fraud_only = list(fraud_keys - identity_keys)[:5]\n    identity_only = list(identity_keys - fraud_keys)[:5]\n    return pd.DataFrame({\n        'common_count': [len(common)],\n        'fraud_only_sample': [str(fraud_only)],\n        'identity_only_sample': [str(identity_only)],\n        'fraud_sample': [str(list(fraud_keys)[:3])],\n        'identity_sample': [str(list(identity_keys)[:3])]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug join key mismatches between fraud and identity theft Metropolitan Area columns. Shows common count and sample unmatched keys.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_identity_only",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(all_fraud, all_identity):\n    fraud_areas = set(all_fraud['Metropolitan Area'].str.strip())\n    identity_areas = set(all_identity['Metropolitan Area'].str.strip())\n    \n    # Areas in identity but NOT in fraud \u2014 these have identity reports but 0 fraud reports\n    identity_only = identity_areas - fraud_areas\n    \n    # Get those rows from identity dataset\n    identity_only_df = all_identity[all_identity['Metropolitan Area'].str.strip().isin(identity_only)].copy()\n    identity_only_df['Fraud_Reports'] = 0\n    \n    # Filter to rows where identity > 0 (all of them, since they have reports)\n    result = identity_only_df[identity_only_df['Identity_Reports'] > 0]\n    \n    summary = pd.DataFrame({\n        'identity_only_count': [len(identity_only)],\n        'with_positive_identity_reports': [len(result)],\n        'sample_area': [result['Metropolitan Area'].iloc[0] if len(result) > 0 else 'None'],\n        'sample_identity_reports': [result['Identity_Reports'].iloc[0] if len(result) > 0 else 0],\n        'answer': ['Yes \u2014 identity > fraud (0) in identity-only areas' if len(result) > 0 else 'No']\n    })\n    return summary\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check metropolitan areas that appear in identity theft data but NOT in fraud data. These areas have identity theft reports but 0 fraud reports, meaning identity > fraud. Returns count and sample area plus final answer.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud": {
+        "x": 100,
+        "y": 40
+      },
+      "load_identity": {
+        "x": 100,
+        "y": 220
+      },
+      "all_fraud": {
+        "x": 100,
+        "y": 400
+      },
+      "all_identity": {
+        "x": 100,
+        "y": 580
+      },
+      "compare": {
+        "x": 380,
+        "y": 505
+      },
+      "debug_keys": {
+        "x": 380,
+        "y": 190
+      },
+      "check_identity_only": {
+        "x": 380,
+        "y": 820
+      }
+    },
+    "links": [
+      {
+        "linkID": "all_fraud-->debug_keys",
+        "source": {
+          "operatorID": "all_fraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_keys",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "all_identity-->debug_keys",
+        "source": {
+          "operatorID": "all_identity",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_keys",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "all_fraud-->compare",
+        "source": {
+          "operatorID": "all_fraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "all_identity-->compare",
+        "source": {
+          "operatorID": "all_identity",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "all_fraud-->check_identity_only",
+        "source": {
+          "operatorID": "all_fraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_identity_only",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "all_identity-->check_identity_only",
+        "source": {
+          "operatorID": "all_identity",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_identity_only",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

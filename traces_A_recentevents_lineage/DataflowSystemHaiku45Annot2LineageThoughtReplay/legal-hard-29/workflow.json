@@ -1,0 +1,483 @@
+{
+  "headId": "step-agent-105-21-1781034730647",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    all_data = []\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv')\n    \n    for filepath in files:\n        try:\n            df = pd.read_csv(filepath, skiprows=2)\n            df = df.dropna(subset=['Metropolitan Area'])\n            df = df[df['Metropolitan Area'].str.strip() != '']\n            df = df[~df['Metropolitan Area'].str.contains('Metropolitan Areas are defined|Source:', na=False)]\n            if len(df) > 0:\n                state = filepath.split('/')[-1].replace('.csv', '')\n                df['State'] = state\n                all_data.append(df)\n        except Exception as e:\n            continue\n    \n    if all_data:\n        result = pd.concat(all_data, ignore_index=True)\n        return result\n    else:\n        return pd.DataFrame()\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from State MSA Fraud and Other data folder. Skip first 2 rows (title and blank), read header, filter out blank rows and metadata rows containing 'Metropolitan Areas are defined' or 'Source:'. Add State column extracted from filename.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "explore_raw_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv')\n    print(f\"Found {len(files)} CSV files\")\n    for f in files[:3]:\n        print(f\"\\n{'='*80}\")\n        print(f\"File: {f}\")\n        print('='*80)\n        with open(f, 'r', encoding='utf-8', errors='ignore') as file:\n            for i, line in enumerate(file):\n                if i < 15:\n                    print(f\"Line {i}: {line.rstrip()}\")\n                else:\n                    break\n    return pd.DataFrame({'file': [files[0] if files else '']})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Explore raw CSV files to understand their structure and content, showing first 15 lines of first 3 files",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "raw_file_content",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv')\n    if not files:\n        return pd.DataFrame()\n    \n    with open(files[0], 'r', encoding='utf-8') as f:\n        lines = f.readlines()[:30]\n    \n    return pd.DataFrame({'line': [line.rstrip('\\n') for line in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 30 lines of the first CSV file to understand the actual structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_reports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data.copy()\n    df['# of Reports'] = df['# of Reports'].str.replace(',', '').astype(int)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the # of Reports column by removing commas and converting to integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "state_totals",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_reports) -> pd.DataFrame:\n    state_total = clean_reports.groupby('State')['# of Reports'].sum().reset_index()\n    state_total.columns = ['State', 'Total_Reports_State']\n    return state_total\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate total fraud reports per state by aggregating all metro areas",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "metro_with_percentages",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_reports, state_totals) -> pd.DataFrame:\n    merged = clean_reports.merge(state_totals, on='State', how='left')\n    merged['Percentage'] = (merged['# of Reports'] / merged['Total_Reports_State']) * 100\n    return merged[['Metropolitan Area', 'State', '# of Reports', 'Total_Reports_State', 'Percentage']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the percentage of fraud reports for each metro area within its state",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "metro_counts_per_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_reports) -> pd.DataFrame:\n    metro_count = clean_reports.groupby('State').size().reset_index(name='Metro_Count')\n    return metro_count\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count number of metro areas per state",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "states_with_5plus_metros",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metro_counts_per_state) -> pd.DataFrame:\n    return metro_counts_per_state[metro_counts_per_state['Metro_Count'] >= 5]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to states with 5 or more metro areas",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_filtered_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metro_with_percentages, states_with_5plus_metros) -> pd.DataFrame:\n    result = metro_with_percentages.merge(states_with_5plus_metros[['State']], on='State', how='inner')\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter metro areas to only those in states with 5+ metro areas",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(final_filtered_data) -> pd.DataFrame:\n    max_idx = final_filtered_data['Percentage'].idxmax()\n    result_row = final_filtered_data.loc[[max_idx]]\n    return result_row\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the metro area with the largest percentage of fraud reports in its state among states with 5+ metros",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(final_filtered_data):\n    sorted_data = final_filtered_data.sort_values('Percentage', ascending=False)\n    return sorted_data.head(10)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Show top 10 metro areas by percentage within their state, to verify the answer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 40
+      },
+      "explore_raw_data": {
+        "x": 100,
+        "y": 220
+      },
+      "raw_file_content": {
+        "x": 100,
+        "y": 400
+      },
+      "clean_reports": {
+        "x": 380,
+        "y": 40
+      },
+      "state_totals": {
+        "x": 660,
+        "y": 122.5
+      },
+      "metro_with_percentages": {
+        "x": 940,
+        "y": 40
+      },
+      "metro_counts_per_state": {
+        "x": 660,
+        "y": 385
+      },
+      "states_with_5plus_metros": {
+        "x": 940,
+        "y": 385
+      },
+      "final_filtered_data": {
+        "x": 1220,
+        "y": 40
+      },
+      "answer": {
+        "x": 1500,
+        "y": 40
+      },
+      "verify_answer": {
+        "x": 1500,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->clean_reports",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_reports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_reports-->state_totals",
+        "source": {
+          "operatorID": "clean_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "state_totals",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_reports-->metro_with_percentages",
+        "source": {
+          "operatorID": "clean_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "metro_with_percentages",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "state_totals-->metro_with_percentages",
+        "source": {
+          "operatorID": "state_totals",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "metro_with_percentages",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "clean_reports-->metro_counts_per_state",
+        "source": {
+          "operatorID": "clean_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "metro_counts_per_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metro_counts_per_state-->states_with_5plus_metros",
+        "source": {
+          "operatorID": "metro_counts_per_state",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "states_with_5plus_metros",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metro_with_percentages-->final_filtered_data",
+        "source": {
+          "operatorID": "metro_with_percentages",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_filtered_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "states_with_5plus_metros-->final_filtered_data",
+        "source": {
+          "operatorID": "states_with_5plus_metros",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_filtered_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "final_filtered_data-->answer",
+        "source": {
+          "operatorID": "final_filtered_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "answer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "final_filtered_data-->verify_answer",
+        "source": {
+          "operatorID": "final_filtered_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_answer",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

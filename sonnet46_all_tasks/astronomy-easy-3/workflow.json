@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-136-6-1781158817614",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_initial_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/astronomy/input/STORM-AI/warmup/v2/wu001_to_wu715-initial_states.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the initial states file from data/astronomy/input/STORM-AI/warmup/v2/wu001_to_wu715-initial_states.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_swarm_density",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-*2015*.csv')\n    dfs = [pd.read_csv(f) for f in sorted(files)]\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all Swarm Alpha satellite density data files matching swarma-*2015*.csv from data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_initial_states_2015",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_initial_states) -> pd.DataFrame:\n    df = load_initial_states.copy()\n    df['Timestamp'] = pd.to_datetime(df['Timestamp'])\n    # Filter to 2015, at 00:00, altitude between 450 and 500 km\n    mask = (\n        (df['Timestamp'].dt.year == 2015) &\n        (df['Timestamp'].dt.hour == 0) &\n        (df['Timestamp'].dt.minute == 0) &\n        (df['Altitude (km)'] >= 450) &\n        (df['Altitude (km)'] <= 500)\n    )\n    return df[mask].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter initial states to 2015, timestamps at 00:00, and altitude between 450 and 500 km.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "match_and_average_density",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_initial_states_2015, load_swarm_density):\n    import numpy as np\n\n    # Get the unique 00:00 timestamps from filtered initial states (2015, 450-500km)\n    ts_df = filter_initial_states_2015.copy()\n    # Normalize timestamps to date strings (YYYY-MM-DD) for matching at 00:00\n    ts_df['Timestamp'] = pd.to_datetime(ts_df['Timestamp'], utc=True).dt.normalize()\n    unique_dates = ts_df['Timestamp'].unique()\n\n    # Parse swarm density timestamps\n    density_df = load_swarm_density.copy()\n    density_df['Timestamp'] = pd.to_datetime(density_df['Timestamp'], utc=True)\n\n    # Filter density to only rows at 00:00 (midnight) that match the initial state dates\n    density_midnight = density_df[density_df['Timestamp'].isin(unique_dates)]\n\n    # Clean: remove NaN and sentinel value 9.99E32\n    col = 'Orbit Mean Density (kg/m^3)'\n    density_clean = density_midnight[col].replace(9.99e32, np.nan).dropna()\n\n    avg = density_clean.mean()\n    return pd.DataFrame({'average_density': [avg], 'n_points': [len(density_clean)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Match Swarm Alpha density data at 00:00 timestamps from the filtered 2015 initial states (450-500km altitude), clean out NaN and 9.99E32 sentinel values, and compute the average density.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_initial_states": {
+        "x": 100,
+        "y": 40
+      },
+      "load_swarm_density": {
+        "x": 380,
+        "y": 220
+      },
+      "filter_initial_states_2015": {
+        "x": 380,
+        "y": 40
+      },
+      "match_and_average_density": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_initial_states-->filter_initial_states_2015",
+        "source": {
+          "operatorID": "load_initial_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_initial_states_2015",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_initial_states_2015-->match_and_average_density",
+        "source": {
+          "operatorID": "filter_initial_states_2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "match_and_average_density",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_swarm_density-->match_and_average_density",
+        "source": {
+          "operatorID": "load_swarm_density",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "match_and_average_density",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

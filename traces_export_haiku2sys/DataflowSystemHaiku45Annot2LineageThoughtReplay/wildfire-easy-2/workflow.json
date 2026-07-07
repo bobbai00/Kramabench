@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-299-6-1781045038366",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "nifc_areas",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/nifc_geographic_areas.gpkg')\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NIFC geographic areas from nifc_geographic_areas.gpkg using geopandas",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "usa_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/usa.gpkg')\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load USA states data from usa.gpkg using geopandas",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "state_abbrev",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(usa_states) -> pd.DataFrame:\n    import geopandas as gpd\n    \n    gdf_states = gpd.GeoDataFrame(usa_states, geometry='geometry')\n    \n    state_abbrev_map = {\n        'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',\n        'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',\n        'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',\n        'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',\n        'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',\n        'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',\n        'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',\n        'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',\n        'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',\n        'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',\n        'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',\n        'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',\n        'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'\n    }\n    \n    gdf_states['state_abbrev'] = gdf_states['adm1_name'].map(state_abbrev_map)\n    return gdf_states[['adm1_id', 'adm1_name', 'state_abbrev', 'geometry']].drop_duplicates(subset=['adm1_id'])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract unique US states with abbreviations from usa_states; map adm1_name to state_abbrev (e.g., Alabama -> AL)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "nifc_area_state_intersections",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(nifc_areas, state_abbrev) -> pd.DataFrame:\n    import geopandas as gpd\n    \n    gdf_nifc = gpd.GeoDataFrame(nifc_areas, geometry='geometry')\n    gdf_states = gpd.GeoDataFrame(state_abbrev, geometry='geometry')\n    \n    results = []\n    for idx_nifc, row_nifc in gdf_nifc.iterrows():\n        nifc_abbrev = row_nifc['GACCAbbreviation']\n        nifc_geom = row_nifc['geometry']\n        \n        for idx_state, row_state in gdf_states.iterrows():\n            state_abbrev_val = row_state['state_abbrev']\n            state_geom = row_state['geometry']\n            \n            if nifc_geom.intersects(state_geom):\n                results.append({\n                    'NIFC_Abbrev': nifc_abbrev,\n                    'State_Abbrev': state_abbrev_val\n                })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Spatial intersection: find all pairs of NIFC areas and US states that intersect geometrically",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "count_states_per_nifc",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(nifc_area_state_intersections) -> pd.DataFrame:\n    result = nifc_area_state_intersections.drop_duplicates().groupby('NIFC_Abbrev').size().reset_index(name='state_count')\n    return result.sort_values('state_count', ascending=False)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count unique US states per NIFC area by removing duplicates and grouping; sort by state count descending",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "nifc_areas": {
+        "x": 380,
+        "y": 40
+      },
+      "usa_states": {
+        "x": 100,
+        "y": 220
+      },
+      "state_abbrev": {
+        "x": 380,
+        "y": 220
+      },
+      "nifc_area_state_intersections": {
+        "x": 660,
+        "y": 130
+      },
+      "count_states_per_nifc": {
+        "x": 940,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "usa_states-->state_abbrev",
+        "source": {
+          "operatorID": "usa_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "state_abbrev",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifc_areas-->nifc_area_state_intersections",
+        "source": {
+          "operatorID": "nifc_areas",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nifc_area_state_intersections",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "state_abbrev-->nifc_area_state_intersections",
+        "source": {
+          "operatorID": "state_abbrev",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nifc_area_state_intersections",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "nifc_area_state_intersections-->count_states_per_nifc",
+        "source": {
+          "operatorID": "nifc_area_state_intersections",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_states_per_nifc",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

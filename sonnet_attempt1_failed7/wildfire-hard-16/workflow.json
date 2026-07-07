@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-112-6-1781149920521",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the NOAA wildfires dataset from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_vars",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the NOAA wildfires variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv with cp1252 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_jfm_known",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_data) -> pd.DataFrame:\n    df = load_data.copy()\n    df['start_date_parsed'] = pd.to_datetime(df['start_date'], errors='coerce')\n    df['month'] = df['start_date_parsed'].dt.month\n    # Known causes: exclude 'U' (unknown) and 'N' (not applicable / natural unspecified)\n    known = df[df['cause'].isin(['L', 'H'])]\n    # Filter to Jan, Feb, Mar\n    jfm = known[known['month'].isin([1, 2, 3])]\n    return jfm[['region', 'cause', 'month']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter wildfire data to: (1) fires with known causes (cause != 'U' and cause != 'N'), and (2) fires starting in January, February, or March. Parse start_date to extract month.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "chi_square_test",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_jfm_known):\n    from scipy.stats import chi2_contingency\n    contingency = pd.crosstab(filter_jfm_known['region'], filter_jfm_known['cause'])\n    chi2, p, dof, expected = chi2_contingency(contingency)\n    result = pd.DataFrame({\n        'metric': ['chi2_statistic', 'p_value', 'degrees_of_freedom'],\n        'value': [round(chi2, 3), round(p, 3), dof]\n    })\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Create a contingency table of region vs cause from the JFM known-cause fires, then perform a chi-square test of independence using scipy.stats.chi2_contingency. Returns chi2 statistic, p-value, and degrees of freedom.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_data": {
+        "x": 100,
+        "y": 40
+      },
+      "load_vars": {
+        "x": 100,
+        "y": 220
+      },
+      "filter_jfm_known": {
+        "x": 380,
+        "y": 40
+      },
+      "chi_square_test": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_data-->filter_jfm_known",
+        "source": {
+          "operatorID": "load_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_jfm_known",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_jfm_known-->chi_square_test",
+        "source": {
+          "operatorID": "filter_jfm_known",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "chi_square_test",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

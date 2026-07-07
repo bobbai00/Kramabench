@@ -1,0 +1,346 @@
+{
+  "headId": "step-agent-163-15-1781161295151",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_omni2_format",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/astronomy/input/omni2_low_res/omni2.text', 'r') as f:\n        content = f.read()\n    return pd.DataFrame({'content': [content[:8000]]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load omni2.text format specification from data/astronomy/input/omni2_low_res/omni2.text",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_tle_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/astronomy/input/TLE/43180.tle', 'r') as f:\n        lines = f.readlines()\n    rows = []\n    for i, line in enumerate(lines):\n        rows.append({'line_num': i, 'content': line.rstrip()})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw TLE file for SATCAT 43180 to inspect its structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_omni2_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/astronomy/input/omni2_low_res/omni2_2024.dat', 'r') as f:\n        lines = f.readlines()\n    rows = []\n    for i, line in enumerate(lines[:5]):\n        rows.append({'line_num': i, 'content': line.rstrip()})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 5 lines of omni2_2024.dat to inspect its structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_tle",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import math\n    mu = 398600.4418  # km^3/s^2\n\n    lines = []\n    with open('data/astronomy/input/TLE/43180.tle', 'r') as f:\n        lines = [l.strip() for l in f.readlines() if l.strip()]\n\n    records = []\n    i = 0\n    while i < len(lines) - 1:\n        l1 = lines[i]\n        l2 = lines[i+1]\n        if l1.startswith('1 ') and l2.startswith('2 '):\n            # Parse epoch from line 1\n            epoch_year_2digit = int(l1[18:20])\n            epoch_day = float(l1[20:32])\n            year = 2000 + epoch_year_2digit if epoch_year_2digit < 57 else 1900 + epoch_year_2digit\n\n            # Convert day-of-year to datetime\n            import datetime\n            epoch_dt = datetime.datetime(year, 1, 1) + datetime.timedelta(days=epoch_day - 1)\n            # Round to nearest hour\n            epoch_rounded = epoch_dt.replace(minute=0, second=0, microsecond=0) + \\\n                datetime.timedelta(hours=round(epoch_dt.minute/60 + epoch_dt.second/3600))\n\n            # Parse mean motion from line 2 (revs/day)\n            mean_motion_rev_per_day = float(l2[52:63])\n            # Convert to rad/s\n            n = mean_motion_rev_per_day * 2 * math.pi / 86400.0\n            # Semi-major axis: a = (mu/n^2)^(1/3)\n            a = (mu / n**2) ** (1/3)\n\n            records.append({\n                'epoch_dt': epoch_dt,\n                'epoch_rounded': epoch_rounded,\n                'mean_motion_rev_per_day': mean_motion_rev_per_day,\n                'semi_major_axis_km': a\n            })\n            i += 2\n        else:\n            i += 1\n\n    df = pd.DataFrame(records)\n    df = df.sort_values('epoch_dt').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse TLE file for SATCAT 43180. Extract epoch (rounded to nearest hour) and compute semi-major axis in km from mean motion using mu=398600.4418 km^3/s^2. Path: data/astronomy/input/TLE/43180.tle",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "read_format_spec",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/astronomy/input/omni2_low_res/omni2.text', 'r') as f:\n        content = f.read()\n    lines = content.split('\\n')\n    relevant = [l for l in lines if 'ap' in l.lower() or 'AP' in l or 'Col' in l or 'col' in l or 'Field' in l or 'field' in l or 'INDEX' in l.upper()]\n    return pd.DataFrame({'line': relevant})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Read omni2.text format spec from data/astronomy/input/omni2_low_res/omni2.text to find AP index column position.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "read_full_format_spec",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/astronomy/input/omni2_low_res/omni2.text', 'r') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [l.rstrip('\\n') for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load full content of omni2.text format specification file from data/astronomy/input/omni2_low_res/omni2.text to find AP index column position.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_ap_column",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(read_full_format_spec):\n    # Search for AP index in the format spec\n    lines = read_full_format_spec['line'].tolist()\n    ap_lines = [(i, l) for i, l in enumerate(lines) if 'ap' in l.lower() or 'AP' in l]\n    return pd.DataFrame(ap_lines, columns=['line_num', 'content'])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Search for AP index column definition in the omni2.text format specification.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "parse_omni2_ap",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import re\n    \n    rows = []\n    with open('data/astronomy/input/omni2_low_res/omni2_2024.dat', 'r') as f:\n        for line in f:\n            parts = line.split()\n            if len(parts) < 50:\n                continue\n            year = int(parts[0])\n            doy  = int(parts[1])\n            hour = int(parts[2])\n            # field 50 is 0-indexed as parts[49]\n            ap   = int(parts[49])\n            \n            dt = pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(days=doy-1, hours=hour)\n            rows.append({'datetime': dt, 'ap_index': ap})\n    \n    df = pd.DataFrame(rows)\n    # Filter to May 2024\n    df = df[(df['datetime'] >= '2024-05-01') & (df['datetime'] < '2024-05-31')]\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse OMNI2 hourly data from data/astronomy/input/omni2_low_res/omni2_2024.dat. Extract year, day-of-year, hour (fields 0,1,2) and AP index (field 50, 0-indexed as parts[49]). Create datetime column and filter to May 1-30, 2024.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "lag_correlation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_tle, parse_omni2_ap):\n    import numpy as np\n    from scipy import stats\n\n    # --- TLE: compute SMA changes ---\n    tle = parse_tle.copy()\n    tle['epoch_rounded'] = pd.to_datetime(tle['epoch_rounded'])\n    tle = tle.drop_duplicates(subset=['epoch_rounded']).sort_values('epoch_rounded').reset_index(drop=True)\n\n    # Compute SMA change between consecutive TLE entries\n    tle['sma_change'] = tle['semi_major_axis_km'].diff()\n    tle = tle.dropna(subset=['sma_change'])\n\n    # Filter to May 1-30, 2024\n    may_start = pd.Timestamp('2024-05-01')\n    may_end   = pd.Timestamp('2024-05-30 23:59:59')\n    tle = tle[(tle['epoch_rounded'] >= may_start) & (tle['epoch_rounded'] <= may_end)]\n\n    # --- OMNI2: AP index ---\n    omni = parse_omni2_ap.copy()\n    omni['datetime'] = pd.to_datetime(omni['datetime'])\n    omni = omni.sort_values('datetime').reset_index(drop=True)\n\n    results = []\n    for lag in range(49):  # 0 to 48\n        # Shift AP index back by 'lag' hours: for each TLE epoch T,\n        # the lagged AP is the AP at time T - lag hours\n        merged_rows = []\n        for _, row in tle.iterrows():\n            t = row['epoch_rounded']\n            t_lagged = t - pd.Timedelta(hours=lag)\n            ap_row = omni[omni['datetime'] == t_lagged]\n            if len(ap_row) == 1:\n                merged_rows.append({'sma_change': row['sma_change'], 'ap': ap_row.iloc[0]['ap_index']})\n\n        if len(merged_rows) < 3:\n            results.append({'lag': lag, 'n': len(merged_rows), 'r2': np.nan})\n            continue\n\n        df_m = pd.DataFrame(merged_rows)\n        r, p = stats.pearsonr(df_m['ap'], df_m['sma_change'])\n        results.append({'lag': lag, 'n': len(merged_rows), 'r2': r**2, 'r': r})\n\n    res_df = pd.DataFrame(results)\n    return res_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute r\u00b2 correlation between SMA change (from TLE) and AP index (from OMNI2) for lags 0-48 hours. For each lag L, align AP index at time T-L hours with SMA change at time T. Filter to May 1-30, 2024. Return lag, n (matched pairs), r\u00b2, r for each lag.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "best_lag",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(lag_correlation):\n    # Find the lag with maximum r\u00b2 correlation\n    best = lag_correlation.loc[lag_correlation['r2'].idxmax()]\n    \n    # Show top 10 lags by r\u00b2\n    top10 = lag_correlation.nlargest(10, 'r2')[['lag', 'n', 'r2', 'r']].reset_index(drop=True)\n    print(\"Top 10 lags by r\u00b2:\")\n    print(top10.to_string())\n    print(f\"\\nBest lag: {int(best['lag'])} hours, r\u00b2={best['r2']:.6f}, r={best['r']:.6f}, n={int(best['n'])}\")\n    \n    return top10\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the best lag (0-48 hours) that maximizes r\u00b2 correlation between SMA change and AP index. Shows top 10 lags sorted by r\u00b2.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_omni2_format": {
+        "x": 100,
+        "y": 40
+      },
+      "load_tle_raw": {
+        "x": 100,
+        "y": 220
+      },
+      "load_omni2_raw": {
+        "x": 100,
+        "y": 400
+      },
+      "parse_tle": {
+        "x": 100,
+        "y": 940
+      },
+      "read_format_spec": {
+        "x": 100,
+        "y": 760
+      },
+      "read_full_format_spec": {
+        "x": 100,
+        "y": 580
+      },
+      "find_ap_column": {
+        "x": 380,
+        "y": 580
+      },
+      "parse_omni2_ap": {
+        "x": 100,
+        "y": 1120
+      },
+      "lag_correlation": {
+        "x": 380,
+        "y": 1030
+      },
+      "best_lag": {
+        "x": 660,
+        "y": 1030
+      }
+    },
+    "links": [
+      {
+        "linkID": "read_full_format_spec-->find_ap_column",
+        "source": {
+          "operatorID": "read_full_format_spec",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_ap_column",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle-->lag_correlation",
+        "source": {
+          "operatorID": "parse_tle",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "lag_correlation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_omni2_ap-->lag_correlation",
+        "source": {
+          "operatorID": "parse_omni2_ap",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "lag_correlation",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "lag_correlation-->best_lag",
+        "source": {
+          "operatorID": "lag_correlation",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "best_lag",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "headId": "step-agent-48-24-1781033850204",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_msa_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, skiprows=2)\n        df = df.dropna(how='all')\n        df = df[df['Metropolitan Area'].notna()]\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all Identity Theft data CSV files from State MSA Identity Theft data directory. Skip first 2 metadata rows, use row 2 as header. Drop all-null rows and filter to rows with valid Metropolitan Area values.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    if not files:\n        return pd.DataFrame({'error': ['No files found']})\n    \n    # Read first file with no header to see raw structure\n    with open(files[0], 'r') as f:\n        lines = [f.readline() for _ in range(20)]\n    \n    return pd.DataFrame({'raw_lines': lines})"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 20 raw lines of the first CSV file to understand the actual structure and column names.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_msa_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_msa_data) -> pd.DataFrame:\n    df = load_msa_data\n    \n    # Remove rows with NaN values in either column\n    df = df.dropna()\n    \n    # Remove metadata rows (those containing \"Metropolitan Areas are defined\" or \"Source:\")\n    df = df[~df['Metropolitan Area'].str.contains('Metropolitan Areas are defined|Source:|Consumer Sentinel', na=False)]\n    \n    # Convert # of Reports to numeric: remove commas, convert to float, then to int\n    df['# of Reports'] = df['# of Reports'].str.replace(',', '').astype(float).astype(int)\n    \n    # Remove duplicate rows\n    df = df.drop_duplicates()\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the MSA data: remove NaN rows, remove metadata rows, convert report counts to integers (handling both comma-separated and float strings), remove duplicates.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cross_state_msa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_msa_data) -> pd.DataFrame:\n    df = clean_msa_data.copy()\n    \n    # A cross-state MSA contains multiple state abbreviations separated by hyphens\n    # Examples: \"Fort Smith, AR-OK\", \"Kansas City, MO-KS\"\n    # Pattern: contains a hyphen followed by two state abbreviations\n    \n    def is_cross_state(msa_name):\n        # Look for pattern like \"XX-YY\" where XX and YY are state abbreviations\n        # State abbreviations are 2 uppercase letters\n        import re\n        # Match pattern: comma, space, then 2 letters, hyphen, 2 letters\n        return bool(re.search(r'[A-Z]{2}-[A-Z]{2}', msa_name))\n    \n    df['is_cross_state'] = df['Metropolitan Area'].apply(is_cross_state)\n    cross_state_df = df[df['is_cross_state'] == True][['Metropolitan Area', '# of Reports']]\n    \n    return cross_state_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter for cross-state Metropolitan Statistical Areas (those with names containing two state abbreviations separated by a hyphen, e.g., \"AR-OK\", \"MO-KS\"). Returns only the cross-state MSAs and their report counts.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_cross_state_reports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cross_state_msa) -> pd.DataFrame:\n    total = cross_state_msa['# of Reports'].sum()\n    return pd.DataFrame({'total_cross_state_reports': [total]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sum all Identity Theft reports from cross-state Metropolitan Statistical Areas to get the total count.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_msa_data": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_raw_file": {
+        "x": 100,
+        "y": 220
+      },
+      "clean_msa_data": {
+        "x": 380,
+        "y": 40
+      },
+      "cross_state_msa": {
+        "x": 660,
+        "y": 40
+      },
+      "total_cross_state_reports": {
+        "x": 940,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_msa_data-->clean_msa_data",
+        "source": {
+          "operatorID": "load_msa_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_msa_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_msa_data-->cross_state_msa",
+        "source": {
+          "operatorID": "clean_msa_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cross_state_msa",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cross_state_msa-->total_cross_state_reports",
+        "source": {
+          "operatorID": "cross_state_msa",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_cross_state_reports",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-70-5-1781073933443",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "water_tests",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = sorted(glob.glob('data/environment/input/water-body-testing-*.csv'))\n    dfs = [pd.read_csv(f) for f in files]\n    df = pd.concat(dfs, ignore_index=True)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water-body-testing CSVs: data/environment/input/water-body-testing-2020.csv, 2021, 2022, 2023; concatenates into one table.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "precip_all",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = sorted(glob.glob('data/environment/input/monthly_precipitations_*.csv'))\n    dfs = [pd.read_csv(f) for f in files]\n    df = pd.concat(dfs, ignore_index=True)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all monthly precipitation CSVs: monthly_precipitations_chatham/ashburnham/amherst/boston; concatenates into one table.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compare_trends",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(water_tests, precip_all) -> pd.DataFrame:\n    months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']\n    # --- water tests: fresh beaches, 2020-2023, compute annual exceedance rate (violations / total samples)\n    w = water_tests\n    w = w[w['Beach Type Description'].str.lower() == 'fresh']\n    w = w[w['Year'].between(2020, 2023)]\n    v = w['Violation'].astype(str).str.strip().str.lower()\n    viol = v.isin(['yes','y','true','1'])\n    exceed = w.assign(is_violation=viol).groupby('Year', as_index=True).agg(total_samples=('is_violation','size'), violations=('is_violation','sum'))\n    exceed['exceedance_rate'] = exceed['violations'] / exceed['total_samples']\n    exceed = exceed.reset_index()[['Year','exceedance_rate']]\n    # --- precipitation: clean, impute month medians using all numeric years, then compute annual and mean annual per year\n    p = precip_all.copy()\n    p['Year_num'] = pd.to_numeric(p['Year'], errors='coerce')\n    p_num = p[~p['Year_num'].isna()].copy()\n    p_num['Year_num'] = p_num['Year_num'].astype(int)\n    for m in months:\n        p_num[m] = pd.to_numeric(p_num[m], errors='coerce')\n    medians = p_num[months].median()\n    p_num[months] = p_num[months].fillna(medians)\n    p_num['annual_calc'] = p_num[months].sum(axis=1)\n    # compute mean annual rainfall across rows (stations) for each year\n    rain = p_num.groupby('Year_num', as_index=True).agg(mean_annual=('annual_calc','mean')).reset_index().rename(columns={'Year_num':'Year'})\n    rain = rain[rain['Year'].between(2020,2023)]\n    # merge\n    df = pd.DataFrame({'Year': [2020,2021,2022,2023]})\n    df = df.merge(exceed, on='Year', how='left').merge(rain, on='Year', how='left')\n    # forward/backfill if any missing rates/values? keep as is\n    # compute year-to-year signs\n    df = df.sort_values('Year').reset_index(drop=True)\n    df['delta_exceed'] = df['exceedance_rate'].diff()\n    df['delta_rain'] = df['mean_annual'].diff()\n    df['sign_exceed'] = df['delta_exceed'].apply(lambda x: 0 if pd.isna(x) else (1 if x>0 else (-1 if x<0 else 0)))\n    df['sign_rain'] = df['delta_rain'].apply(lambda x: 0 if pd.isna(x) else (1 if x>0 else (-1 if x<0 else 0)))\n    # compare signs for sequential changes (2020->2021, 21->22, 22->23)\n    signs_match = (df['sign_exceed'].iloc[1:].reset_index(drop=True) == df['sign_rain'].iloc[1:].reset_index(drop=True)).all()\n    out = df[['Year','exceedance_rate','mean_annual','delta_exceed','delta_rain','sign_exceed','sign_rain']]\n    out['same_trend'] = signs_match\n    return out\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare yearly exceedance rate for Fresh beaches (proportion of samples with Violation in ['yes','y','true','1']) for years 2020-2023 to mean annual precipitation. For precipitation: keep rows with numeric Year, convert months to numeric, impute missing month values with the month's median across non-missing years, compute annual as sum of months, then take mean annual precipitation per year. Return per-year exceedance_rate and mean_annual and whether year-to-year change signs match for all consecutive steps (same_trend boolean).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "water_tests": {
+        "x": 100,
+        "y": 40
+      },
+      "precip_all": {
+        "x": 100,
+        "y": 220
+      },
+      "compare_trends": {
+        "x": 380,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "water_tests-->compare_trends",
+        "source": {
+          "operatorID": "water_tests",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_trends",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "precip_all-->compare_trends",
+        "source": {
+          "operatorID": "precip_all",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_trends",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-76-6-1781034168466",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv', header=1)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_Number_of_Reports_by_Type.csv with correct header row (row 1) containing Year, Fraud, Identity Theft, and Other report counts",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_reports) -> pd.DataFrame:\n    df = load_reports.copy()\n    df.columns = ['Year', 'Fraud', 'Identity_Theft', 'Other']\n    df = df[df['Year'] != 'Year']\n    df = df.dropna(how='all')\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'].notna()]\n    for col in ['Fraud', 'Identity_Theft', 'Other']:\n        df[col] = df[col].astype(str).str.replace(',', '').apply(pd.to_numeric, errors='coerce')\n    df = df.dropna()\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the reports data: rename columns, remove header row and null rows, convert Year and report counts to numeric, remove commas from numbers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_other_ratio",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_data) -> pd.DataFrame:\n    df = clean_data.copy()\n    df['Total'] = df['Fraud'] + df['Identity_Theft'] + df['Other']\n    df['Other_Ratio'] = df['Other'] / df['Total']\n    df['Other_More_Than_Half'] = df['Other_Ratio'] > 0.5\n    result = df[['Year', 'Total', 'Other', 'Other_Ratio', 'Other_More_Than_Half']]\n    return result"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate total reports per year and the ratio of 'Other' reports to total, check if 'Other' is more than half (>50%)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_data": {
+        "x": 380,
+        "y": 40
+      },
+      "check_other_ratio": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_reports-->clean_data",
+        "source": {
+          "operatorID": "load_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_data-->check_other_ratio",
+        "source": {
+          "operatorID": "clean_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_other_ratio",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

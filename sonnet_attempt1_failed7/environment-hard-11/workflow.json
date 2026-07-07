@@ -1,0 +1,181 @@
+{
+  "headId": "step-agent-121-8-1781150143082",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "raw_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the beach datasheet from data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "raw_inspect",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import csv\n    rows = []\n    with open('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', encoding='latin-1') as f:\n        reader = csv.reader(f)\n        for i, row in enumerate(reader):\n            rows.append({'row_num': i, 'content': str(row)})\n            if i >= 20:\n                break\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 21 rows of the CSV file to understand its structure, including where the real header is.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "beach_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv(\n        'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv',\n        skiprows=2,\n        header=0\n    )\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load beach datasheet from data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv, skipping the first 2 rows so row 2 (0-indexed) becomes the header: Date, 1-Day Rain, 2-Day Rain, 3-Day Rain, Tag, Enterococcus, Tag, Enterococcus, Tag, Enterococcus",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "failed_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(beach_data):\n    df = beach_data[['Date', '1-Day Rain', 'Tag', 'Enterococcus']].copy()\n    \n    # Rows where Tag is '<' mean the actual count is less than the listed value\n    # So if Tag == '<', the sample is definitely <= the listed value (below threshold)\n    # Only rows WITHOUT '<' tag and with Enterococcus > 104 are failures\n    failed = df[(df['Tag'] != '<') & (df['Enterococcus'] > 104)]\n    \n    avg_rain = failed['1-Day Rain'].mean().round(2)\n    \n    return failed.assign(avg_1day_rain=avg_rain)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter Pleasure Bay Beach samples that FAILED the swimming standard (Enterococcus > 104 counts per 100mL, excluding rows tagged with '<'). Compute average 1-Day Rain for those failing samples.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avg_rainfall_failed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(beach_data) -> pd.DataFrame:\n    df = beach_data.copy()\n    \n    # Pleasure Bay Beach columns: Tag (col index 4) and Enterococcus (col index 5)\n    # Tag '<' means value is less than the listed number \u2014 these pass the standard\n    # We want rows where Enterococcus > 104 AND Tag is NOT '<'\n    \n    # Filter: Tag is not '<' (i.e., actual count, not a '<' threshold)\n    pleasure_bay = df[df['Tag'] != '<'].copy()\n    \n    # Filter: Enterococcus > 104 (failed standard)\n    failed = pleasure_bay[pleasure_bay['Enterococcus'] > 104].copy()\n    \n    # Compute average 1-Day Rain\n    avg_rain = failed['1-Day Rain'].mean()\n    avg_rain_rounded = round(avg_rain, 2)\n    \n    result = pd.DataFrame({\n        'num_failed_samples': [len(failed)],\n        'avg_1day_rain': [avg_rain],\n        'avg_1day_rain_rounded': [avg_rain_rounded],\n        'all_1day_rain_values': [list(failed['1-Day Rain'].values)]\n    })\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the average 1-Day Rain for Pleasure Bay Beach samples that failed the swimming standard (Enterococcus > 104, excluding Tag='<' rows). Returns the count of failed samples, raw average, and rounded average to 2 decimal places.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "raw_data": {
+        "x": 100,
+        "y": 40
+      },
+      "raw_inspect": {
+        "x": 100,
+        "y": 220
+      },
+      "beach_data": {
+        "x": 100,
+        "y": 400
+      },
+      "failed_samples": {
+        "x": 380,
+        "y": 310
+      },
+      "avg_rainfall_failed": {
+        "x": 380,
+        "y": 490
+      }
+    },
+    "links": [
+      {
+        "linkID": "beach_data-->failed_samples",
+        "source": {
+          "operatorID": "beach_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "failed_samples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "beach_data-->avg_rainfall_failed",
+        "source": {
+          "operatorID": "beach_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avg_rainfall_failed",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

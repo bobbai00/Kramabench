@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-106-6-1781034718669",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv', header=0)\n    df.columns = ['Year', 'Fraud', 'Identity_Theft', 'Other']\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSN 2024 Number of Reports by Type from CSV, normalize column names to: Year, Fraud, Identity_Theft, Other",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "extract_2024_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_csn_data) -> pd.DataFrame:\n    df = load_csn_data.dropna(how='all')\n    df_2024 = df[df['Year'] == '2024']\n    return df_2024"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract 2024 row from CSN data after dropping empty rows",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_fraud_percentage",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_2024_data) -> pd.DataFrame:\n    row = extract_2024_data.iloc[0]\n    fraud = int(row['Fraud'].replace(',', ''))\n    identity_theft = int(row['Identity_Theft'].replace(',', ''))\n    other = int(row['Other'].replace(',', ''))\n    total = fraud + identity_theft + other\n    fraud_percentage = round((fraud / total) * 100)\n    return pd.DataFrame({'Fraud_Percentage': [fraud_percentage]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate percentage of fraud reporters in 2024 by dividing fraud count by total reports and rounding to nearest integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "extract_2024_data": {
+        "x": 380,
+        "y": 40
+      },
+      "calculate_fraud_percentage": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_csn_data-->extract_2024_data",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_2024_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_2024_data-->calculate_fraud_percentage",
+        "source": {
+          "operatorID": "extract_2024_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_fraud_percentage",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

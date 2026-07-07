@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-186-7-1781038827709",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_nifc_areas",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/nifc_geographic_areas.gpkg')\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NIFC geographic areas from nifc_geographic_areas.gpkg using geopandas",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_usa_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/usa.gpkg')\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load USA state boundaries from usa.gpkg using geopandas",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifc_state_intersections",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_nifc_areas, load_usa_states) -> pd.DataFrame:\n    import geopandas as gpd\n    \n    nifc_gdf = gpd.GeoDataFrame(load_nifc_areas, geometry='geometry')\n    states_gdf = gpd.GeoDataFrame(load_usa_states, geometry='geometry')\n    \n    # For each NIFC area, find all states it intersects with\n    results = []\n    for _, nifc_row in nifc_gdf.iterrows():\n        nifc_abbr = nifc_row['GACCAbbreviation']\n        nifc_geom = nifc_row['geometry']\n        \n        # Find all states that intersect with this NIFC area\n        intersecting_states = states_gdf[states_gdf.geometry.intersects(nifc_geom)]\n        state_abbrevs = intersecting_states['adm1_name'].unique()\n        \n        for state in state_abbrevs:\n            results.append({\n                'NIFC_Abbreviation': nifc_abbr,\n                'NIFC_Name': nifc_row['GACCName'],\n                'State': state\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Spatial intersection analysis: for each NIFC geographic area, find all US states whose boundaries intersect with it",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "count_intersections",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(nifc_state_intersections) -> pd.DataFrame:\n    df = nifc_state_intersections.drop_duplicates()\n    result = df.groupby('NIFC_Abbreviation').size().reset_index(name='state_count')\n    result = result.sort_values('state_count', ascending=False)\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Remove duplicate rows from spatial intersections, group by NIFC abbreviation, count unique states per NIFC area, and sort descending by state count",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_nifc_areas": {
+        "x": 100,
+        "y": 40
+      },
+      "load_usa_states": {
+        "x": 100,
+        "y": 220
+      },
+      "nifc_state_intersections": {
+        "x": 380,
+        "y": 130
+      },
+      "count_intersections": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_nifc_areas-->nifc_state_intersections",
+        "source": {
+          "operatorID": "load_nifc_areas",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nifc_state_intersections",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_usa_states-->nifc_state_intersections",
+        "source": {
+          "operatorID": "load_usa_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nifc_state_intersections",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "nifc_state_intersections-->count_intersections",
+        "source": {
+          "operatorID": "nifc_state_intersections",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_intersections",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

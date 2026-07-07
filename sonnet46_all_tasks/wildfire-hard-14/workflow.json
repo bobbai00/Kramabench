@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-138-6-1781158844748",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "aqi_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/annual_aqi_by_county_2024.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load annual AQI by county 2024 data from 'data/wildfire/input/annual_aqi_by_county_2024.csv'",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wildfire_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/Wildfire_Acres_by_State.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wildfire acres by state data from 'data/wildfire/input/Wildfire_Acres_by_State.csv'",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "aqi_by_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(aqi_data) -> pd.DataFrame:\n    cols = ['State', 'Days with AQI', 'Good Days', 'Moderate Days',\n            'Unhealthy for Sensitive Groups Days', 'Unhealthy Days',\n            'Very Unhealthy Days', 'Hazardous Days']\n    agg = aqi_data[cols].groupby('State').sum().reset_index()\n    # \"Generally unsafe\" = Unhealthy for Sensitive Groups + Unhealthy + Very Unhealthy + Hazardous\n    unsafe_cols = ['Unhealthy for Sensitive Groups Days', 'Unhealthy Days',\n                   'Very Unhealthy Days', 'Hazardous Days']\n    agg['unsafe_days'] = agg[unsafe_cols].sum(axis=1)\n    agg['unsafe_proportion'] = agg['unsafe_days'] / agg['Days with AQI']\n    return agg[['State', 'Days with AQI', 'unsafe_days', 'unsafe_proportion']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Aggregate AQI data by state. Sum all day-type columns per state. Compute 'unsafe_days' as the sum of Unhealthy for Sensitive Groups, Unhealthy, Very Unhealthy, and Hazardous days. Compute 'unsafe_proportion' = unsafe_days / Days with AQI.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "correlation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(aqi_by_state, wildfire_data):\n    merged = aqi_by_state.merge(wildfire_data[['State', 'Total Acres Burned']], on='State', how='inner')\n    corr = merged['unsafe_proportion'].corr(merged['Total Acres Burned'])\n    return pd.DataFrame({'correlation': [round(corr, 2)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge aqi_by_state with wildfire_data on State (inner join), then compute Pearson correlation between 'unsafe_proportion' and 'Total Acres Burned', rounded to 2 decimal places.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "aqi_data": {
+        "x": 100,
+        "y": 40
+      },
+      "wildfire_data": {
+        "x": 380,
+        "y": 220
+      },
+      "aqi_by_state": {
+        "x": 380,
+        "y": 40
+      },
+      "correlation": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "aqi_data-->aqi_by_state",
+        "source": {
+          "operatorID": "aqi_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "aqi_by_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "aqi_by_state-->correlation",
+        "source": {
+          "operatorID": "aqi_by_state",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfire_data-->correlation",
+        "source": {
+          "operatorID": "wildfire_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlation",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

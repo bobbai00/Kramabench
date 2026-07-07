@@ -1,0 +1,721 @@
+{
+  "headId": "step-agent-388-14-1781053874226",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "beaches",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/wollaston_beach_datasheet.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Wollaston Beach datasheet from CSV file",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "ej_populations",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/environmental-justice-populations.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load environmental justice populations data from CSV file",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "water_testing",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2023.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water body testing data from 2023 CSV file",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "beaches_cleaned",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/wollaston_beach_datasheet.csv', header=None)\n    \n    # Inspect first few rows to understand structure\n    # Rows 0-1 seem to be headers with location names and measurement types\n    # Data starts from row 2\n    \n    # Use row 0 and 1 to construct column names\n    row0 = df.iloc[0, :].tolist()\n    row1 = df.iloc[1, :].tolist()\n    \n    # Build meaningful column names from rows 0 and 1\n    cols = []\n    for i in range(len(row0)):\n        r0 = str(row0[i]) if pd.notna(row0[i]) else \"\"\n        r1 = str(row1[i]) if pd.notna(row1[i]) else \"\"\n        if r0 and r1 and r0 != 'nan':\n            cols.append(f\"{r0}_{r1}\".strip())\n        elif r0 and r0 != 'nan':\n            cols.append(r0.strip())\n        elif r1 and r1 != 'nan':\n            cols.append(r1.strip())\n        else:\n            cols.append(f\"col_{i}\")\n    \n    df.columns = cols\n    df = df.iloc[2:].reset_index(drop=True)\n    \n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse and clean the Wollaston Beach datasheet. The file has a complex multi-row header structure with alternating location names and measurements. Extract actual column names and data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "high_ej_communities",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(ej_populations):\n    return ej_populations[ej_populations['Percent of population in EJ BGs'] > 90]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter environmental justice populations to communities with more than 90% EJ population. Returns municipalities meeting this threshold.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "water_testing_enterococcus",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(water_testing):\n    df = water_testing[water_testing['Organism'] == 'Enterococci'].copy()\n    df['Beach Type'] = df['Beach Type Description']\n    return df[df['Beach Type'] == 'Marine']\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water testing data to Enterococci measurements for Marine beaches only.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "boston_harbor_beaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(water_testing_enterococcus, high_ej_communities) -> pd.DataFrame:\n    wt = water_testing_enterococcus.copy()\n    ej = high_ej_communities.copy()\n    \n    ej_communities = set(ej['Municipality'].str.lower().str.strip())\n    \n    wt['Community_lower'] = wt['Community'].str.lower().str.strip()\n    \n    boston_harbor_filtered = wt[wt['Community_lower'].isin(ej_communities)]\n    \n    return boston_harbor_filtered\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water testing data to Boston Harbor beaches in communities with >90% EJ population. Join water testing Enterococci data with high EJ communities list by Community name.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "beaches_parsed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(beaches_cleaned) -> pd.DataFrame:\n    df = beaches_cleaned.copy()\n    \n    df['Date'] = pd.to_datetime(df['Wollaston Beach, Quincy: Bacterial Water Quality'], errors='coerce')\n    \n    for col in ['col_1', 'col_2', 'col_3']:\n        df[col] = pd.to_numeric(df[col], errors='coerce')\n    \n    df_data = df[df['Date'].notna()].copy()\n    df_data.columns = ['date_str', 'rain_1day', 'rain_2day', 'rain_3day', \n                       'milton_tag', 'milton_entero', 'channing_tag', 'channing_entero',\n                       'sachem_tag', 'sachem_entero', 'rice_tag', 'rice_entero', 'date']\n    \n    return df_data\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse the Wollaston Beach cleaned data to extract dates and rainfall measurements (1-day, 2-day, 3-day) and Enterococcus levels for each beach location.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "boston_harbor_beaches_list",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(boston_harbor_beaches) -> pd.DataFrame:\n    return boston_harbor_beaches[['Community', 'Beach Name', 'Indicator Level', 'Sample Date']].drop_duplicates()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract unique Boston Harbor beaches in high EJ communities from water testing data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "wollaston_beach_list",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(beaches_parsed) -> pd.DataFrame:\n    return beaches_parsed[['date_str', 'date', 'rain_1day', 'rain_2day', 'rain_3day', 'milton_entero', 'channing_entero', 'sachem_entero', 'rice_entero', 'milton_tag', 'channing_tag', 'sachem_tag', 'rice_tag']].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Wollaston Beach data with rainfall and Enterococcus measurements",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compare_beaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(boston_harbor_beaches_list, wollaston_beach_list):\n    import pandas as pd\n    \n    # Get unique beach names from Boston Harbor high EJ communities\n    boston_beaches = boston_harbor_beaches_list['Beach Name'].unique().tolist()\n    print(\"Boston Harbor beaches in high EJ communities:\")\n    print(boston_beaches)\n    \n    # Check if Wollaston Beach data contains these beaches\n    wollaston_beaches = []\n    for col in ['milton_entero', 'channing_entero', 'sachem_entero', 'rice_entero']:\n        if col in wollaston_beach_list.columns:\n            wollaston_beaches.append(col.replace('_entero', '').capitalize())\n    \n    print(\"\\nWollaston Beach locations in the dataset:\")\n    print(wollaston_beaches)\n    \n    # Return Boston Harbor beaches data for reference\n    return boston_harbor_beaches_list\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare beach names in Boston Harbor high EJ communities with Wollaston Beach dataset to identify matching beaches.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_beach_names",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(boston_harbor_beaches_list, wollaston_beach_list):\n    bh_beaches = boston_harbor_beaches_list[['Beach Name', 'Community']].drop_duplicates()\n    ws_beaches = wollaston_beach_list[['date_str']].head(5)\n    \n    print(\"Boston Harbor beaches:\")\n    print(bh_beaches['Beach Name'].unique())\n    print(f\"\\nTotal Boston Harbor beaches: {len(bh_beaches['Beach Name'].unique())}\")\n    \n    print(\"\\n\\nWollaston dataset columns:\")\n    print(wollaston_beach_list.columns.tolist())\n    \n    print(\"\\n\\nWollaston dataset sample:\")\n    print(wollaston_beach_list.head())\n    \n    return pd.DataFrame({\n        'check': ['done']\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check beach names in both datasets to identify overlaps",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "get_unique_beaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(boston_harbor_beaches_list, wollaston_beach_list):\n    bh_beaches = boston_harbor_beaches_list['Beach Name'].unique()\n    ws_beaches = ['Milton Road', 'Channing Street', 'Sachem Street', 'Rice Road']\n    \n    result_list = []\n    result_list.append('Boston Harbor beaches in high EJ communities:')\n    for b in sorted(bh_beaches):\n        result_list.append(f'  {b}')\n    \n    result_list.append('\\nWollaston Beach locations:')\n    for b in ws_beaches:\n        result_list.append(f'  {b}')\n    \n    result_list.append('\\nOverlap: None - these are different datasets')\n    \n    return pd.DataFrame({'note': result_list})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check unique beach names in both datasets to identify overlaps",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "wollaston_data_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(wollaston_beach_list):\n    df = wollaston_beach_list.copy()\n    \n    # Convert date to datetime if not already\n    if df['date'].dtype == 'object':\n        df['date'] = pd.to_datetime(df['date'])\n    \n    # For each beach location, we need to consolidate entero values\n    # Let's focus on creating a dataset with average entero per date\n    # We'll process each location's entero value\n    \n    result_rows = []\n    \n    for idx, row in df.iterrows():\n        rain_3day = row['rain_3day']\n        date = row['date']\n        \n        # Process each beach location\n        locations = [\n            ('milton', row['milton_entero'], row['milton_tag']),\n            ('channing', row['channing_entero'], row['channing_tag']),\n            ('sachem', row['sachem_entero'], row['sachem_tag']),\n            ('rice', row['rice_entero'], row['rice_tag'])\n        ]\n        \n        for loc_name, entero_str, tag in locations:\n            if pd.notna(entero_str) and entero_str != '':\n                entero_val = None\n                try:\n                    # Try to convert directly to float\n                    entero_val = float(entero_str)\n                except (ValueError, TypeError):\n                    # Skip if can't convert\n                    continue\n                \n                result_rows.append({\n                    'date': date,\n                    'location': loc_name,\n                    'rain_3day': rain_3day,\n                    'entero_raw': entero_str,\n                    'entero_value': entero_val,\n                    'tag': tag\n                })\n    \n    return pd.DataFrame(result_rows)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean Wollaston Beach data to extract rows with both 3-day rainfall and Enterococcus values, handling numeric conversion",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_wollaston_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wollaston_beach_list):\n    df = wollaston_beach_list.copy()\n    df['date'] = pd.to_datetime(df['date'])\n    \n    results = []\n    for _, row in df.iterrows():\n        rain_3day = row['rain_3day']\n        date = row['date']\n        \n        for location in ['milton', 'channing', 'sachem', 'rice']:\n            entero_raw = row[f'{location}_entero']\n            tag = row[f'{location}_tag']\n            \n            if pd.isna(entero_raw) or entero_raw == '':\n                continue\n                \n            try:\n                entero_val = float(entero_raw)\n                \n                if pd.notna(tag):\n                    if tag == '<':\n                        entero_val = entero_val / 2.0\n                    elif tag == '>':\n                        pass\n                \n                if pd.notna(rain_3day):\n                    results.append({\n                        'date': date,\n                        'location': location,\n                        'rain_3day': rain_3day,\n                        'entero_value': entero_val\n                    })\n            except (ValueError, TypeError):\n                pass\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Wollaston Beach data with 3-day rainfall and Enterococcus values, applying estimation rules: < x \u2192 x/2, > x \u2192 x",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "correlation_calculation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_wollaston_data):\n    import numpy as np\n    from scipy.stats import pearsonr\n    \n    df = extract_wollaston_data.copy()\n    \n    # Remove rows with NaN in either column\n    df_clean = df.dropna(subset=['rain_3day', 'entero_value'])\n    \n    # Calculate Pearson correlation\n    if len(df_clean) > 1:\n        corr, pvalue = pearsonr(df_clean['rain_3day'], df_clean['entero_value'])\n        result = pd.DataFrame({'correlation': [round(corr, 3)]})\n    else:\n        result = pd.DataFrame({'correlation': [None]})\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate Pearson correlation between 3-day rainfall and Enterococcus levels for Wollaston Beach (Quincy), applying estimation rules for < x (\u2192 x/2) and > x (\u2192 x).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "beaches": {
+        "x": 100,
+        "y": 40
+      },
+      "ej_populations": {
+        "x": 100,
+        "y": 475
+      },
+      "water_testing": {
+        "x": 100,
+        "y": 220
+      },
+      "beaches_cleaned": {
+        "x": 100,
+        "y": 887.5
+      },
+      "high_ej_communities": {
+        "x": 380,
+        "y": 475
+      },
+      "water_testing_enterococcus": {
+        "x": 380,
+        "y": 220
+      },
+      "boston_harbor_beaches": {
+        "x": 660,
+        "y": 257.5
+      },
+      "beaches_parsed": {
+        "x": 380,
+        "y": 887.5
+      },
+      "boston_harbor_beaches_list": {
+        "x": 940,
+        "y": 257.5
+      },
+      "wollaston_beach_list": {
+        "x": 660,
+        "y": 887.5
+      },
+      "compare_beaches": {
+        "x": 1220,
+        "y": 392.5
+      },
+      "check_beach_names": {
+        "x": 1220,
+        "y": 572.5
+      },
+      "get_unique_beaches": {
+        "x": 1220,
+        "y": 752.5
+      },
+      "wollaston_data_clean": {
+        "x": 940,
+        "y": 1052.5
+      },
+      "extract_wollaston_data": {
+        "x": 940,
+        "y": 1232.5
+      },
+      "correlation_calculation": {
+        "x": 1220,
+        "y": 1232.5
+      }
+    },
+    "links": [
+      {
+        "linkID": "ej_populations-->high_ej_communities",
+        "source": {
+          "operatorID": "ej_populations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "high_ej_communities",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "water_testing-->water_testing_enterococcus",
+        "source": {
+          "operatorID": "water_testing",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "water_testing_enterococcus",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "water_testing_enterococcus-->boston_harbor_beaches",
+        "source": {
+          "operatorID": "water_testing_enterococcus",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "boston_harbor_beaches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "high_ej_communities-->boston_harbor_beaches",
+        "source": {
+          "operatorID": "high_ej_communities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "boston_harbor_beaches",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "beaches_cleaned-->beaches_parsed",
+        "source": {
+          "operatorID": "beaches_cleaned",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beaches_parsed",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "boston_harbor_beaches-->boston_harbor_beaches_list",
+        "source": {
+          "operatorID": "boston_harbor_beaches",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "boston_harbor_beaches_list",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "beaches_parsed-->wollaston_beach_list",
+        "source": {
+          "operatorID": "beaches_parsed",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "wollaston_beach_list",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "boston_harbor_beaches_list-->compare_beaches",
+        "source": {
+          "operatorID": "boston_harbor_beaches_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_beaches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wollaston_beach_list-->compare_beaches",
+        "source": {
+          "operatorID": "wollaston_beach_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_beaches",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "boston_harbor_beaches_list-->check_beach_names",
+        "source": {
+          "operatorID": "boston_harbor_beaches_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_beach_names",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wollaston_beach_list-->check_beach_names",
+        "source": {
+          "operatorID": "wollaston_beach_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_beach_names",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "boston_harbor_beaches_list-->get_unique_beaches",
+        "source": {
+          "operatorID": "boston_harbor_beaches_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "get_unique_beaches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wollaston_beach_list-->get_unique_beaches",
+        "source": {
+          "operatorID": "wollaston_beach_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "get_unique_beaches",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "wollaston_beach_list-->wollaston_data_clean",
+        "source": {
+          "operatorID": "wollaston_beach_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "wollaston_data_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wollaston_beach_list-->extract_wollaston_data",
+        "source": {
+          "operatorID": "wollaston_beach_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_wollaston_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_wollaston_data-->correlation_calculation",
+        "source": {
+          "operatorID": "extract_wollaston_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlation_calculation",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

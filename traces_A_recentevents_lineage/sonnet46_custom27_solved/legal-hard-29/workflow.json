@@ -1,0 +1,484 @@
+{
+  "headId": "step-agent-120-17-1781150238789",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "explore_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\")\n    return pd.DataFrame({'files': sorted(files)})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all CSV files in the State MSA Fraud and Other data folder.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "sample_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Alabama.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Alabama.csv to inspect file structure and column names.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_all_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\")\n    frames = []\n    for f in files:\n        state = f.split(\"/\")[-1].replace(\".csv\", \"\")\n        df = pd.read_csv(f, header=1, skipfooter=1, engine='python')\n        df.columns = [\"Metropolitan Area\", \"Reports\"]\n        df = df.dropna(subset=[\"Metropolitan Area\"])\n        df = df[df[\"Metropolitan Area\"] != \"Metropolitan Area\"]  # drop repeated headers\n        df[\"Reports\"] = df[\"Reports\"].astype(str).str.replace(\",\", \"\").str.strip()\n        df = df[df[\"Reports\"].str.match(r'^\\d+$')]\n        df[\"Reports\"] = df[\"Reports\"].astype(int)\n        df[\"State\"] = state\n        frames.append(df)\n    return pd.concat(frames, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all 52 state CSV files from the State MSA Fraud and Other data folder. Each file has a header on row 1 with \"Metropolitan Area\" and \"# of Reports\". Parses reports as integers, tags each row with the state name, and concatenates all into one DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_top_metro",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_all_states):\n    df = load_all_states.copy()\n    \n    # Count metro areas per state\n    metro_counts = df.groupby('State')['Metropolitan Area'].count()\n    states_5plus = metro_counts[metro_counts >= 5].index\n    \n    # Filter to states with 5+ metro areas\n    df_filtered = df[df['State'].isin(states_5plus)]\n    \n    # Compute total reports per state\n    state_totals = df_filtered.groupby('State')['Reports'].sum().rename('State_Total')\n    df_filtered = df_filtered.join(state_totals, on='State')\n    \n    # Compute percentage of state total\n    df_filtered = df_filtered.copy()\n    df_filtered['Pct_of_State'] = df_filtered['Reports'] / df_filtered['State_Total'] * 100\n    \n    # Find the metro with the largest percentage\n    top_row = df_filtered.loc[df_filtered['Pct_of_State'].idxmax()]\n    \n    return df_filtered.sort_values('Pct_of_State', ascending=False).head(10).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to states with 5+ metro areas, compute each metro's percentage of its state's total fraud reports, and return the top 10 metros by that percentage. The winner has the largest share of its state's fraud reports.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_dc",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob, os\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\")\n    # Check which state file the DC metro comes from\n    results = []\n    for f in sorted(files):\n        state = os.path.splitext(os.path.basename(f))[0]\n        raw = pd.read_csv(f, header=None, encoding='latin-1')\n        # Find data rows: row 1 is header, rows 2+ are data\n        if len(raw) > 2:\n            for i in range(2, len(raw)):\n                val = str(raw.iloc[i, 0]) if pd.notna(raw.iloc[i, 0]) else ''\n                if 'Washington' in val or 'District' in val:\n                    results.append({'state_file': state, 'row': i, 'metro': val, 'reports': raw.iloc[i, 1]})\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check which state files contain Washington DC metro area entries, to diagnose the state assignment issue.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_top_metro_fixed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_all_states):\n    import re\n    df = load_all_states.copy()\n    \n    # Deduplicate: each unique metro area (by name) should only appear once.\n    # For cross-state metros (e.g., \"DC-VA-MD-WV\"), we assign it to the state\n    # whose abbreviation appears FIRST in the metro name.\n    # Strategy: for each metro name, keep the row where the state file matches\n    # the first state abbreviation listed in the metro name.\n    \n    # Build a mapping from state abbreviation -> state name (file name)\n    state_abbrev_map = {\n        'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',\n        'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',\n        'DC': 'DistrictofColumbia', 'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii',\n        'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',\n        'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine',\n        'MD': 'Maryland', 'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota',\n        'MS': 'Mississippi', 'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska',\n        'NV': 'Nevada', 'NH': 'NewHampshire', 'NJ': 'NewJersey', 'NM': 'NewMexico',\n        'NY': 'NewYork', 'NC': 'NorthCarolina', 'ND': 'NorthDakota', 'OH': 'Ohio',\n        'OK': 'Oklahoma', 'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'RhodeIsland',\n        'SC': 'SouthCarolina', 'SD': 'SouthDakota', 'TN': 'Tennessee', 'TX': 'Texas',\n        'UT': 'Utah', 'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington',\n        'WV': 'WestVirginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',\n        'PR': 'PuertoRico'\n    }\n    \n    def get_primary_state(metro_name):\n        # Extract abbreviations after the comma (e.g., \"City, TX-OK Metro\" -> TX)\n        # Pattern: after comma, find state abbrevs separated by hyphens\n        m = re.search(r',\\s+([A-Z]{2}(?:-[A-Z]{2})*)\\s+', metro_name)\n        if m:\n            abbrevs = m.group(1).split('-')\n            # Return the first abbreviation that maps to a known state\n            for abbrev in abbrevs:\n                if abbrev in state_abbrev_map:\n                    return state_abbrev_map[abbrev]\n        return None\n    \n    df['primary_state'] = df['Metropolitan Area'].apply(get_primary_state)\n    \n    # Keep only rows where State matches the primary state of the metro\n    df_dedup = df[df['State'] == df['primary_state']].copy()\n    \n    # Count metro areas per state\n    state_counts = df_dedup.groupby('State').size().reset_index(name='metro_count')\n    states_5plus = state_counts[state_counts['metro_count'] >= 5]['State']\n    \n    # Filter to states with 5+ metros\n    df_filtered = df_dedup[df_dedup['State'].isin(states_5plus)].copy()\n    \n    # Compute state totals and percentage\n    state_totals = df_filtered.groupby('State')['Reports'].sum().reset_index(name='State_Total')\n    df_filtered = df_filtered.merge(state_totals, on='State')\n    df_filtered['Pct_of_State'] = df_filtered['Reports'] / df_filtered['State_Total'] * 100\n    \n    return df_filtered.sort_values('Pct_of_State', ascending=False).head(15)[\n        ['Metropolitan Area', 'Reports', 'State', 'State_Total', 'Pct_of_State']\n    ].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Fix cross-state metro deduplication: assign each metro to its primary state (first abbreviation in the metro name), filter to states with 5+ metro areas, compute each metro's percentage of its state's total fraud reports, and return top 15 by percentage.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_result",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_all_states):\n    import re\n    df = load_all_states.copy()\n    \n    # Extract primary state abbreviation from metro name (first 2-letter abbreviation after comma)\n    def get_primary_state(metro):\n        match = re.search(r',\\s*([A-Z]{2})(?:-[A-Z]{2})*\\s+(Metropolitan|Micropolitan)', metro)\n        if match:\n            return match.group(1)\n        return None\n    \n    df['primary_state_abbr'] = df['Metropolitan Area'].apply(get_primary_state)\n    \n    # Deduplicate: keep each metro only once (by its primary state abbreviation)\n    df_dedup = df.drop_duplicates(subset=['Metropolitan Area'])\n    \n    # Count metro areas per state (using file-state tag)\n    state_counts = df_dedup.groupby('State').size().reset_index(name='metro_count')\n    states_5plus = state_counts[state_counts['metro_count'] >= 5]['State'].tolist()\n    \n    print(f\"States with 5+ metros: {len(states_5plus)}\")\n    print(state_counts.sort_values('metro_count', ascending=False).head(20).to_string())\n    \n    # Filter to states with 5+ metros\n    df_filtered = df_dedup[df_dedup['State'].isin(states_5plus)].copy()\n    \n    # Compute state totals and percentages\n    state_totals = df_filtered.groupby('State')['Reports'].sum().reset_index(name='State_Total')\n    df_filtered = df_filtered.merge(state_totals, on='State')\n    df_filtered['Pct_of_State'] = df_filtered['Reports'] / df_filtered['State_Total'] * 100\n    \n    result = df_filtered.sort_values('Pct_of_State', ascending=False).head(20)[\n        ['Metropolitan Area', 'Reports', 'State', 'State_Total', 'Pct_of_State']\n    ]\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Verify the top metro result by deduplicating metros (each metro counted once, in the state it was originally filed under), filtering to states with 5+ metro areas, computing percentage of state total, and showing top 20 results. Also prints state metro counts for verification.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_crossstate",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob, re\n    \n    # Check specific states to understand cross-state metros\n    states_to_check = ['NewYork', 'NewJersey', 'Illinois', 'Indiana', 'Minnesota', 'Wisconsin']\n    rows = []\n    for state in states_to_check:\n        path = f\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/{state}.csv\"\n        try:\n            df = pd.read_csv(path, header=1)\n            df.columns = ['Metro', 'Reports']\n            df = df.dropna(how='all')\n            df = df[~df['Metro'].str.contains('Source:', na=True)]\n            df = df[df['Metro'].notna() & df['Metro'].str.len().gt(3)]\n            df['Reports_raw'] = df['Reports']\n            df['Reports_num'] = pd.to_numeric(df['Reports'].astype(str).str.replace(',',''), errors='coerce')\n            df['State'] = state\n            rows.append(df)\n        except:\n            pass\n    \n    result = pd.concat(rows, ignore_index=True)\n    return result[['State', 'Metro', 'Reports_raw', 'Reports_num']]\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect cross-state metro files: NewYork, NewJersey, Illinois, Indiana, Minnesota, Wisconsin \u2014 to understand how cross-state metros appear in each state file.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_state_totals",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    folder = \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/\"\n    states_to_check = ['WestVirginia', 'Virginia', 'Maryland', 'DistrictofColumbia', 'NewYork', 'NewJersey']\n    \n    results = []\n    for state in states_to_check:\n        path = folder + state + '.csv'\n        try:\n            raw = pd.read_csv(path, header=None, encoding='latin-1')\n            results.append({'State': state, 'Rows': len(raw), 'Content': str(raw.values.tolist())[:500]})\n        except:\n            results.append({'State': state, 'Rows': -1, 'Content': 'ERROR'})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect state files to find if there are explicit state totals, and understand how cross-state metros should be handled. Look at WestVirginia, Maryland, Virginia, DC files for Washington DC metro context. Also check NewYork and NewJersey for NYC metro.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "correct_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_all_states):\n    import glob, re\n    import pandas as pd\n    \n    df = load_all_states.copy()\n    df = df.dropna(subset=['Metropolitan Area', 'Reports'])\n    df = df[df['Reports'] > 0]\n    \n    # Count metros per state (using the raw data - each state file lists its metros)\n    state_metro_counts = df.groupby('State')['Metropolitan Area'].count()\n    states_5plus = state_metro_counts[state_metro_counts >= 5].index\n    \n    print(\"States with 5+ metros:\")\n    for s in sorted(states_5plus):\n        print(f\"  {s}: {state_metro_counts[s]} metros\")\n    \n    # Filter to states with 5+ metros\n    df_filtered = df[df['State'].isin(states_5plus)]\n    \n    # For each state, compute total reports and each metro's percentage\n    state_totals = df_filtered.groupby('State')['Reports'].sum().rename('State_Total')\n    df_filtered = df_filtered.join(state_totals, on='State')\n    df_filtered['Pct_of_State'] = df_filtered['Reports'] / df_filtered['State_Total'] * 100\n    \n    # Sort by percentage descending\n    result = df_filtered.sort_values('Pct_of_State', ascending=False).head(30)\n    return result[['Metropolitan Area', 'Reports', 'State', 'State_Total', 'Pct_of_State']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Correct analysis: use raw state file data as-is (each state file lists the metros for that state, cross-state metros appear in multiple files). Count metros per state, filter to states with 5+ metros, compute each metro's percentage of its state's total reports, sort by percentage descending to find the winner.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_check",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_all_states):\n    df = load_all_states.copy()\n    df = df.dropna(subset=['Metropolitan Area', 'Reports'])\n    \n    # Count metros per state\n    state_counts = df.groupby('State')['Metropolitan Area'].count().reset_index()\n    state_counts.columns = ['State', 'MetroCount']\n    \n    # Filter to states with 5+ metros\n    states_5plus = state_counts[state_counts['MetroCount'] >= 5]['State']\n    df_filtered = df[df['State'].isin(states_5plus)]\n    \n    # Compute state totals\n    state_totals = df_filtered.groupby('State')['Reports'].sum().reset_index()\n    state_totals.columns = ['State', 'State_Total']\n    \n    df_merged = df_filtered.merge(state_totals, on='State')\n    df_merged['Pct_of_State'] = df_merged['Reports'] / df_merged['State_Total'] * 100\n    \n    # Show state metro counts for states with 5+ metros\n    print(\"States with 5+ metros and their counts:\")\n    print(state_counts[state_counts['MetroCount'] >= 5].sort_values('MetroCount', ascending=False).to_string())\n    \n    # Show top result\n    result = df_merged.sort_values('Pct_of_State', ascending=False).head(30)\n    return result[['State', 'MetroCount'.replace('MetroCount', 'State_Total') if False else 'Metropolitan Area', 'Reports', 'State_Total', 'Pct_of_State']].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Final check: count metros per state (using raw state file data), filter to states with 5+ metros, compute each metro's percentage of state total fraud reports, return top 30 sorted by percentage descending. Also prints state metro counts for verification.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "definitive_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_all_states):\n    df = load_all_states.copy()\n    \n    # Count metros per state (using raw data as-is from each state file)\n    metro_counts = df.groupby('State')['Metropolitan Area'].count().reset_index()\n    metro_counts.columns = ['State', 'MetroCount']\n    \n    # Print state metro counts to understand the data\n    print(\"State metro counts:\")\n    print(metro_counts.sort_values('MetroCount', ascending=False).to_string())\n    \n    # Filter to states with 5+ metro areas\n    eligible_states = metro_counts[metro_counts['MetroCount'] >= 5]['State'].tolist()\n    print(f\"\\nEligible states (5+ metros): {len(eligible_states)}\")\n    print(sorted(eligible_states))\n    \n    df_eligible = df[df['State'].isin(eligible_states)].copy()\n    \n    # Compute state totals\n    state_totals = df_eligible.groupby('State')['Reports'].sum().reset_index()\n    state_totals.columns = ['State', 'State_Total']\n    \n    df_eligible = df_eligible.merge(state_totals, on='State')\n    df_eligible['Pct_of_State'] = df_eligible['Reports'] / df_eligible['State_Total'] * 100\n    \n    result = df_eligible.sort_values('Pct_of_State', ascending=False).head(30)\n    \n    print(\"\\nTop 30 by percentage:\")\n    print(result[['State', 'Metropolitan Area', 'Reports', 'State_Total', 'Pct_of_State', 'MetroCount' if 'MetroCount' in result.columns else 'Reports']].to_string())\n    \n    # Merge metro counts back for verification\n    result = result.merge(metro_counts, on='State')\n    \n    return result[['State', 'Metropolitan Area', 'Reports', 'State_Total', 'Pct_of_State', 'MetroCount']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Definitive analysis: use raw state file data, count metros per state, filter to states with 5+ metros, compute each metro's percentage of state total, return top 30 with metro count for verification. Prints state metro counts for full transparency.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_verification",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_all_states):\n    df = load_all_states.copy()\n    \n    # Show all WestVirginia metros\n    wv = df[df['State'] == 'WestVirginia'].copy()\n    wv_total = wv['Reports'].sum()\n    wv['Pct'] = wv['Reports'] / wv_total * 100\n    wv = wv.sort_values('Pct', ascending=False)\n    \n    print(\"=== WestVirginia metros ===\")\n    print(f\"Total metros: {len(wv)}, Total reports: {wv_total}\")\n    for _, r in wv.iterrows():\n        print(f\"  {r['Pct']:.2f}% | {r['Reports']} | {r['Metropolitan Area']}\")\n    \n    # Also confirm state metro counts for states with 5+ metros\n    metro_counts = df.groupby('State').size().reset_index(name='MetroCount')\n    states_5plus = metro_counts[metro_counts['MetroCount'] >= 5]['State'].tolist()\n    print(f\"\\nStates with 5+ metros: {len(states_5plus)}\")\n    \n    # Filter and compute\n    filtered = df[df['State'].isin(states_5plus)].copy()\n    state_totals = filtered.groupby('State')['Reports'].sum().reset_index(name='State_Total')\n    filtered = filtered.merge(state_totals, on='State')\n    filtered['Pct_of_State'] = filtered['Reports'] / filtered['State_Total'] * 100\n    \n    top = filtered.nlargest(5, 'Pct_of_State')[['State', 'Metropolitan Area', 'Reports', 'State_Total', 'Pct_of_State']]\n    top = top.merge(metro_counts, on='State')\n    return top.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Final verification: show all metros listed in WestVirginia's file and confirm metro count, state total, and percentage calculation for the top result.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "explore_files": {
+        "x": 100,
+        "y": 220
+      },
+      "sample_file": {
+        "x": 100,
+        "y": 400
+      },
+      "load_all_states": {
+        "x": 100,
+        "y": 580
+      },
+      "find_top_metro": {
+        "x": 380,
+        "y": 40
+      },
+      "check_dc": {
+        "x": 100,
+        "y": 760
+      },
+      "find_top_metro_fixed": {
+        "x": 380,
+        "y": 220
+      },
+      "verify_result": {
+        "x": 380,
+        "y": 400
+      },
+      "inspect_crossstate": {
+        "x": 100,
+        "y": 940
+      },
+      "inspect_state_totals": {
+        "x": 100,
+        "y": 1120
+      },
+      "correct_analysis": {
+        "x": 380,
+        "y": 580
+      },
+      "final_check": {
+        "x": 380,
+        "y": 760
+      },
+      "definitive_analysis": {
+        "x": 380,
+        "y": 940
+      },
+      "final_verification": {
+        "x": 380,
+        "y": 1120
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_all_states-->find_top_metro",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_top_metro",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_all_states-->find_top_metro_fixed",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_top_metro_fixed",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_all_states-->verify_result",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_result",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_all_states-->correct_analysis",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correct_analysis",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_all_states-->final_check",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_check",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_all_states-->definitive_analysis",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "definitive_analysis",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_all_states-->final_verification",
+        "source": {
+          "operatorID": "load_all_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_verification",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

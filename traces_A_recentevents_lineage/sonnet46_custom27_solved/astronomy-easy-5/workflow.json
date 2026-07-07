@@ -1,0 +1,174 @@
+{
+  "headId": "step-agent-107-7-1781149829485",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_tle",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/astronomy/input/TLE/48445.tle', 'r') as f:\n        lines = f.readlines()\n    rows = []\n    for i, line in enumerate(lines):\n        rows.append({'line_num': i, 'content': line.strip()})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and preview raw TLE file at data/astronomy/input/TLE/48445.tle to understand its structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_tle",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_tle) -> pd.DataFrame:\n    lines = load_tle['content'].tolist()\n    records = []\n    i = 0\n    while i < len(lines) - 1:\n        l1 = lines[i].strip()\n        l2 = lines[i+1].strip()\n        if l1.startswith('1 ') and l2.startswith('2 '):\n            records.append({'line1': l1, 'line2': l2})\n            i += 2\n        else:\n            i += 1\n    return pd.DataFrame(records)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse raw TLE file content into paired (line1, line2) records. Each row is one TLE epoch pair for satellite 48445.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compute_altitudes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_tle) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, load\n    from skyfield.positionlib import ICRF\n    import numpy as np\n\n    ts = load.timescale()\n\n    records = []\n    for _, row in parse_tle.iterrows():\n        line1 = row['line1']\n        line2 = row['line2']\n        try:\n            sat = EarthSatellite(line1, line2, '', ts)\n            epoch = sat.epoch\n            # Get ITRF XYZ position at epoch (km)\n            geocentric = sat.at(epoch)\n            xyz = geocentric.itrf_xyz().km  # returns (x, y, z) in km\n            # Altitude above Earth's surface (using WGS84 mean radius ~6371 km)\n            r = np.sqrt(xyz[0]**2 + xyz[1]**2 + xyz[2]**2)\n            alt_km = r - 6371.0\n            epoch_tt = epoch.tt  # Terrestrial Time as float (Julian date)\n            records.append({\n                'epoch_tt': epoch_tt,\n                'epoch_utc': epoch.utc_iso(),\n                'altitude_km': alt_km,\n                'line1': line1,\n                'line2': line2\n            })\n        except Exception as e:\n            records.append({\n                'epoch_tt': None,\n                'epoch_utc': None,\n                'altitude_km': None,\n                'line1': line1,\n                'line2': line2\n            })\n\n    df = pd.DataFrame(records)\n    df = df.dropna(subset=['altitude_km'])\n    df = df.sort_values('epoch_tt').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "For each TLE pair, instantiate a skyfield EarthSatellite, evaluate itrf_xyz at the TLE epoch, compute altitude (km) as norm of XYZ minus Earth's mean radius (6371 km). Output: epoch_tt (Julian TT), epoch_utc (ISO string), altitude_km. Sorted by epoch time.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "count_major_changes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(compute_altitudes) -> pd.DataFrame:\n    df = compute_altitudes[['epoch_tt', 'epoch_utc', 'altitude_km']].drop_duplicates().sort_values('epoch_tt').reset_index(drop=True)\n    \n    # epoch_tt is Julian Day (TT), 1 day = 1.0 unit; 12h = 0.5 units\n    half_day = 0.5\n    threshold_km = 1.0  # 1000m = 1 km\n    \n    epochs = df['epoch_tt'].values\n    alts = df['altitude_km'].values\n    \n    change_count = 0\n    n = len(df)\n    \n    for i in range(n):\n        for j in range(i + 1, n):\n            dt = epochs[j] - epochs[i]\n            if dt > half_day:\n                break  # sorted, no need to go further\n            delta_alt = abs(alts[j] - alts[i])\n            if delta_alt > threshold_km:\n                change_count += 1\n    \n    return pd.DataFrame({\n        'total_major_altitude_changes': [change_count],\n        'threshold_km': [threshold_km],\n        'window_hours': [12],\n        'total_tle_epochs': [n]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count satellite major altitude changes: pairs of TLE epochs within 12h (0.5 Julian days) where |altitude difference| > 1000m (1 km). Iterates over all pairs within the 12h window using sorted epoch_tt values. Returns total count of such events.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_tle": {
+        "x": 100,
+        "y": 40
+      },
+      "parse_tle": {
+        "x": 380,
+        "y": 40
+      },
+      "compute_altitudes": {
+        "x": 660,
+        "y": 40
+      },
+      "count_major_changes": {
+        "x": 940,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_tle-->parse_tle",
+        "source": {
+          "operatorID": "load_tle",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_tle",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle-->compute_altitudes",
+        "source": {
+          "operatorID": "parse_tle",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_altitudes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "compute_altitudes-->count_major_changes",
+        "source": {
+          "operatorID": "compute_altitudes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_major_changes",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,653 @@
+{
+  "headId": "step-agent-305-42-1781045557519",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "lightning_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/wildfire/input/nifc_lightning_caused_acres.csv', sep='\\t', engine='python', on_bad_lines='skip')\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load lightning-caused acres data from nifc_lightning_caused_acres.csv with tab delimiter and skip malformed rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "human_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/wildfire/input/nifc_human_caused_acres.csv', sep='\\t', engine='python', on_bad_lines='skip')\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load human-caused acres data from nifc_human_caused_acres.csv with tab delimiter and skip malformed rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "combine_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(lightning_data, human_data):\n    lightning_data['source'] = 'lightning'\n    human_data['source'] = 'human'\n    combined = pd.concat([lightning_data, human_data], ignore_index=True)\n    return combined\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Combine lightning and human-caused wildfire data, adding source column to distinguish between the two datasets",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(combine_data) -> pd.DataFrame:\n    df = combine_data.copy()\n    \n    # Get geographic areas (all columns except Year, Total, and source)\n    geo_cols = [col for col in df.columns if col not in ['Year', 'Total', 'source']]\n    \n    # Clean numeric columns - remove commas and convert to numeric\n    for col in geo_cols:\n        df[col] = df[col].astype(str).str.replace(',', '').replace('N/A', 'nan').replace('NaN', 'nan')\n        df[col] = pd.to_numeric(df[col], errors='coerce')\n    \n    # Clean Total column\n    df['Total'] = df['Total'].astype(str).str.replace(',', '').replace('N/A', 'nan').replace('NaN', 'nan')\n    df['Total'] = pd.to_numeric(df['Total'], errors='coerce')\n    \n    return df[['Year', 'source'] + geo_cols + ['Total']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean numeric columns by removing commas and converting to numeric type; handle N/A values",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_lightning",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(lightning_data) -> pd.DataFrame:\n    df = lightning_data.copy()\n    \n    # Drop Total column\n    df = df.drop('Total', axis=1)\n    \n    # Melt all area columns into long format\n    area_cols = [col for col in df.columns if col != 'Year']\n    df = df.melt(id_vars=['Year'], var_name='Area', value_name='Acres')\n    \n    # Convert Acres to numeric, removing commas and handling NaN\n    df['Acres'] = df['Acres'].astype(str).str.replace(',', '')\n    df['Acres'] = pd.to_numeric(df['Acres'], errors='coerce')\n    \n    # Remove rows with NaN acres\n    df = df.dropna(subset=['Acres'])\n    \n    # Add source column\n    df['Source'] = 'lightning'\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and unpivot lightning-caused acres data: remove Total column, convert wide format to long, clean comma-separated values, convert to numeric, and add source label",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_human",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(human_data) -> pd.DataFrame:\n    df = human_data.copy()\n    \n    # Drop Total column\n    df = df.drop('Total', axis=1)\n    \n    # Melt all area columns into long format\n    area_cols = [col for col in df.columns if col != 'Year']\n    df = df.melt(id_vars=['Year'], var_name='Area', value_name='Acres')\n    \n    # Convert Acres to numeric, removing commas and handling NaN\n    df['Acres'] = df['Acres'].astype(str).str.replace(',', '')\n    df['Acres'] = pd.to_numeric(df['Acres'], errors='coerce')\n    \n    # Remove rows with NaN acres\n    df = df.dropna(subset=['Acres'])\n    \n    # Add source column\n    df['Source'] = 'human'\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and unpivot human-caused acres data: remove Total column, convert wide format to long, clean comma-separated values, convert to numeric, and add source label",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "combine_all_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(clean_lightning, clean_human) -> pd.DataFrame:\n    return pd.concat([clean_lightning, clean_human], ignore_index=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Combine cleaned lightning and human-caused data into a single dataset",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_by_area_year",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(combine_all_data) -> pd.DataFrame:\n    return combine_all_data.groupby(['Area', 'Year']).agg({'Acres': 'sum'}).reset_index()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Aggregate total acres burned by geographic area and year (summing both lightning and human-caused)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "historical_stats",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(total_by_area_year) -> pd.DataFrame:\n    return total_by_area_year.groupby('Area').agg({'Acres': ['mean', 'std']}).reset_index()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate historical mean and standard deviation of acres burned for each geographic area",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "merge_with_historical",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(total_by_area_year, historical_stats) -> pd.DataFrame:\n    # Flatten the multi-level columns from historical_stats\n    historical_stats.columns = ['Area', 'mean_acres', 'std_acres']\n    \n    # Merge\n    df = total_by_area_year.merge(historical_stats, on='Area')\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge total acres by area-year with historical mean and std for each area",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_anomaly",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(merge_with_historical) -> pd.DataFrame:\n    df = merge_with_historical.copy()\n    \n    # Calculate Z-score\n    df['z_score'] = (df['Acres'] - df['mean_acres']) / df['std_acres']\n    \n    # Replace inf values with NaN\n    df['z_score'] = df['z_score'].replace([float('inf'), float('-inf')], float('nan'))\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate Z-score for each area-year combination to measure anomaly relative to historical average",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_anomaly",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_anomaly) -> pd.DataFrame:\n    df = calculate_anomaly.dropna(subset=['z_score'])\n    \n    # Find the row with maximum absolute Z-score\n    df['abs_z_score'] = df['z_score'].abs()\n    max_idx = df['abs_z_score'].idxmax()\n    \n    result = df.loc[[max_idx], ['Area', 'Year', 'z_score', 'Acres', 'mean_acres']]\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify the geographic area and year with the highest anomaly (maximum absolute Z-score)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_top_anomalies",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_anomaly):\n    df = calculate_anomaly.copy()\n    df['abs_z_score'] = df['z_score'].abs()\n    top_10 = df.nlargest(10, 'abs_z_score')[['Area', 'Year', 'z_score', 'abs_z_score', 'Acres', 'mean_acres']]\n    return top_10\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Display top 10 most anomalous year-area combinations by absolute Z-score to verify the result",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_valid_years",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_anomaly):\n    df = calculate_anomaly.copy()\n    df = df[df['Year'] >= 2000]\n    df = df[df['Year'] <= 2024]\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter out invalid years (keep only 2000-2024) to ensure data quality",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "lightning_data": {
+        "x": 100,
+        "y": 115
+      },
+      "human_data": {
+        "x": 100,
+        "y": 295
+      },
+      "combine_data": {
+        "x": 380,
+        "y": 40
+      },
+      "clean_data": {
+        "x": 660,
+        "y": 40
+      },
+      "clean_lightning": {
+        "x": 380,
+        "y": 370
+      },
+      "clean_human": {
+        "x": 380,
+        "y": 550
+      },
+      "combine_all_data": {
+        "x": 660,
+        "y": 370
+      },
+      "total_by_area_year": {
+        "x": 940,
+        "y": 370
+      },
+      "historical_stats": {
+        "x": 1220,
+        "y": 535
+      },
+      "merge_with_historical": {
+        "x": 1500,
+        "y": 370
+      },
+      "calculate_anomaly": {
+        "x": 1780,
+        "y": 370
+      },
+      "find_max_anomaly": {
+        "x": 2060,
+        "y": 190
+      },
+      "verify_top_anomalies": {
+        "x": 2060,
+        "y": 370
+      },
+      "filter_valid_years": {
+        "x": 2060,
+        "y": 550
+      }
+    },
+    "links": [
+      {
+        "linkID": "lightning_data-->combine_data",
+        "source": {
+          "operatorID": "lightning_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combine_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "human_data-->combine_data",
+        "source": {
+          "operatorID": "human_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combine_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "combine_data-->clean_data",
+        "source": {
+          "operatorID": "combine_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "lightning_data-->clean_lightning",
+        "source": {
+          "operatorID": "lightning_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_lightning",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "human_data-->clean_human",
+        "source": {
+          "operatorID": "human_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_human",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_lightning-->combine_all_data",
+        "source": {
+          "operatorID": "clean_lightning",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combine_all_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_human-->combine_all_data",
+        "source": {
+          "operatorID": "clean_human",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combine_all_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "combine_all_data-->total_by_area_year",
+        "source": {
+          "operatorID": "combine_all_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_by_area_year",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "total_by_area_year-->historical_stats",
+        "source": {
+          "operatorID": "total_by_area_year",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "historical_stats",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "total_by_area_year-->merge_with_historical",
+        "source": {
+          "operatorID": "total_by_area_year",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "merge_with_historical",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "historical_stats-->merge_with_historical",
+        "source": {
+          "operatorID": "historical_stats",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "merge_with_historical",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "merge_with_historical-->calculate_anomaly",
+        "source": {
+          "operatorID": "merge_with_historical",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_anomaly",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_anomaly-->find_max_anomaly",
+        "source": {
+          "operatorID": "calculate_anomaly",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_anomaly",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_anomaly-->verify_top_anomalies",
+        "source": {
+          "operatorID": "calculate_anomaly",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_top_anomalies",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_anomaly-->filter_valid_years",
+        "source": {
+          "operatorID": "calculate_anomaly",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_valid_years",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

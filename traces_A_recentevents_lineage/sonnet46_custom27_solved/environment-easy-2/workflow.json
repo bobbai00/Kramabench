@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-104-9-1781149906841",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "sample_load",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2002.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load sample file water-body-testing-2002.csv to understand data structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "all_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/water-body-testing-*.csv')\n    dfs = [pd.read_csv(f) for f in files]\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water-body-testing CSV files from data/environment/input/ using glob, concatenate into a single DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "freshwater_exceedance",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(all_data):\n    df = all_data[all_data['Beach Type Description'] == 'Fresh'].copy()\n    df['is_violation'] = df['Violation'].str.strip().str.lower() == 'yes'\n    yearly = df.groupby('Year').agg(\n        total=('is_violation', 'count'),\n        violations=('is_violation', 'sum')\n    ).reset_index()\n    yearly['exceedance_rate'] = yearly['violations'] / yearly['total']\n    avg_rate = round(yearly['exceedance_rate'].mean(), 2)\n    yearly['above_avg'] = yearly['exceedance_rate'] > avg_rate\n    yearly['avg_rate'] = avg_rate\n    return yearly.sort_values('Year')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter for freshwater beaches, normalize Violation column, compute yearly bacterial exceedance rate (violations/total), compute average exceedance rate rounded to 2 decimal places, flag years above average.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "years_above_avg",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(freshwater_exceedance):\n    result = freshwater_exceedance[freshwater_exceedance['above_avg'] == True][['Year', 'exceedance_rate', 'avg_rate']].sort_values('Year')\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter freshwater_exceedance to only rows where above_avg is True, showing years with exceedance rate above average. Sorted by Year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "sample_load": {
+        "x": 100,
+        "y": 40
+      },
+      "all_data": {
+        "x": 100,
+        "y": 220
+      },
+      "freshwater_exceedance": {
+        "x": 380,
+        "y": 220
+      },
+      "years_above_avg": {
+        "x": 660,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "all_data-->freshwater_exceedance",
+        "source": {
+          "operatorID": "all_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "freshwater_exceedance",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "freshwater_exceedance-->years_above_avg",
+        "source": {
+          "operatorID": "freshwater_exceedance",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "years_above_avg",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

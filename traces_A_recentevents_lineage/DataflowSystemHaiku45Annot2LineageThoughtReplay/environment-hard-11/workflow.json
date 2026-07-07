@@ -1,0 +1,484 @@
+{
+  "headId": "step-agent-362-30-1781052786757",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_beach_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', 'r') as f:\n        lines = f.readlines()\n    \n    for i in range(min(20, len(lines))):\n        print(f\"Line {i}: {repr(lines[i][:120])}\")\n    \n    return pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', header=None)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw beach data and print first 20 lines to understand file structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_beach_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_beach_data) -> pd.DataFrame:\n    df = load_beach_data.copy()\n    \n    # The data has complex nested headers. Let's examine the structure:\n    # Row 0: Title\n    # Row 1: Contains location names (Pleasure Bay @ Broadway, Pleasure Bay @ Flagpole, Castle Island Playground)\n    # Rows 2+: Data with dates and measurements\n    \n    # Extract location positions from row 1\n    locations_row = df.iloc[1]\n    \n    # Identify column indices for each location\n    broadway_cols = []\n    flagpole_cols = []\n    castle_cols = []\n    \n    for i, val in enumerate(locations_row):\n        if 'Broadway' in str(val):\n            broadway_cols.append(i)\n        elif 'Flagpole' in str(val):\n            flagpole_cols.append(i)\n        elif 'Castle' in str(val):\n            castle_cols.append(i)\n    \n    # Extract data starting from row 2 (skip title and header rows)\n    data_df = df.iloc[2:].copy()\n    data_df.columns = range(len(data_df.columns))\n    \n    # Reset index\n    data_df = data_df.reset_index(drop=True)\n    \n    # The pattern appears to be: Date, then for each location there are pairs of columns\n    # Let's examine what the columns represent by looking at the structure\n    # Column 0: Date\n    # Columns 1-2: Pleasure Bay @ Broadway (likely Enterococcus and another measure)\n    # Columns 3-4: (appears to be related to Pleasure Bay @ Broadway as well)\n    # Columns 5-6: Pleasure Bay @ Flagpole\n    # Columns 7-8: Castle Island Playground\n    # Column 9: Unknown\n    \n    # Let me structure this as: Date | Broadway_Ent | Broadway_Rain | Flagpole_Ent | Flagpole_Rain | Castle_Ent | Castle_Rain\n    \n    data_df.rename(columns={\n        0: 'Date',\n        1: 'Broadway_Ent',\n        2: 'Broadway_Rain',\n        3: 'Broadway_Unknown',\n        4: 'Broadway_Other',\n        5: 'Flagpole_Ent',\n        6: 'Flagpole_Rain',\n        7: 'Castle_Ent',\n        8: 'Castle_Rain',\n        9: 'Other'\n    }, inplace=True)\n    \n    return data_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse the raw beach data to extract date, Enterococcus counts, and rainfall information for each location (Pleasure Bay @ Broadway, Pleasure Bay @ Flagpole, and Castle Island Playground)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_beach_data) -> pd.DataFrame:\n    df = load_beach_data.copy()\n    \n    # Skip the header rows (first 2 rows)\n    df = df.iloc[2:].reset_index(drop=True)\n    \n    # Based on the structure, we have 10 columns:\n    # 0: Date, 1: Broadway_1DayRain, 2: Broadway_2DayRain, 3: Broadway_3DayRain, \n    # 4: Broadway_Tag, 5: Broadway_Ent, 6: Flagpole_1DayRain, 7: Flagpole_Tag, \n    # 8: Flagpole_Ent, 9: (Other/Castle data)\n    \n    # Assign proper column names based on the actual 10 columns\n    df.columns = ['Date', 'Broadway_1DayRain', 'Broadway_2DayRain', 'Broadway_3DayRain', \n                  'Broadway_Tag', 'Broadway_Ent', 'Flagpole_1DayRain', 'Flagpole_Tag', \n                  'Flagpole_Ent', 'Other']\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the parsed beach data by removing header rows and assigning proper column names for the 10 columns: Date, Broadway (1-day/2-day/3-day rainfall, tag, Enterococcus), Flagpole (1-day rainfall, tag, Enterococcus), and Other",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "load_raw_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import csv\n    data = []\n    with open('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', 'r') as f:\n        reader = csv.reader(f)\n        for row in reader:\n            data.append(row)\n    \n    # Find the actual header and data start\n    # Row 0: title, Row 1: locations\n    # Starting from row 2, we have actual data with Date, Rain, Ent columns repeating\n    \n    # Let's extract just the structured data starting from row 2\n    result_rows = []\n    for i, row in enumerate(data[2:], start=2):\n        if row and row[0]:  # Only process rows with a date\n            result_rows.append(row)\n    \n    return pd.DataFrame(result_rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw CSV file and extract data rows starting from row 2, skipping metadata headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv')\n    if not files:\n        files = glob.glob('data/environment/input/*.csv')\n    return pd.read_csv(files[0], sep=',', dtype=str)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw CSV file from the provided path, reading all data as strings to preserve the structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "raw_load",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import pandas as pd\n    df = pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', header=None)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw CSV file with all data as is, no header specified, to understand full structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_pleasure_bay",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(raw_load) -> pd.DataFrame:\n    df = raw_load.copy()\n    \n    # Skip the first two header rows\n    df = df.iloc[2:].reset_index(drop=True)\n    \n    # After reset_index, columns are still 0-9 (numeric)\n    # Rename for clarity before extracting\n    df.columns = ['Date', 'Broadway_1Day_Rain', 'Broadway_2Day_Rain', 'Broadway_3Day_Rain', \n                  'Broadway_Tag', 'Broadway_Enterococcus', 'Flagpole_Tag', 'Flagpole_Enterococcus',\n                  'Castle_Tag', 'Castle_Enterococcus']\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse raw beach data to extract date, 1/2/3-day rainfall, and Enterococcus counts for all three locations (Broadway, Flagpole, Castle Island)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "examine_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', 'r') as f:\n        lines = f.readlines()[:10]\n    return pd.DataFrame({'line': [line.strip() for line in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Read first 10 lines of the CSV file to understand the exact structure and header layout",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_pleasure_bay_correct",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', \n                      header=None, dtype=str)\n    \n    # Row 2 has the actual column headers\n    headers = df.iloc[2].tolist()\n    \n    # Rows 3 onwards are data\n    data = df.iloc[3:].copy()\n    data.columns = headers\n    \n    # Reset index\n    data = data.reset_index(drop=True)\n    \n    return data\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load beach data with proper header handling - reads from row 2 as headers and rows 3+ as data",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_pleasure_bay",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_pleasure_bay_correct) -> pd.DataFrame:\n    df = parse_pleasure_bay_correct.copy()\n    df = df[df['Date'] != 'Date'].reset_index(drop=True)\n    df['1-Day Rain'] = pd.to_numeric(df['1-Day Rain'], errors='coerce')\n    df['Enterococcus'] = pd.to_numeric(df['Enterococcus'], errors='coerce')\n    df['Enterococcus.1'] = pd.to_numeric(df['Enterococcus.1'], errors='coerce')\n    df['Enterococcus.2'] = pd.to_numeric(df['Enterococcus.2'], errors='coerce')\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean parsed Pleasure Bay data by removing header row and converting numeric columns (1-Day Rain and Enterococcus counts) to numeric types",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "identify_pleasure_bay_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(clean_pleasure_bay) -> pd.DataFrame:\n    df = clean_pleasure_bay.copy()\n    \n    # The Pleasure Bay location has multiple columns for Enterococcus:\n    # Column 'Enterococcus' appears to be Pleasure Bay @ Broadway\n    # Column 'Enterococcus.1' appears to be Pleasure Bay @ Flagpole\n    # The '1-Day Rain' column should be the rainfall for these samples\n    \n    # Convert columns to numeric, handling any non-numeric values\n    df['Enterococcus'] = pd.to_numeric(df['Enterococcus'], errors='coerce')\n    df['Enterococcus.1'] = pd.to_numeric(df['Enterococcus.1'], errors='coerce')\n    df['Enterococcus.2'] = pd.to_numeric(df['Enterococcus.2'], errors='coerce')\n    df['1-Day Rain'] = pd.to_numeric(df['1-Day Rain'], errors='coerce')\n    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')\n    \n    # Remove rows where Date is NaN (this includes the header row)\n    df = df[df['Date'].notna()].copy()\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert numeric columns to proper data types and remove non-date rows. Identifies Pleasure Bay Broadway (Enterococcus), Pleasure Bay Flagpole (Enterococcus.1), and Castle Island (Enterococcus.2) with their 1-Day Rain values.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "pleasure_bay_failed_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identify_pleasure_bay_samples) -> pd.DataFrame:\n    df = identify_pleasure_bay_samples.copy()\n    \n    # Convert Enterococcus columns to numeric, coercing errors to NaN\n    df['Enterococcus'] = pd.to_numeric(df['Enterococcus'], errors='coerce')\n    df['Enterococcus.1'] = pd.to_numeric(df['Enterococcus.1'], errors='coerce')\n    df['Enterococcus.2'] = pd.to_numeric(df['Enterococcus.2'], errors='coerce')\n    df['1-Day Rain'] = pd.to_numeric(df['1-Day Rain'], errors='coerce')\n    \n    # Filter for failed samples: Enterococcus > 104\n    # Broadway (Enterococcus) or Flagpole (Enterococcus.1) failures\n    broadway_failed = df[df['Enterococcus'] > 104][['Date', '1-Day Rain', 'Enterococcus']].copy()\n    broadway_failed['Location'] = 'Broadway'\n    broadway_failed['Enterococcus_Value'] = broadway_failed['Enterococcus']\n    \n    flagpole_failed = df[df['Enterococcus.1'] > 104][['Date', '1-Day Rain', 'Enterococcus.1']].copy()\n    flagpole_failed['Location'] = 'Flagpole'\n    flagpole_failed['Enterococcus_Value'] = flagpole_failed['Enterococcus.1']\n    \n    # Combine both locations' failures\n    result = pd.concat([\n        broadway_failed[['Date', '1-Day Rain', 'Location', 'Enterococcus_Value']],\n        flagpole_failed[['Date', '1-Day Rain', 'Location', 'Enterococcus_Value']]\n    ], ignore_index=True)\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter for Pleasure Bay Beach samples (Broadway and Flagpole) that failed to meet swimming standards (Enterococcus > 104 counts per 100mL). Extract Date, 1-Day Rain, Location, and Enterococcus value for each failed sample.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "average_rainfall_failed_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pleasure_bay_failed_samples) -> pd.DataFrame:\n    avg_rainfall = pleasure_bay_failed_samples['1-Day Rain'].mean()\n    return pd.DataFrame({'Average_1Day_Rainfall': [round(avg_rainfall, 2)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the average 1-Day Rain for all Pleasure Bay Beach samples that failed swimming standards (Enterococcus > 104), rounded to 2 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_beach_data": {
+        "x": 100,
+        "y": 130
+      },
+      "parse_beach_data": {
+        "x": 380,
+        "y": 40
+      },
+      "clean_data": {
+        "x": 380,
+        "y": 310
+      },
+      "load_raw_data": {
+        "x": 100,
+        "y": 310
+      },
+      "load_data": {
+        "x": 100,
+        "y": 490
+      },
+      "raw_load": {
+        "x": 100,
+        "y": 670
+      },
+      "parse_pleasure_bay": {
+        "x": 380,
+        "y": 670
+      },
+      "examine_file": {
+        "x": 100,
+        "y": 850
+      },
+      "parse_pleasure_bay_correct": {
+        "x": 100,
+        "y": 1030
+      },
+      "clean_pleasure_bay": {
+        "x": 380,
+        "y": 1030
+      },
+      "identify_pleasure_bay_samples": {
+        "x": 660,
+        "y": 1030
+      },
+      "pleasure_bay_failed_samples": {
+        "x": 940,
+        "y": 1030
+      },
+      "average_rainfall_failed_samples": {
+        "x": 1220,
+        "y": 1030
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_beach_data-->parse_beach_data",
+        "source": {
+          "operatorID": "load_beach_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_beach_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_beach_data-->clean_data",
+        "source": {
+          "operatorID": "load_beach_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "raw_load-->parse_pleasure_bay",
+        "source": {
+          "operatorID": "raw_load",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_pleasure_bay",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_pleasure_bay_correct-->clean_pleasure_bay",
+        "source": {
+          "operatorID": "parse_pleasure_bay_correct",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_pleasure_bay",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_pleasure_bay-->identify_pleasure_bay_samples",
+        "source": {
+          "operatorID": "clean_pleasure_bay",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identify_pleasure_bay_samples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identify_pleasure_bay_samples-->pleasure_bay_failed_samples",
+        "source": {
+          "operatorID": "identify_pleasure_bay_samples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "pleasure_bay_failed_samples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "pleasure_bay_failed_samples-->average_rainfall_failed_samples",
+        "source": {
+          "operatorID": "pleasure_bay_failed_samples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "average_rainfall_failed_samples",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

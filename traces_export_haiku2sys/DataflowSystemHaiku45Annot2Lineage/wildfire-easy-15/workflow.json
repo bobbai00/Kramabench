@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-218-7-1781039372570",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires dataset from noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_variabledescrip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires variable description from noaa_wildfires_variabledescrip.csv with cp1252 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "july_fires",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_wildfires) -> pd.DataFrame:\n    df = load_wildfires.copy()\n    return df[df['start_day_of_year'].between(182, 212)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter wildfires to July only (start_day_of_year 182-212). July typically runs from day 182 to 212 of the year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "correlation_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(july_fires) -> pd.DataFrame:\n    import numpy as np\n    from scipy import stats\n    \n    # Extract the relevant columns for July fires\n    # hec = hectares (fire size), wind_med = median wind speed\n    df = july_fires[['hec', 'wind_med']].dropna()\n    \n    # Calculate Pearson correlation coefficient\n    correlation = df['hec'].corr(df['wind_med'])\n    \n    # Calculate p-value for statistical significance\n    pearson_r, p_value = stats.pearsonr(df['hec'], df['wind_med'])\n    \n    # Create result dataframe\n    result = pd.DataFrame({\n        'metric': ['Pearson Correlation', 'P-value', 'Sample Size', 'Strong Correlation (|r| > 0.7)'],\n        'value': [f'{pearson_r:.4f}', f'{p_value:.6f}', str(len(df)), 'Yes' if abs(pearson_r) > 0.7 else 'No']\n    })\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate Pearson correlation between fire size (hectares) and median wind speed for July fires. A strong correlation is defined as |r| > 0.7.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_wildfires": {
+        "x": 100,
+        "y": 40
+      },
+      "load_variabledescrip": {
+        "x": 100,
+        "y": 220
+      },
+      "july_fires": {
+        "x": 380,
+        "y": 40
+      },
+      "correlation_analysis": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_wildfires-->july_fires",
+        "source": {
+          "operatorID": "load_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "july_fires",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "july_fires-->correlation_analysis",
+        "source": {
+          "operatorID": "july_fires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlation_analysis",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

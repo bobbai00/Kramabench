@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-145-8-1781036137635",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_categories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv', encoding='cp1252')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Report Categories data from CSV file at data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv with cp1252 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_categories",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_categories) -> pd.DataFrame:\n    df = load_categories.copy()\n    # Use row 1 as header and skip everything before it\n    df = df.iloc[1:].reset_index(drop=True)\n    # Set column names from the first row (which is now row 0)\n    df.columns = df.iloc[0]\n    # Skip the header row and start from data\n    df = df.iloc[1:].reset_index(drop=True)\n    # Remove rows with NaN in Category column (footer/metadata)\n    df = df.dropna(subset=['Category'])\n    # Remove duplicates\n    df = df.drop_duplicates()\n    # Clean up column names (strip whitespace)\n    df.columns = df.columns.str.strip()\n    # Convert Number_of_Reports to numeric (removing commas)\n    df['# of Reports'] = df['# of Reports'].astype(str).str.replace(',', '').astype(float)\n    # Convert Percentage to numeric (removing %)\n    df['Percentage'] = df['Percentage'].astype(str).str.replace('%', '').astype(float)\n    # Keep only necessary columns\n    df = df[['Category', '# of Reports', 'Percentage']]\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the categories data: use row 1 as header, skip metadata rows, remove duplicates, convert numeric columns (remove commas from report counts, % from percentages), keep only Category, # of Reports, and Percentage columns",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "categories_for_50pct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_categories) -> pd.DataFrame:\n    df = clean_categories.copy()\n    \n    # Sort by # of Reports in descending order\n    df = df.sort_values('# of Reports', ascending=False).reset_index(drop=True)\n    \n    # Calculate cumulative reports and cumulative percentage\n    total_reports = df['# of Reports'].sum()\n    df['Cumulative Reports'] = df['# of Reports'].cumsum()\n    df['Cumulative Percentage'] = (df['Cumulative Reports'] / total_reports) * 100\n    \n    # Find minimum number of categories to reach 50%\n    categories_for_50pct = (df['Cumulative Percentage'] >= 50).idxmax() + 1\n    \n    return df[['Category', '# of Reports', 'Cumulative Reports', 'Cumulative Percentage']].head(categories_for_50pct + 2)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sort categories by report count descending, calculate cumulative reports and percentage, identify minimum number of categories needed to reach 50% cumulative threshold",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_categories": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_categories": {
+        "x": 380,
+        "y": 40
+      },
+      "categories_for_50pct": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_categories-->clean_categories",
+        "source": {
+          "operatorID": "load_categories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_categories",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_categories-->categories_for_50pct",
+        "source": {
+          "operatorID": "clean_categories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "categories_for_50pct",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

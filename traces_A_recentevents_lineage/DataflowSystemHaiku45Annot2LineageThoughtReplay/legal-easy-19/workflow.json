@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-137-8-1781035898269",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Amount_Lost.csv', header=None)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fraud reports data from 2024_CSN_Fraud_Reports_by_Amount_Lost.csv file with no header to inspect raw structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "extract_fraud_ranges",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data.copy()\n    df.columns = ['range', 'count', 'pct']\n    \n    # Filter for data rows (those with numbers in the count column)\n    df = df[df['count'].str.contains(r'^[\\d,]+$', na=False, regex=True)]\n    \n    # Convert count to numeric by removing commas\n    df['count'] = df['count'].str.replace(',', '').astype(int)\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract fraud report ranges and counts from the raw data, filter to rows with numeric counts, and convert counts to integers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_proportion",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_fraud_ranges) -> pd.DataFrame:\n    df = extract_fraud_ranges.copy()\n    \n    # Identify rows that represent loss ranges between $1-$500\n    # Looking at the data, we need to find ranges that fall within $1-$500\n    # Ranges like \"$1 - $100\", \"$101 - $200\", \"$201 - $300\", \"$301 - $400\", \"$401 - $500\"\n    \n    # First, let's identify the ranges within $1-$500\n    target_ranges = [\n        '$1 - $100',\n        '$101 - $200', \n        '$201 - $300',\n        '$301 - $400',\n        '$401 - $500'\n    ]\n    \n    # Filter to only these ranges and sum the counts\n    df_target = df[df['range'].isin(target_ranges)]\n    count_1_to_500 = df_target['count'].sum()\n    \n    # Use total reports with $ loss as denominator (987,520)\n    # This is the base of reporters who actually had losses\n    total_with_loss = df[df['range'] == 'Reports with $ Loss']['count'].values[0]\n    \n    # Calculate proportion\n    proportion = count_1_to_500 / total_with_loss\n    \n    # Round to 3 decimal places\n    proportion_rounded = round(proportion, 3)\n    \n    result_df = pd.DataFrame({\n        'count_1_to_500': [count_1_to_500],\n        'total_with_loss': [total_with_loss],\n        'proportion': [proportion_rounded]\n    })\n    \n    return result_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the proportion of fraud reporters who lost between $1-$500 by summing counts from ranges $1-$100, $101-$200, $201-$300, $301-$400, and $401-$500, divided by total reports with loss",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 40
+      },
+      "extract_fraud_ranges": {
+        "x": 380,
+        "y": 40
+      },
+      "calculate_proportion": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->extract_fraud_ranges",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_fraud_ranges",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_fraud_ranges-->calculate_proportion",
+        "source": {
+          "operatorID": "extract_fraud_ranges",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_proportion",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

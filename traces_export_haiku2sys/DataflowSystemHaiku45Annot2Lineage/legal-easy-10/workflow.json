@@ -1,0 +1,174 @@
+{
+  "headId": "step-agent-72-8-1781034145323",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv', skiprows=1)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSN Number of Reports by Type data from 2024_CSN_Number_of_Reports_by_Type.csv, skipping the first row to use the correct headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_csn_data) -> pd.DataFrame:\n    df = load_csn_data.copy()\n    # Remove empty rows and metadata rows\n    df = df.dropna(how='all')\n    # Skip header row (index 0) and source row\n    df = df[df['Unnamed: 0'] != 'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission'].copy()\n    df = df[df['Unnamed: 0'] != 'Year'].copy()\n    # Rename columns\n    df.columns = ['Year', 'Fraud', 'Identity_Theft', 'Other']\n    # Convert to numeric, removing commas\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df['Fraud'] = df['Fraud'].str.replace(',', '').astype(float)\n    df['Identity_Theft'] = df['Identity_Theft'].str.replace(',', '').astype(float)\n    df['Other'] = df['Other'].str.replace(',', '').astype(float)\n    # Drop rows with NaN years\n    df = df.dropna(subset=['Year'])\n    df['Year'] = df['Year'].astype(int)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean CSN data by removing metadata rows, renaming columns to Year/Fraud/Identity_Theft/Other, converting numeric columns from comma-separated strings, and filtering to valid year rows",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_fraud_percentage",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_data) -> pd.DataFrame:\n    df = clean_data.copy()\n    df['Total_Reports'] = df['Fraud'] + df['Identity_Theft'] + df['Other']\n    df['Fraud_Percentage'] = (df['Fraud'] / df['Total_Reports']) * 100\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate total reports and fraud percentage for each year",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fraud_50_percent_years",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(calculate_fraud_percentage) -> pd.DataFrame:\n    result = calculate_fraud_percentage[calculate_fraud_percentage['Fraud_Percentage'] >= 50.0]\n    return result[['Year']].sort_values('Year')"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter years where Fraud reports are at least 50% of total reports and return sorted list of years",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_data": {
+        "x": 380,
+        "y": 40
+      },
+      "calculate_fraud_percentage": {
+        "x": 660,
+        "y": 40
+      },
+      "fraud_50_percent_years": {
+        "x": 940,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_csn_data-->clean_data",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_data-->calculate_fraud_percentage",
+        "source": {
+          "operatorID": "clean_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_fraud_percentage",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_fraud_percentage-->fraud_50_percent_years",
+        "source": {
+          "operatorID": "calculate_fraud_percentage",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fraud_50_percent_years",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

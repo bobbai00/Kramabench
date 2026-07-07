@@ -1,0 +1,136 @@
+{
+  "headId": "step-agent-116-8-1781150009363",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    return pd.DataFrame({\"file\": files})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all CSV files in the State MSA Identity Theft data folder.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "sample_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/Arkansas.csv\")\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load a sample CSV file (Arkansas.csv) to understand the structure of the State MSA Identity Theft data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "all_msa_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    records = []\n    for f in files:\n        state = f.split(\"/\")[-1].replace(\".csv\", \"\")\n        df = pd.read_csv(f, header=None, skiprows=2)\n        df.columns = [\"metro_area\", \"reports\"]\n        # Keep only rows where reports is numeric\n        df = df.dropna(subset=[\"metro_area\", \"reports\"])\n        df = df[pd.to_numeric(df[\"reports\"], errors=\"coerce\").notna()]\n        df[\"reports\"] = pd.to_numeric(df[\"reports\"])\n        # Filter out footer rows\n        df = df[df[\"metro_area\"].str.len() < 200]\n        df[\"state\"] = state\n        records.append(df)\n    return pd.concat(records, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all 52 CSV files from 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv'. Parse each file by skipping the first 2 rows, extract metro_area and reports columns, keep only numeric report rows, drop footer/null rows, and tag each row with the state name (from filename).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "highest_concentration",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(all_msa_data) -> pd.DataFrame:\n    df = all_msa_data.copy()\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df.dropna(subset=['reports'])\n    \n    # Count metro areas per state\n    state_msa_counts = df.groupby('state')['metro_area'].count().reset_index()\n    state_msa_counts.columns = ['state', 'msa_count']\n    \n    # Filter to states with at least 2 metropolitan areas\n    states_with_2plus = state_msa_counts[state_msa_counts['msa_count'] >= 2]['state']\n    df_filtered = df[df['state'].isin(states_with_2plus)]\n    \n    # Calculate total reports per state\n    state_totals = df_filtered.groupby('state')['reports'].sum().reset_index()\n    state_totals.columns = ['state', 'state_total']\n    \n    # Merge and compute concentration\n    df_merged = df_filtered.merge(state_totals, on='state')\n    df_merged['concentration'] = df_merged['reports'] / df_merged['state_total']\n    \n    # Find the max concentration per state (i.e., the single metro area with highest share)\n    max_conc = df_merged.groupby('state')['concentration'].max().reset_index()\n    max_conc.columns = ['state', 'max_concentration']\n    \n    # Find the state with the highest such concentration\n    result = max_conc.sort_values('max_concentration', ascending=False).head(10)\n    \n    # Also show the metro area name for clarity\n    top_row = df_merged.loc[df_merged['concentration'].idxmax()]\n    summary = df_merged.sort_values('concentration', ascending=False).head(10)[['state', 'metro_area', 'reports', 'state_total', 'concentration']]\n    \n    return summary\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to states with at least 2 MSAs, compute each MSA's share of state total reports (concentration), and find the state with the highest single-MSA concentration. Returns top 10 rows sorted by concentration descending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_files": {
+        "x": 100,
+        "y": 40
+      },
+      "sample_file": {
+        "x": 100,
+        "y": 220
+      },
+      "all_msa_data": {
+        "x": 100,
+        "y": 400
+      },
+      "highest_concentration": {
+        "x": 380,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "all_msa_data-->highest_concentration",
+        "source": {
+          "operatorID": "all_msa_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "highest_concentration",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

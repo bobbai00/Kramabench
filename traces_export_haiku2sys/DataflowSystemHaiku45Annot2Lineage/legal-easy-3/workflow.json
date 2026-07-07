@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-33-8-1781033595325",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv', header=1)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load identity theft reports data from 2024_CSN_Number_of_Reports_by_Type.csv with corrected header row (row 1)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "extract_identity_theft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_reports) -> pd.DataFrame:\n    df = load_reports.copy()\n    df.columns = ['Year', 'Fraud', 'Identity_Theft', 'Other']\n    df = df[df['Year'].notna()].copy()\n    df = df[df['Year'] != 'Year'].copy()\n    df = df[~df['Year'].str.contains('Source', na=False, case=False)].copy()\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'].notna()].copy()\n    df['Identity_Theft'] = df['Identity_Theft'].str.replace(',', '').astype(int)\n    return df[df['Year'].isin([2001, 2024])][['Year', 'Identity_Theft']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract identity theft report counts for years 2001 and 2024 from the loaded data, filtering out metadata rows and converting to integers after removing commas",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_ratio",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_identity_theft) -> pd.DataFrame:\n    data = extract_identity_theft.sort_values('Year')\n    reports_2001 = data[data['Year'] == 2001]['Identity_Theft'].values[0]\n    reports_2024 = data[data['Year'] == 2024]['Identity_Theft'].values[0]\n    ratio = reports_2024 / reports_2001\n    return pd.DataFrame({'Ratio_2024_vs_2001': [round(ratio, 4)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the ratio of identity theft reports in 2024 vs 2001, rounded to 4 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "extract_identity_theft": {
+        "x": 380,
+        "y": 40
+      },
+      "calculate_ratio": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_reports-->extract_identity_theft",
+        "source": {
+          "operatorID": "load_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_identity_theft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_identity_theft-->calculate_ratio",
+        "source": {
+          "operatorID": "extract_identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_ratio",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

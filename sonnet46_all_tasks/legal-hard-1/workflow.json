@@ -1,0 +1,332 @@
+{
+  "headId": "step-agent-135-12-1781158870665",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_html",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/metropolitan_statistics.html', 'r', encoding='utf-8') as f:\n        content = f.read()\n    return pd.DataFrame({'content': [content]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the metropolitan_statistics.html file content from data/legal/input/metropolitan_statistics.html",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_csv_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*\")\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, encoding='latin-1')\n        df['source_file'] = f\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from the State MSA Identity Theft data folder using glob. Concatenates all files with a source_file column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_html",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_html) -> pd.DataFrame:\n    from io import StringIO\n    tables = pd.read_html(StringIO(load_html['content'].iloc[0]))\n    df = tables[1]\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract table index 1 from metropolitan_statistics.html - the MSA population table with columns: 'Metropolitan statistical area', '2024 estimate', '2020 census', '% change', 'Encompassing combined statistical area'. Returns the raw table for further processing.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "parse_csv",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    frames = []\n    for f in files:\n        df = pd.read_csv(f, header=None, skiprows=1, skipfooter=1, engine='python')\n        df = df.iloc[:, :2]\n        df.columns = ['Metropolitan Area', '# of Reports']\n        df = df.dropna(subset=['Metropolitan Area'])\n        df = df[df['Metropolitan Area'].str.strip() != '']\n        df = df[df['Metropolitan Area'] != 'Metropolitan Area']\n        df = df[~df['Metropolitan Area'].str.startswith('Source:', na=False)]\n        frames.append(df)\n    result = pd.concat(frames, ignore_index=True)\n    result = result.drop_duplicates()\n    return result\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse identity theft CSV files from 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*'. Each file has row 0 blank and row 1 as header with columns 'Metropolitan Areas: Identity Theft Reports' and unnamed. Renames to 'Metropolitan Area' and '# of Reports', drops metadata/blank rows, deduplicates.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "normalize_html",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\nimport re\n\ndef process(parse_html):\n    df = parse_html.copy()\n    \n    def normalize_name(name):\n        if not isinstance(name, str):\n            return None\n        # Remove common suffixes\n        name = re.sub(r'\\b(Metropolitan Statistical Area|Micropolitan Statistical Area|Metropolitan Division|MSA|CSA)\\b', '', name, flags=re.IGNORECASE)\n        # Normalize dashes/hyphens (en-dash, em-dash, hyphen) to regular hyphen\n        name = name.replace('\u2013', '-').replace('\u2014', '-').replace('\\u2013', '-').replace('\\u2014', '-')\n        # Normalize punctuation: remove trailing commas, extra spaces\n        name = re.sub(r'[^\\w\\s,\\-]', '', name)\n        name = re.sub(r'\\s+', ' ', name).strip().strip(',').strip()\n        return name.lower()\n    \n    df['normalized_name'] = df['Metropolitan statistical area'].apply(normalize_name)\n    \n    # Interpolate 2023 population: linear between 2020 census and 2024 estimate\n    # 2023 is 3/4 of the way from 2020 to 2024\n    df['pop_2023'] = df['2020 census'] + (df['2024 estimate'] - df['2020 census']) * (3 / 4)\n    \n    return df[['Metropolitan statistical area', 'normalized_name', '2020 census', '2024 estimate', 'pop_2023']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize MSA names from HTML population table by removing suffixes (MSA, Metropolitan Statistical Area, etc.), normalizing dashes/punctuation, and lowercasing. Also interpolates 2023 population linearly between 2020 census and 2024 estimate (2023 = 2020 + 3/4 * (2024 - 2020)).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "normalize_csv",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\nimport re\n\ndef process(parse_csv):\n    df = parse_csv.copy()\n    \n    def normalize_name(name):\n        if not isinstance(name, str):\n            return None\n        # Remove suffixes: Metropolitan Statistical Area, Micropolitan Statistical Area, MSA, etc.\n        name = re.sub(r'\\s+(Metropolitan Statistical Area|Micropolitan Statistical Area|Metropolitan Division|MSA)\\s*$', '', name, flags=re.IGNORECASE)\n        # Normalize various dash types to regular hyphen\n        name = name.replace('\u2013', '-').replace('\u2014', '-').replace('\\u2013', '-').replace('\\u2014', '-')\n        # Normalize spaces around hyphens\n        name = re.sub(r'\\s*-\\s*', '-', name)\n        # Remove trailing/leading whitespace\n        name = name.strip()\n        # Lowercase\n        name = name.lower()\n        # Normalize multiple spaces\n        name = re.sub(r'\\s+', ' ', name)\n        return name\n    \n    df['normalized_name'] = df['Metropolitan Area'].apply(normalize_name)\n    # Convert # of Reports to numeric\n    df['reports'] = df['# of Reports'].str.replace(',', '').str.strip()\n    df['reports'] = pd.to_numeric(df['reports'], errors='coerce')\n    df = df.dropna(subset=['normalized_name', 'reports'])\n    return df[['Metropolitan Area', 'normalized_name', 'reports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize MSA names from CSV identity theft data by removing suffixes (Metropolitan Statistical Area, Micropolitan Statistical Area, MSA), normalizing dashes/punctuation, lowercasing. Also converts '# of Reports' to numeric (removing commas). Returns Metropolitan Area, normalized_name, reports columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "join_and_filter",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(normalize_html, normalize_csv):\n    merged = normalize_html.merge(normalize_csv, on='normalized_name', how='inner')\n    large = merged[merged['pop_2023'] > 1_000_000]\n    return large[['Metropolitan statistical area', 'Metropolitan Area', 'normalized_name', 'pop_2023', 'reports']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join HTML population data with CSV identity theft data on normalized_name (inner join). Filter to metropolitan areas with interpolated 2023 population > 1,000,000. Returns matched rows with pop_2023 and reports columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compute_average",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(join_and_filter) -> pd.DataFrame:\n    avg = join_and_filter['reports'].mean()\n    return pd.DataFrame({'average_reports': [round(avg, 4)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the average number of identity theft reports across all matched metropolitan areas with 2023 population > 1,000,000. Returns a single-row DataFrame with the rounded average.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_html": {
+        "x": 100,
+        "y": 40
+      },
+      "load_csv_files": {
+        "x": 100,
+        "y": 220
+      },
+      "parse_html": {
+        "x": 380,
+        "y": 40
+      },
+      "parse_csv": {
+        "x": 380,
+        "y": 220
+      },
+      "normalize_html": {
+        "x": 660,
+        "y": 40
+      },
+      "normalize_csv": {
+        "x": 660,
+        "y": 220
+      },
+      "join_and_filter": {
+        "x": 940,
+        "y": 130
+      },
+      "compute_average": {
+        "x": 1220,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_html-->parse_html",
+        "source": {
+          "operatorID": "load_html",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_html",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_html-->normalize_html",
+        "source": {
+          "operatorID": "parse_html",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "normalize_html",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_csv-->normalize_csv",
+        "source": {
+          "operatorID": "parse_csv",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "normalize_csv",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "normalize_html-->join_and_filter",
+        "source": {
+          "operatorID": "normalize_html",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "join_and_filter",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "normalize_csv-->join_and_filter",
+        "source": {
+          "operatorID": "normalize_csv",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "join_and_filter",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "join_and_filter-->compute_average",
+        "source": {
+          "operatorID": "join_and_filter",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_average",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

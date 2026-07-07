@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-26-5-1781072793174",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wb2012",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2012.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body testing data for 2012 from data/environment/input/water-body-testing-2012.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "wb2013",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2013.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water-body testing data for 2013 from data/environment/input/water-body-testing-2013.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compare_rates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wb2012, wb2013) -> pd.DataFrame:\n    # group by unique beach identifier: Community Code + Beach Name\n    g2012 = wb2012.groupby(['Community Code', 'Beach Name'], dropna=False).agg(total_2012=('Violation', 'size'), exceed_2012=('Violation', lambda s: (s == 'yes').sum())).reset_index()\n    g2012['rate_2012'] = g2012['exceed_2012'] / g2012['total_2012']\n    g2013 = wb2013.groupby(['Community Code', 'Beach Name'], dropna=False).agg(total_2013=('Violation', 'size'), exceed_2013=('Violation', lambda s: (s == 'yes').sum())).reset_index()\n    g2013['rate_2013'] = g2013['exceed_2013'] / g2013['total_2013']\n    merged = g2012.merge(g2013, on=['Community Code', 'Beach Name'], how='inner')\n    higher = merged[merged['rate_2013'] > merged['rate_2012']]\n    return pd.DataFrame({'higher_count': [int(len(higher))]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute per-beach (Community Code + Beach Name) exceedance rates for 2012 and 2013, inner-join to keep beaches with samples in 2012, count beaches where 2013 rate > 2012 rate; outputs single-row with higher_count.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wb2012": {
+        "x": 100,
+        "y": 40
+      },
+      "wb2013": {
+        "x": 100,
+        "y": 220
+      },
+      "compare_rates": {
+        "x": 380,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "wb2012-->compare_rates",
+        "source": {
+          "operatorID": "wb2012",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_rates",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wb2013-->compare_rates",
+        "source": {
+          "operatorID": "wb2013",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_rates",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

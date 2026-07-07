@@ -1,0 +1,313 @@
+{
+  "headId": "step-agent-302-10-1781045115436",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "suppression_costs",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/nifc_suppression_costs.csv', sep='\\t')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load suppression costs data from nifc_suppression_costs.csv with tab delimiter",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "human_caused_acres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/nifc_human_caused_acres.csv', sep='\\t')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load human-caused acres data from nifc_human_caused_acres.csv with tab delimiter",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_suppression",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_suppression_costs.csv', 'r') as f:\n        lines = [f.readline() for _ in range(25)]\n    return pd.DataFrame({'raw_line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 25 raw lines of nifc_suppression_costs.csv to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_acres",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_human_caused_acres.csv', 'r') as f:\n        lines = [f.readline() for _ in range(15)]\n    return pd.DataFrame({'raw_line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 15 raw lines of nifc_human_caused_acres.csv to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_suppression",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(suppression_costs) -> pd.DataFrame:\n    df = suppression_costs.copy()\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df['Total_numeric'] = df['Total'].str.replace('$', '').str.replace(',', '').astype(float)\n    df['Acres_numeric'] = df['Acres'].str.replace(',', '').astype(float)\n    return df[['Year', 'Acres_numeric', 'Total_numeric']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean suppression costs: convert Total and Acres columns to numeric values by removing $ and commas",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_acres",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(human_caused_acres) -> pd.DataFrame:\n    df = human_caused_acres.copy()\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df['Total_numeric'] = df['Total'].str.replace(',', '').astype(float)\n    return df[['Year', 'Total_numeric']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean human-caused acres: convert Total column to numeric by removing commas",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "merged_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_suppression, clean_acres) -> pd.DataFrame:\n    merged = clean_suppression.merge(clean_acres, on='Year', how='inner')\n    merged['cost_per_acre'] = merged['Total_numeric_x'] / merged['Total_numeric_y']\n    return merged[['Year', 'cost_per_acre']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge suppression costs and human-caused acres by Year, calculate cost_per_acre = Total_suppression / Total_human_caused_acres",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "max_cost_per_acre",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(merged_data) -> pd.DataFrame:\n    max_row = merged_data.loc[merged_data['cost_per_acre'].idxmax()]\n    year = int(max_row['Year'])\n    cost_per_acre = round(max_row['cost_per_acre'], 2)\n    return pd.DataFrame({\n        'Year': [year],\n        'Cost_Per_Acre': [cost_per_acre]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the year with the highest suppression cost per acre of human-caused fire and round to nearest cent",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "suppression_costs": {
+        "x": 100,
+        "y": 40
+      },
+      "human_caused_acres": {
+        "x": 100,
+        "y": 220
+      },
+      "inspect_suppression": {
+        "x": 100,
+        "y": 400
+      },
+      "inspect_acres": {
+        "x": 100,
+        "y": 580
+      },
+      "clean_suppression": {
+        "x": 380,
+        "y": 40
+      },
+      "clean_acres": {
+        "x": 380,
+        "y": 220
+      },
+      "merged_data": {
+        "x": 660,
+        "y": 130
+      },
+      "max_cost_per_acre": {
+        "x": 940,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "suppression_costs-->clean_suppression",
+        "source": {
+          "operatorID": "suppression_costs",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_suppression",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "human_caused_acres-->clean_acres",
+        "source": {
+          "operatorID": "human_caused_acres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_acres",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_suppression-->merged_data",
+        "source": {
+          "operatorID": "clean_suppression",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "merged_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_acres-->merged_data",
+        "source": {
+          "operatorID": "clean_acres",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "merged_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "merged_data-->max_cost_per_acre",
+        "source": {
+          "operatorID": "merged_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "max_cost_per_acre",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

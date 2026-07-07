@@ -1,0 +1,142 @@
+{
+  "headId": "step-agent-154-8-1781159238580",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "raw_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the beach datasheet from data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "explore_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', header=None)\n    return df.head(30)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the first 30 rows of the CSV with no header to inspect raw structure and find actual column names and data layout.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_structure",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import pandas as pd\n    # Load first 15 rows with no header to see the full structure\n    df = pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', \n                     header=None, nrows=15)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 15 rows of the CSV with no header to inspect the raw structure of the file including headers and column layout.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "pleasure_bay_failed",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import numpy as np\n    \n    # Load with no header to inspect raw structure\n    df = pd.read_csv(\n        'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv',\n        header=None\n    )\n    \n    # Row 0: Title\n    # Row 1: Station names (col4=Pleasure Bay @ Broadway, col6=Pleasure Bay @ Flagpole, col8=Castle Island Playground)\n    # Row 2: Column headers: col0=Date, col1=1-Day Rain, col2=2-Day Rain, col3=3-Day Rain,\n    #         col4=Tag, col5=Enterococcus (Broadway), col6=Tag, col7=Enterococcus (Flagpole),\n    #         col8=Tag, col9=Enterococcus (Castle Island)\n    # Row 3+: Data\n    \n    # Extract data rows (skip first 3 rows)\n    data = df.iloc[3:].copy()\n    data.columns = [\n        'date', 'rain_1day', 'rain_2day', 'rain_3day',\n        'tag_broadway', 'entero_broadway',\n        'tag_flagpole', 'entero_flagpole',\n        'tag_castle', 'entero_castle'\n    ]\n    data = data.reset_index(drop=True)\n    \n    # Keep only rows with a date\n    data = data[data['date'].notna() & (data['date'] != '')].copy()\n    \n    # Convert rain_1day to numeric\n    data['rain_1day'] = pd.to_numeric(data['rain_1day'], errors='coerce')\n    \n    # For Pleasure Bay Beach, the two sampling stations are Broadway and Flagpole\n    # The tag column indicates \"<\" meaning less than the value in entero column\n    # If tag is \"<\", entero value is a detection limit (e.g., <10 means actual count < 10)\n    # Standard: fails if Enterococcus > 104 counts per 100mL\n    \n    # Parse enterococcus values for Broadway\n    def parse_entero(tag, value):\n        \"\"\"Parse enterococcus value. If tag is '<', actual is less than value (passes). \n           Otherwise, use numeric value.\"\"\"\n        try:\n            v = float(value)\n        except (ValueError, TypeError):\n            return np.nan\n        tag_str = str(tag).strip() if pd.notna(tag) else ''\n        if tag_str == '<':\n            # Actual value is less than v, so we treat as v-epsilon (< v)\n            return -v  # use negative to flag as \"less than\"\n        return v\n    \n    data['entero_broadway_val'] = data.apply(\n        lambda r: parse_entero(r['tag_broadway'], r['entero_broadway']), axis=1\n    )\n    data['entero_flagpole_val'] = data.apply(\n        lambda r: parse_entero(r['tag_flagpole'], r['entero_flagpole']), axis=1\n    )\n    \n    # A sample FAILS if Enterococcus > 104\n    # \"<X\" means actual < X, so it PASSES (we coded as negative)\n    # Positive value > 104 means FAIL\n    # Pleasure Bay Beach fails if EITHER Broadway OR Flagpole fails\n    def fails_standard(val):\n        \"\"\"Returns True if value exceeds 104 (fails standard).\"\"\"\n        if pd.isna(val):\n            return False\n        if val < 0:  # \"<X\" notation, actual is below detection limit \u2192 passes\n            return False\n        return val > 104\n    \n    data['broadway_fails'] = data['entero_broadway_val'].apply(fails_standard)\n    data['flagpole_fails'] = data['entero_flagpole_val'].apply(fails_standard)\n    data['pleasure_bay_fails'] = data['broadway_fails'] | data['flagpole_fails']\n    \n    # Filter to rows where Pleasure Bay Beach FAILS\n    failed = data[data['pleasure_bay_fails']].copy()\n    \n    # Average 1-day rainfall for failed samples\n    avg_rain = failed['rain_1day'].mean()\n    \n    return failed[['date', 'rain_1day', 'entero_broadway', 'tag_broadway', \n                   'entero_flagpole', 'tag_flagpole', \n                   'entero_broadway_val', 'entero_flagpole_val']].assign(\n        avg_1day_rain_failed=round(avg_rain, 2)\n    )\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the beach CSV, skip the first 3 header rows, parse Enterococcus values for Pleasure Bay Beach (Broadway and Flagpole stations), handle the less-than tag notation, identify failed samples (Enterococcus > 104 per 100mL), and compute average 1-day prior rainfall for those failed samples.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "pleasure_bay_analysis",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import numpy as np\n    \n    df = pd.read_csv(\n        'data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv',\n        header=None,\n        skiprows=3\n    )\n    # After skipping 3 rows, columns are:\n    # 0: Date, 1: 1-Day Rain, 2: 2-Day Rain, 3: 3-Day Rain,\n    # 4: Tag for Broadway (e.g., '<'), 5: Enterococcus Broadway,\n    # 6: Tag for Flagpole (e.g., '<'), 7: Enterococcus Flagpole,\n    # 8: Tag for Castle Island, 9: Enterococcus Castle Island\n    df.columns = ['date', 'rain_1day', 'rain_2day', 'rain_3day',\n                  'tag_bw', 'entero_bw', 'tag_fp', 'entero_fp',\n                  'tag_ci', 'entero_ci']\n    \n    # Drop rows where date is NaN\n    df = df[df['date'].notna()].copy()\n    \n    # Convert rain_1day to numeric\n    df['rain_1day'] = pd.to_numeric(df['rain_1day'], errors='coerce')\n    \n    # Parse Enterococcus values for Broadway and Flagpole\n    # If tag is '<', value is less than the listed number (so it passes)\n    # We need numeric value; if tag == '<', it's below detection \u2192 passes standard\n    df['entero_bw_num'] = pd.to_numeric(df['entero_bw'], errors='coerce')\n    df['entero_fp_num'] = pd.to_numeric(df['entero_fp'], errors='coerce')\n    \n    # A sample FAILS if Enterococcus > 104 (i.e., strictly greater than 104)\n    # If tag is '<', the value is below detection \u2192 passes\n    # If tag is NaN and value > 104 \u2192 fails\n    df['bw_fail'] = (df['tag_bw'].isna()) & (df['entero_bw_num'] > 104)\n    df['fp_fail'] = (df['tag_fp'].isna()) & (df['entero_fp_num'] > 104)\n    \n    # A row fails if EITHER Broadway OR Flagpole fails\n    df['any_fail'] = df['bw_fail'] | df['fp_fail']\n    \n    failed = df[df['any_fail']]\n    \n    avg_rain = failed['rain_1day'].mean()\n    \n    result = pd.DataFrame({\n        'num_failed_samples': [len(failed)],\n        'avg_1day_rain_failed': [round(avg_rain, 2)],\n        'failed_dates': [list(failed['date'])]\n    })\n    return result\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load beach CSV, skip 3 header rows, parse Pleasure Bay Broadway and Flagpole Enterococcus values. A sample fails if Enterococcus > 104 (no '<' tag). A row fails if either station fails. Compute average 1-day prior rainfall for all failed rows. Returns summary with count, average rainfall, and failed dates.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "raw_data": {
+        "x": 100,
+        "y": 40
+      },
+      "explore_raw": {
+        "x": 100,
+        "y": 220
+      },
+      "inspect_structure": {
+        "x": 100,
+        "y": 400
+      },
+      "pleasure_bay_failed": {
+        "x": 100,
+        "y": 580
+      },
+      "pleasure_bay_analysis": {
+        "x": 100,
+        "y": 760
+      }
+    },
+    "links": [],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

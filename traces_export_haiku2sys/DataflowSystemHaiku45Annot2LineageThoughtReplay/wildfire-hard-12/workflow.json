@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-314-6-1781045749631",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fire_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Loads fire weather data from 2002-2014 and 2016 from Fire_Weather_Data_2002-2014_2016.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "analyze_start_distribution",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_fire_data) -> pd.DataFrame:\n    df = load_fire_data\n    \n    # Group by start_year and calculate median/mean start_day_of_year\n    yearly_stats = df.groupby('start_year')['start_day_of_year'].agg(['median', 'mean', 'count']).reset_index()\n    yearly_stats = yearly_stats.sort_values('start_year')\n    \n    return yearly_stats\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate yearly statistics (median, mean, count) of fire start_day_of_year to analyze temporal shift in fire start distribution",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "trend_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(analyze_start_distribution) -> pd.DataFrame:\n    df = analyze_start_distribution.copy()\n    df = df.sort_values('start_year')\n    \n    early_period = df[df['start_year'] <= 2008][['start_year', 'median', 'mean']].mean()\n    late_period = df[df['start_year'] >= 2011][['start_year', 'median', 'mean']].mean()\n    \n    median_diff = late_period['median'] - early_period['median']\n    mean_diff = late_period['mean'] - early_period['mean']\n    \n    result = pd.DataFrame({\n        'early_period_median': [early_period['median']],\n        'late_period_median': [late_period['median']],\n        'median_shift': [median_diff],\n        'early_period_mean': [early_period['mean']],\n        'late_period_mean': [late_period['mean']],\n        'mean_shift': [mean_diff],\n        'shifted_later': [median_diff > 0]\n    })\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compares fire start distribution between early (2002-2008) and late (2011-2016) periods to determine if shift occurred. Calculates median and mean day-of-year for each period and their differences. Positive shift = later start date, negative = earlier.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fire_data": {
+        "x": 100,
+        "y": 40
+      },
+      "analyze_start_distribution": {
+        "x": 380,
+        "y": 40
+      },
+      "trend_analysis": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fire_data-->analyze_start_distribution",
+        "source": {
+          "operatorID": "load_fire_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "analyze_start_distribution",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_start_distribution-->trend_analysis",
+        "source": {
+          "operatorID": "analyze_start_distribution",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "trend_analysis",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

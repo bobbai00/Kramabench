@@ -1,0 +1,268 @@
+{
+  "headId": "step-agent-21-8-1781033494876",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "florida_fraud_state",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Florida state and MSA fraud and other data from 2024 CSV file",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "metro_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv', encoding='latin-1')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Metropolitan Areas Fraud and Other Reports data with latin-1 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "florida_fraud_clean",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/Florida.csv', skiprows=1)\n    df = df.dropna(how='all')\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Florida state MSA fraud and other data, skip first row and drop empty rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "metro_fraud_clean",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Metropolitan_Areas_Fraud_and_Other_Reports.csv', skiprows=1, encoding='latin-1')\n    df = df.dropna(how='all')\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Metropolitan Areas Fraud and Other Reports, skip first row and drop empty rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "miami_florida_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(florida_fraud_clean) -> pd.DataFrame:\n    df = florida_fraud_clean.copy()\n    df.columns = ['Metropolitan Area', 'Reports']\n    df = df[df['Metropolitan Area'].str.contains('Miami-Fort Lauderdale', na=False, case=False)]\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Miami-Fort Lauderdale-West Palm Beach fraud report count from Florida state data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "miami_metro_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(metro_fraud_clean) -> pd.DataFrame:\n    df = metro_fraud_clean.copy()\n    df.columns = ['Rank', 'Metropolitan Area', 'Reports per 100K', 'Reports']\n    df = df[df['Metropolitan Area'].str.contains('Miami-Fort Lauderdale', na=False, case=False)]\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Miami-Fort Lauderdale-West Palm Beach fraud report count from metro data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "consistency_check",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(miami_florida_state, miami_metro_data) -> pd.DataFrame:\n    florida_reports = miami_florida_state['Reports'].values[0]\n    metro_reports = miami_metro_data['Reports'].values[0]\n    \n    is_consistent = florida_reports == metro_reports\n    \n    return pd.DataFrame({\n        'Florida State Data': [florida_reports],\n        'Metro Data': [metro_reports],\n        'Consistent': [is_consistent]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare fraud report counts for Miami-Fort Lauderdale-West Palm Beach between Florida state data and metro data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "florida_fraud_state": {
+        "x": 100,
+        "y": 40
+      },
+      "metro_fraud_data": {
+        "x": 100,
+        "y": 220
+      },
+      "florida_fraud_clean": {
+        "x": 100,
+        "y": 400
+      },
+      "metro_fraud_clean": {
+        "x": 100,
+        "y": 580
+      },
+      "miami_florida_state": {
+        "x": 380,
+        "y": 400
+      },
+      "miami_metro_data": {
+        "x": 380,
+        "y": 580
+      },
+      "consistency_check": {
+        "x": 660,
+        "y": 490
+      }
+    },
+    "links": [
+      {
+        "linkID": "florida_fraud_clean-->miami_florida_state",
+        "source": {
+          "operatorID": "florida_fraud_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "miami_florida_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "metro_fraud_clean-->miami_metro_data",
+        "source": {
+          "operatorID": "metro_fraud_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "miami_metro_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "miami_florida_state-->consistency_check",
+        "source": {
+          "operatorID": "miami_florida_state",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "consistency_check",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "miami_metro_data-->consistency_check",
+        "source": {
+          "operatorID": "miami_metro_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "consistency_check",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

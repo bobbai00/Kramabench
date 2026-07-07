@@ -1,0 +1,875 @@
+{
+  "headId": "step-agent-414-36-1781055529694",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_tle_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load():\n    with open('data/astronomy/input/TLE/48445.tle', 'r') as f:\n        lines = f.readlines()\n    \n    records = []\n    i = 0\n    while i < len(lines):\n        line = lines[i].strip()\n        if not line or line.startswith('#'):\n            i += 1\n            continue\n        \n        # Check if this is a line 1 of TLE\n        if line.startswith('1 48445'):\n            line1 = line\n            if i + 1 < len(lines):\n                line2 = lines[i + 1].strip()\n                if line2.startswith('2 48445'):\n                    records.append({\n                        'line1': line1,\n                        'line2': line2\n                    })\n                    i += 2\n                else:\n                    i += 1\n            else:\n                i += 1\n        else:\n            i += 1\n    \n    return pd.DataFrame(records)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and parse TLE file from 'data/astronomy/input/TLE/48445.tle', extracting complete line1 and line2 for each TLE record",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_tle_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/astronomy/input/TLE/48445.tle', 'r') as f:\n        content = f.read(2000)\n    return pd.DataFrame({'raw_content': [content]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the raw content of the TLE file to understand its format and structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_tle_dates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_tle_data) -> pd.DataFrame:\n    df = load_tle_data.copy()\n    \n    def parse_epoch(line1):\n        try:\n            year = int(line1[18:20])\n            day_frac = float(line1[20:32])\n            \n            full_year = 2000 + year if year < 57 else 1900 + year\n            day = int(day_frac)\n            fraction = day_frac - day\n            \n            return pd.Timestamp(year=full_year, month=1, day=1) + pd.Timedelta(days=day-1) + pd.Timedelta(days=fraction)\n        except Exception as e:\n            return pd.NaT\n    \n    df['epoch'] = df['line1'].apply(parse_epoch)\n    \n    return df[['line1', 'line2', 'epoch']].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse epoch dates from TLE line1 (year and day of year), convert to datetime format for filtering and sorting",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_altitudes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates):\n    from skyfield.api import EarthSatellite, load\n    from skyfield.data import hipparcos\n    import pandas as pd\n    \n    ts = load.timescale()\n    eph = load('de421.bsp')\n    earth = eph['earth']\n    \n    results = []\n    \n    for idx, row in parse_tle_dates.iterrows():\n        try:\n            line1 = row['line1'].strip()\n            line2 = row['line2'].strip()\n            epoch_dt = row['epoch']\n            \n            sat = EarthSatellite.from_two_line_elements(line1, line2)\n            t = ts.from_datetime(epoch_dt)\n            astrometric = sat.at(t).observe(earth)\n            apparent = astrometric.apparent()\n            position = apparent.position.au\n            \n            distance_au = (position[0]**2 + position[1]**2 + position[2]**2) ** 0.5\n            distance_km = distance_au * 149597870.7\n            \n            earth_radius_km = 6371.0\n            altitude_km = distance_km - earth_radius_km\n            \n            results.append({'epoch': epoch_dt, 'altitude_km': altitude_km})\n        except Exception as e:\n            results.append({'epoch': epoch_dt, 'altitude_km': None})\n    \n    return pd.DataFrame(results)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate altitude in km for each TLE epoch using skyfield's EarthSatellite.from_two_line_elements() to parse TLE, compute geocentric distance, subtract Earth radius to get altitude above surface in km",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_altitude",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, load\n    from skyfield.data import hipparcos\n    import numpy as np\n    \n    # Load ephemeris\n    ts = load.timescale()\n    eph = load('de421.bsp')\n    earth = eph['earth']\n    \n    results = []\n    for idx, row in parse_tle_dates.head(5).iterrows():\n        try:\n            line1 = str(row['line1']).strip()\n            line2 = str(row['line2']).strip()\n            \n            # Parse TLE\n            satellite = EarthSatellite.from_line(line1, line2)\n            \n            # Parse epoch\n            epoch_str = row['epoch_dt']\n            year = int(epoch_str[:4])\n            \n            # Create time using day of year\n            # Extract from line1: positions 18-19 are year, 20-23 are day of year\n            tle_year_str = line1[18:20]\n            tle_doy_str = line1[20:32]\n            \n            tle_year = int(tle_year_str)\n            if tle_year < 57:\n                full_year = 2000 + tle_year\n            else:\n                full_year = 1900 + tle_year\n            \n            tle_doy = float(tle_doy_str)\n            \n            # Create time\n            t = ts.utc(full_year, 1, 1) + (tle_doy - 1)\n            \n            # Get position in ITRF frame\n            astrometric = earth.at(t).observe(satellite)\n            apparent = astrometric.apparent()\n            \n            # Try to get position\n            try:\n                position = apparent.position.au\n                distance_au = np.linalg.norm(position)\n                distance_km = distance_au * 149597870.7\n                \n                # Earth radius\n                earth_radius_km = 6371.0\n                altitude_km = distance_km - earth_radius_km\n                \n                results.append({\n                    'epoch_dt': epoch_str,\n                    'line1': line1[:20] + '...',\n                    'altitude_km': altitude_km,\n                    'distance_au': distance_au\n                })\n            except Exception as e:\n                results.append({\n                    'epoch_dt': epoch_str,\n                    'line1': line1[:20] + '...',\n                    'altitude_km': None,\n                    'distance_au': None\n                })\n        except Exception as e:\n            results.append({\n                'epoch_dt': row['epoch_dt'],\n                'line1': 'ERROR',\n                'altitude_km': None,\n                'distance_au': None\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug altitude calculation - test skyfield computation on first 5 TLE records with detailed error tracking",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_tle_parsing",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_tle_dates) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, wgs84, load\n    \n    # Get first few records\n    df = parse_tle_dates.head(3).copy()\n    \n    # Debug: extract line1 and line2, check format\n    results = []\n    for idx, row in df.iterrows():\n        line1 = str(row['line1']).strip()\n        line2 = str(row['line2']).strip()\n        epoch_dt = row['epoch_dt']\n        \n        # Log the lines\n        results.append({\n            'epoch': epoch_dt,\n            'line1_len': len(line1),\n            'line1': line1[:50],\n            'line2_len': len(line2),\n            'line2': line2[:50],\n        })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug TLE line format - extract line1 and line2 to check their structure and length",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_directly",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, load, wgs84\n    from skyfield.toposlib import GeographicPosition\n    import numpy as np\n    \n    ts = load.timescale()\n    \n    results = []\n    for idx, row in parse_tle_dates.head(5).iterrows():\n        try:\n            line1 = row['line1'].strip()\n            line2 = row['line2'].strip()\n            epoch = row['epoch']\n            \n            satellite = EarthSatellite.from_line(line1, line2)\n            \n            # Create a skyfield time object from the epoch datetime\n            epoch_dt = pd.Timestamp(epoch)\n            t = ts.from_datetime(epoch_dt)\n            \n            # Get geocentric position\n            astrometric = satellite.at(t)\n            \n            # Get Earth-relative position\n            position = astrometric.apparent().position.au\n            \n            # Convert to km (1 AU = 149,597,870.7 km)\n            r_km = np.linalg.norm(position) * 149597870.7\n            \n            # Earth radius in km\n            earth_radius_km = 6371.0\n            altitude = r_km - earth_radius_km\n            \n            results.append({\n                'epoch': epoch,\n                'altitude_km': altitude,\n                'r_km': r_km,\n                'line1_len': len(line1),\n                'line2_len': len(line2)\n            })\n        except Exception as e:\n            results.append({\n                'epoch': epoch,\n                'altitude_km': np.nan,\n                'error': str(e),\n                'line1_len': len(line1),\n                'line2_len': len(line2)\n            })\n    \n    return pd.DataFrame(results)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test skyfield altitude calculation directly - debug coordinate transformation and verify computation",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_api",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, wgs84, load\n    \n    results = []\n    \n    first_row = parse_tle_dates.iloc[0]\n    line1 = first_row['line1']\n    line2 = first_row['line2']\n    \n    try:\n        ts = load.timescale()\n        sat = EarthSatellite.from_line(line1, line2)\n        timescale = ts.utc(2024, 1, 1, 10, 38, 28)\n        astrometric = sat.at(timescale)\n        position = astrometric.apparent()\n        lat, lon = wgs84.latlong_of(position)\n        elevation_m = wgs84.height_of(position).m\n        results.append({'method': 'from_line', 'success': True, 'altitude_km': elevation_m / 1000})\n    except Exception as e:\n        results.append({'method': 'from_line', 'success': False, 'error': str(e)})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test skyfield API - try correct imports and methods to compute altitude from TLE",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_correct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, wgs84\n    import numpy as np\n    \n    results = []\n    \n    for idx, row in parse_tle_dates.head(5).iterrows():\n        try:\n            line1 = row['line1'].strip()\n            line2 = row['line2'].strip()\n            epoch = row['epoch']\n            \n            # Correct skyfield method: create satellite from two line elements\n            sat = EarthSatellite.from_two_line_elements(line1, line2)\n            \n            # Convert epoch to skyfield Time object\n            from skyfield import api\n            ts = api.load.timescale()\n            t = ts.from_datetime(epoch)\n            \n            # Compute geocentric position (ITRF coordinates)\n            astrometric = sat.at(t)\n            position = astrometric.apparent().frame_xyz(wgs84)\n            \n            # Compute distance from Earth center and subtract radius\n            distance_km = np.sqrt((position**2).sum()) / 1000.0\n            altitude_km = distance_km - 6371.0  # Earth mean radius in km\n            \n            results.append({'method': 'from_two_line_elements', 'success': True, 'altitude_km': altitude_km, 'error': None})\n        except Exception as e:\n            results.append({'method': 'from_two_line_elements', 'success': False, 'altitude_km': None, 'error': str(e)})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test correct skyfield API - use EarthSatellite.from_two_line_elements() to create satellite, then compute altitude from ITRF position",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_correct_api",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates):\n    from skyfield.api import EarthSatellite, wgs84, load\n    from skyfield.data import hipparcos\n    \n    df = parse_tle_dates.head(1).copy()\n    results = []\n    \n    for idx, row in df.iterrows():\n        line1 = row['line1']\n        line2 = row['line2']\n        epoch = row['epoch']\n        \n        try:\n            ts = load.timescale()\n            \n            sat = EarthSatellite.from_line(line1, line2)\n            t = ts.from_datetime(epoch)\n            astrometric = sat.at(t)\n            geocentric = astrometric.apparent().frame_xyz\n            \n            position_km = geocentric.km\n            distance = (position_km[0]**2 + position_km[1]**2 + position_km[2]**2)**0.5\n            \n            earth_radius = 6371.0\n            altitude = distance - earth_radius\n            \n            results.append({\n                'method': 'from_line',\n                'success': True,\n                'altitude_km': altitude,\n                'error': None\n            })\n        except AttributeError as e:\n            results.append({\n                'method': 'from_line',\n                'success': False,\n                'altitude_km': None,\n                'error': f'from_line failed: {str(e)}'\n            })\n        except Exception as e:\n            results.append({\n                'method': 'from_line',\n                'success': False,\n                'altitude_km': None,\n                'error': str(e)\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test skyfield API - use EarthSatellite.from_line() and compute altitude from ITRF position at epoch time",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_import",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_tle_dates) -> pd.DataFrame:\n    from skyfield.api import EarthSatellite, load, wgs84\n    from skyfield.data import hipparcos\n    import datetime\n    \n    results = []\n    \n    # Test 1: Check what methods EarthSatellite actually has\n    methods = [m for m in dir(EarthSatellite) if not m.startswith('_')]\n    results.append({'test': 'EarthSatellite methods', 'info': str(methods[:10])})\n    \n    # Test 2: Try to use Wgs84 to build a satellite from TLE lines\n    try:\n        line1 = parse_tle_dates.iloc[0]['line1']\n        line2 = parse_tle_dates.iloc[0]['line2']\n        results.append({'test': 'TLE lines available', 'info': f'line1={line1[:30]}..., line2={line2[:30]}...'})\n    except Exception as e:\n        results.append({'test': 'TLE lines error', 'info': str(e)})\n    \n    # Test 3: Check skyfield version\n    try:\n        import skyfield\n        results.append({'test': 'skyfield version', 'info': skyfield.__version__})\n    except:\n        results.append({'test': 'skyfield version', 'info': 'unknown'})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test skyfield imports and available methods on EarthSatellite class",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_satrec",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates):\n    from skyfield.api import EarthSatellite, load, wgs84\n    from skyfield.data.hipparcos import load_dataframe\n    import pandas as pd\n    \n    ts = load.timescale()\n    \n    results = []\n    for idx, row in parse_tle_dates.head(5).iterrows():\n        try:\n            line1 = row['line1'].strip()\n            line2 = row['line2'].strip()\n            epoch_str = str(row['epoch'])\n            \n            from skyfield.api import EarthSatellite\n            from skyfield.timelib import Time\n            \n            sat = EarthSatellite.from_satrec(None)\n            \n            results.append({\n                'method': 'from_satrec_test',\n                'success': False,\n                'error': 'Need to check satrec creation'\n            })\n        except Exception as e:\n            results.append({\n                'method': 'from_satrec_test',\n                'success': False,\n                'error': str(e)\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test skyfield satrec - check if we can use from_satrec to load TLE data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_skyfield_proper",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_tle_dates):\n    from skyfield.api import EarthSatellite, load, wgs84\n    from skyfield.data.hipparcos import load_dataframe as load_hipparcos\n    import pandas as pd\n    \n    ts = load.timescale()\n    \n    results = []\n    for idx, row in parse_tle_dates.head(5).iterrows():\n        try:\n            line1 = row['line1']\n            line2 = row['line2']\n            epoch = row['epoch']\n            \n            satellite = EarthSatellite.from_satrec(line1, line2, ts)\n            \n            t = ts.from_datetime(pd.Timestamp(epoch).to_pydatetime())\n            astrometric = satellite.at(t)\n            \n            altitude_km = (astrometric.apparent_magnitude)\n            \n            results.append({\n                'epoch': epoch,\n                'method': 'from_satrec',\n                'success': True,\n                'altitude_km': altitude_km,\n                'error': None\n            })\n        except Exception as e:\n            results.append({\n                'epoch': epoch,\n                'method': 'from_satrec',\n                'success': False,\n                'altitude_km': None,\n                'error': str(e)\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test skyfield proper API - use from_satrec with timescale object, then compute ITRF position and altitude",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "test_sgp4_direct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_tle_dates):\n    from sgp4.api import Satrec\n    import numpy as np\n    \n    results = []\n    for idx, row in parse_tle_dates.head(5).iterrows():\n        try:\n            line1 = row['line1']\n            line2 = row['line2']\n            epoch_dt = row['epoch']\n            \n            sat = Satrec.twoline2rv(line1, line2)\n            \n            jd = epoch_dt.to_julian_date() if hasattr(epoch_dt, 'to_julian_date') else (epoch_dt.toordinal() + 1721425.5)\n            fr = 0.0\n            \n            err, r, v = sat.sgp4(jd, fr)\n            \n            if err == 0 and r:\n                x, y, z = r[0], r[1], r[2]\n                r_mag = np.sqrt(x**2 + y**2 + z**2)\n                earth_radius = 6371.0\n                altitude_km = r_mag - earth_radius\n                results.append({\n                    'epoch': epoch_dt,\n                    'method': 'sgp4_direct',\n                    'success': True,\n                    'altitude_km': altitude_km,\n                    'error': None\n                })\n            else:\n                results.append({\n                    'epoch': epoch_dt,\n                    'method': 'sgp4_direct',\n                    'success': False,\n                    'altitude_km': None,\n                    'error': f'sgp4 error code: {err}'\n                })\n        except Exception as e:\n            results.append({\n                'epoch': epoch_dt,\n                'method': 'sgp4_direct',\n                'success': False,\n                'altitude_km': None,\n                'error': str(e)\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Test SGP4 direct API - use sgp4.api.Satrec.twoline2rv() to load TLE and compute ITRF position and altitude",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_all_altitudes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates):\n    from sgp4.api import Satrec\n    import numpy as np\n    \n    results = []\n    for _, row in parse_tle_dates.iterrows():\n        try:\n            line1 = row['line1']\n            line2 = row['line2']\n            epoch = row['epoch']\n            \n            sat = Satrec.twoline2rv(line1, line2)\n            if sat.error == 0:\n                jd = epoch.to_julian_date()\n                fr = 0.0\n                err, r, v = sat.sgp4(jd, fr)\n                if err == 0:\n                    r_km = np.linalg.norm(r)\n                    altitude_km = r_km - 6371.0\n                    results.append({'epoch': epoch, 'altitude_km': altitude_km})\n                else:\n                    results.append({'epoch': epoch, 'altitude_km': np.nan})\n            else:\n                results.append({'epoch': epoch, 'altitude_km': np.nan})\n        except Exception as e:\n            results.append({'epoch': epoch, 'altitude_km': np.nan})\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate altitude in km for all TLE epochs using sgp4.api.Satrec.twoline2rv() to load TLE and sgp4() with JD/fraction to compute altitude above Earth surface (6371 km radius)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_altitude_calculation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_tle_dates):\n    import pandas as pd\n    from sgp4.api import Satrec\n    \n    results = []\n    for idx, row in parse_tle_dates.head(10).iterrows():\n        try:\n            line1 = row['line1'].strip()\n            line2 = row['line2'].strip()\n            epoch = row['epoch']\n            \n            satrec = Satrec.twoline2rv(line1, line2)\n            \n            yr = int(epoch.year)\n            mo = int(epoch.month)\n            da = int(epoch.day)\n            hr = int(epoch.hour)\n            minute = int(epoch.minute)\n            sec = float(epoch.second) + epoch.microsecond / 1e6\n            \n            err, pos, vel = satrec.sgp4(yr, mo, da, hr, minute, sec)\n            \n            if err == 0 and pos is not None:\n                x, y, z = pos\n                r_km = (x**2 + y**2 + z**2)**0.5\n                altitude = r_km - 6371.0\n                results.append({\n                    'epoch': epoch,\n                    'line1_valid': len(line1) == 69,\n                    'line2_valid': len(line2) == 69,\n                    'sgp4_err': err,\n                    'r_km': r_km,\n                    'altitude_km': altitude,\n                    'status': 'success'\n                })\n            else:\n                results.append({\n                    'epoch': epoch,\n                    'line1_valid': len(line1) == 69,\n                    'line2_valid': len(line2) == 69,\n                    'sgp4_err': err,\n                    'r_km': None,\n                    'altitude_km': None,\n                    'status': f'sgp4_error_{err}'\n                })\n        except Exception as e:\n            results.append({\n                'epoch': epoch,\n                'line1_valid': None,\n                'line2_valid': None,\n                'sgp4_err': None,\n                'r_km': None,\n                'altitude_km': None,\n                'status': str(e)\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug altitude calculation - check TLE parsing and SGP4 computation step-by-step for first 10 records to identify where NaN values come from",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "deduplicate_altitudes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_all_altitudes):\n    df = calculate_all_altitudes.drop_duplicates(subset=['epoch', 'altitude_km']).reset_index(drop=True)\n    df = df.sort_values('epoch').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Remove duplicate TLE epochs and sort by epoch datetime in ascending order",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_altitude_changes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(deduplicate_altitudes):\n    df = deduplicate_altitudes.copy()\n    df['time_diff_hours'] = df['epoch'].diff().dt.total_seconds() / 3600\n    df['altitude_change_m'] = (df['altitude_km'] - df['altitude_km'].shift()) * 1000\n    df['abs_altitude_change_m'] = df['altitude_change_m'].abs()\n    return df[['epoch', 'altitude_km', 'time_diff_hours', 'altitude_change_m', 'abs_altitude_change_m']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate time differences between consecutive TLE epochs (in hours) and altitude changes (in meters). Compute both signed and absolute altitude changes.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "count_major_altitude_changes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(calculate_altitude_changes):\n    filtered = calculate_altitude_changes[\n        (calculate_altitude_changes['time_diff_hours'] <= 12) &\n        (calculate_altitude_changes['abs_altitude_change_m'] > 1000)\n    ]\n    count = len(filtered)\n    return pd.DataFrame({'major_altitude_change_count': [count]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count satellite major altitude changes (>1000m) occurring within 12 hours between consecutive TLE epochs during 2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_major_changes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_altitude_changes):\n    df = calculate_altitude_changes.copy()\n    \n    # Filter for major altitude changes (>1000m) within 12 hours\n    major_changes = df[\n        (df['abs_altitude_change_m'] > 1000) & \n        (df['time_diff_hours'] <= 12) &\n        (df['time_diff_hours'].notna())\n    ]\n    \n    return major_changes[['epoch', 'altitude_km', 'time_diff_hours', 'altitude_change_m', 'abs_altitude_change_m']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Verify major altitude changes - extract all records where absolute altitude change > 1000m within 12 hours to inspect the actual changes",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_tle_data": {
+        "x": 100,
+        "y": 1120
+      },
+      "inspect_tle_file": {
+        "x": 100,
+        "y": 1300
+      },
+      "parse_tle_dates": {
+        "x": 380,
+        "y": 1120
+      },
+      "calculate_altitudes": {
+        "x": 660,
+        "y": 40
+      },
+      "debug_altitude": {
+        "x": 660,
+        "y": 220
+      },
+      "debug_tle_parsing": {
+        "x": 660,
+        "y": 400
+      },
+      "test_skyfield_directly": {
+        "x": 660,
+        "y": 580
+      },
+      "test_skyfield_api": {
+        "x": 660,
+        "y": 760
+      },
+      "test_skyfield_correct": {
+        "x": 660,
+        "y": 940
+      },
+      "test_skyfield_correct_api": {
+        "x": 660,
+        "y": 1120
+      },
+      "test_skyfield_import": {
+        "x": 660,
+        "y": 1300
+      },
+      "test_skyfield_satrec": {
+        "x": 660,
+        "y": 1480
+      },
+      "test_skyfield_proper": {
+        "x": 660,
+        "y": 1660
+      },
+      "test_sgp4_direct": {
+        "x": 660,
+        "y": 1840
+      },
+      "calculate_all_altitudes": {
+        "x": 660,
+        "y": 2020
+      },
+      "debug_altitude_calculation": {
+        "x": 660,
+        "y": 2200
+      },
+      "deduplicate_altitudes": {
+        "x": 940,
+        "y": 2020
+      },
+      "calculate_altitude_changes": {
+        "x": 1220,
+        "y": 2020
+      },
+      "count_major_altitude_changes": {
+        "x": 1500,
+        "y": 1930
+      },
+      "verify_major_changes": {
+        "x": 1500,
+        "y": 2110
+      }
+    },
+    "links": [
+      {
+        "linkID": "parse_tle_dates-->debug_altitude",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_altitude",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->debug_tle_parsing",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_tle_parsing",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_tle_data-->parse_tle_dates",
+        "source": {
+          "operatorID": "load_tle_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_tle_dates",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_directly",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_directly",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->calculate_altitudes",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_altitudes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_api",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_api",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_correct",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_correct",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_correct_api",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_correct_api",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_import",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_import",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_satrec",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_satrec",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_skyfield_proper",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_skyfield_proper",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->test_sgp4_direct",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_sgp4_direct",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->debug_altitude_calculation",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_altitude_calculation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_tle_dates-->calculate_all_altitudes",
+        "source": {
+          "operatorID": "parse_tle_dates",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_all_altitudes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_all_altitudes-->deduplicate_altitudes",
+        "source": {
+          "operatorID": "calculate_all_altitudes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "deduplicate_altitudes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "deduplicate_altitudes-->calculate_altitude_changes",
+        "source": {
+          "operatorID": "deduplicate_altitudes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_altitude_changes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_altitude_changes-->count_major_altitude_changes",
+        "source": {
+          "operatorID": "calculate_altitude_changes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_major_altitude_changes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_altitude_changes-->verify_major_changes",
+        "source": {
+          "operatorID": "calculate_altitude_changes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_major_changes",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

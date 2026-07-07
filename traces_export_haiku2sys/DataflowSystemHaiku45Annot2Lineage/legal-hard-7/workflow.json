@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-57-34-1781034044150",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_theft_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv', skiprows=2)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load identity theft reports data from CSV file, skipping first 2 rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_theft_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_theft_data) -> pd.DataFrame:\n    df = load_theft_data.copy()\n    df = df.dropna(how='all')\n    df = df.drop_duplicates()\n    \n    # Filter out metadata rows\n    df = df[~df['Theft Type'].astype(str).str.contains('top identity theft types|Source:|Consumer Sentinel', case=False, na=False)]\n    df = df[df['Year'].notna()]\n    df = df[df['Theft Type'].notna()]\n    \n    # Rename columns to standardized lowercase\n    df.columns = df.columns.str.lower()\n    \n    # The actual structure appears to be: Theft Type | Year | # of Reports\n    # But the loaded data shows Year in first column. Let's examine and reorder if needed\n    # Based on the hint output, Year values are like \"2020\", \"2021\" and Theft Type are like \"Bank Account\"\n    # Rename columns properly based on actual content\n    df = df.rename(columns={'theft type': 'year', 'year': 'theft_type', '# of reports': 'reports'})\n    \n    df['year'] = df['year'].astype(int)\n    df['reports'] = df['reports'].astype(str).str.replace(',', '').astype(int)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft data by removing metadata rows and null rows. Handle column reordering (actual structure is Year, Theft Type, Reports). Convert Year to integer and Reports to integer (removing commas). Standardize column names to lowercase.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_growth_rate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_theft_data) -> pd.DataFrame:\n    df = clean_theft_data\n    growth = []\n    for theft_type in df['theft_type'].unique():\n        data_2020 = df[(df['theft_type'] == theft_type) & (df['year'] == 2020)]['reports'].values\n        data_2024 = df[(df['theft_type'] == theft_type) & (df['year'] == 2024)]['reports'].values\n        \n        if len(data_2020) > 0 and len(data_2024) > 0:\n            reports_2020 = data_2020[0]\n            reports_2024 = data_2024[0]\n            growth_rate = ((reports_2024 - reports_2020) / reports_2020) * 100\n            growth.append({'theft_type': theft_type, '2020_reports': reports_2020, '2024_reports': reports_2024, 'growth_rate_pct': growth_rate})\n    \n    return pd.DataFrame(growth)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate relative growth rate (%) for each identity theft category from 2020 to 2024 using formula: ((2024 value - 2020 value) / 2020 value) * 100",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_theft_data": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_theft_data": {
+        "x": 380,
+        "y": 40
+      },
+      "calculate_growth_rate": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_theft_data-->clean_theft_data",
+        "source": {
+          "operatorID": "load_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_theft_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_theft_data-->calculate_growth_rate",
+        "source": {
+          "operatorID": "clean_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_growth_rate",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

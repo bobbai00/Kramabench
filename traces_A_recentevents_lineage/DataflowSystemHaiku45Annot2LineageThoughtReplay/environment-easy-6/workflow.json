@@ -1,0 +1,174 @@
+{
+  "headId": "step-agent-357-5-1781052133894",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_all_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/water-body-testing-*.csv')\n    dfs = []\n    for file in sorted(files):\n        df = pd.read_csv(file)\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water body testing CSV files from 2002-2023 using glob pattern matching and concatenate into single DataFrame",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_marine_beaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_all_data) -> pd.DataFrame:\n    return load_all_data[load_all_data['Beach Type Description'] == 'Marine']\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water body testing data to include only marine beaches",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "normalize_violations",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_marine_beaches) -> pd.DataFrame:\n    df = filter_marine_beaches.copy()\n    df['Violation'] = df['Violation'].str.lower()\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize violation column values to lowercase for consistent comparison (yes/no)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_exceedance_rate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(normalize_violations) -> pd.DataFrame:\n    df = normalize_violations\n    total_tests = len(df)\n    violation_tests = len(df[df['Violation'] == 'yes'])\n    exceedance_rate = (violation_tests / total_tests) * 100 if total_tests > 0 else 0\n    return pd.DataFrame({'exceedance_rate': [round(exceedance_rate, 2)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the exceedance rate for marine beaches as percentage of tests with violations (Violation='yes')",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_all_data": {
+        "x": 100,
+        "y": 40
+      },
+      "filter_marine_beaches": {
+        "x": 380,
+        "y": 40
+      },
+      "normalize_violations": {
+        "x": 660,
+        "y": 40
+      },
+      "calculate_exceedance_rate": {
+        "x": 940,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_all_data-->filter_marine_beaches",
+        "source": {
+          "operatorID": "load_all_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_marine_beaches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_marine_beaches-->normalize_violations",
+        "source": {
+          "operatorID": "filter_marine_beaches",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "normalize_violations",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "normalize_violations-->calculate_exceedance_rate",
+        "source": {
+          "operatorID": "normalize_violations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_exceedance_rate",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

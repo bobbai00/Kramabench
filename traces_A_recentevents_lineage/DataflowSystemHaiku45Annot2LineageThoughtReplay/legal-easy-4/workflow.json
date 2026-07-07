@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-135-11-1781035827104",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Data_Contributors.csv', header=3)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSN Data Contributors CSV file with header at row 3 to properly align column names",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_ftc_web_fraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_csn_data) -> pd.DataFrame:\n    df = load_csn_data\n    \n    # Filter for FTC Web Reports (Fraud & Other) for years 2022-2024\n    df_filtered = df[\n        (df['Year'].isin(['2022', '2023', '2024'])) &\n        (df['Data Contributor'] == 'FTC - Web Reports (Fraud & Other)')\n    ]\n    \n    return df_filtered"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter for FTC Web Reports (Fraud & Other) entries for years 2022-2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "sum_ftc_web_fraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_ftc_web_fraud) -> pd.DataFrame:\n    df = filter_ftc_web_fraud\n    \n    # Remove commas from # of Reports and convert to numeric\n    df['reports_numeric'] = df['# of Reports'].str.replace(',', '').astype(int)\n    \n    # Sum all reports\n    total_reports = df['reports_numeric'].sum()\n    \n    # Return as dataframe\n    return pd.DataFrame({'Total FTC Web Reports (Fraud & Other) 2022-2024': [total_reports]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sum total FTC Web Reports (Fraud & Other) for 2022-2024 after converting comma-separated strings to integers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "filter_ftc_web_fraud": {
+        "x": 380,
+        "y": 40
+      },
+      "sum_ftc_web_fraud": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_csn_data-->filter_ftc_web_fraud",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_ftc_web_fraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_ftc_web_fraud-->sum_ftc_web_fraud",
+        "source": {
+          "operatorID": "filter_ftc_web_fraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "sum_ftc_web_fraud",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

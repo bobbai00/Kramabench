@@ -1,0 +1,290 @@
+{
+  "headId": "step-agent-118-11-1781150104679",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the NOAA wildfires dataset from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_vars",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the NOAA wildfires variable description from data/wildfire/input/noaa_wildfires_variabledescrip.csv using cp1252 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "check_vars",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_vars):\n    # Show all variable descriptions to find residential houses damaged column\n    return load_vars[load_vars['Variable Name '].str.contains('res|house|struct|damage|resid', case=False, na=False) | \n                     load_vars['Young et al. 2020, Table 1'].str.contains('res|house|struct|damage|resid', case=False, na=False) |\n                     load_vars['Alternative description'].str.contains('res|house|struct|damage|resid', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions for columns related to residential houses damaged",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "all_vars",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_vars):\n    return load_vars[load_vars['Alternative description'].str.contains('resid|house|home|dwelling', case=False, na=False) | \n                     load_vars['Young et al. 2020, Table 1'].str.contains('resid|house|home|dwelling', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions for columns related to residential/house/home/dwelling damage",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_data) -> pd.DataFrame:\n    return load_data[load_data['start_year'] == 2008].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter wildfire dataset to only 2008 incidents (start_year == 2008)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "pareto_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_2008) -> pd.DataFrame:\n    df = filter_2008[['incident_number', 'prim_threatened_aggregate']].copy()\n    df = df.sort_values('prim_threatened_aggregate', ascending=False).reset_index(drop=True)\n    \n    total = df['prim_threatened_aggregate'].sum()\n    df['cumulative'] = df['prim_threatened_aggregate'].cumsum()\n    df['cumulative_pct'] = df['cumulative'] / total\n    \n    # Find the number of fires needed to reach 90% of total houses damaged\n    fires_for_90pct = (df['cumulative_pct'] < 0.90).sum() + 1\n    total_fires = len(df)\n    \n    proportion = fires_for_90pct / total_fires\n    \n    return pd.DataFrame({\n        'total_fires': [total_fires],\n        'fires_for_90pct': [fires_for_90pct],\n        'proportion': [round(proportion, 4)],\n        'total_prim_threatened': [total],\n        'cumulative_pct_at_threshold': [df.loc[fires_for_90pct - 1, 'cumulative_pct']]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Pareto analysis: sort 2008 wildfires by prim_threatened_aggregate descending, compute cumulative sum, find the minimum number of fires that account for at least 90% of total residential houses at risk, then compute that count as a proportion of total fires.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(pareto_analysis) -> pd.DataFrame:\n    fires_for_90pct = pareto_analysis['fires_for_90pct'].iloc[0]\n    total_fires = pareto_analysis['total_fires'].iloc[0]\n    proportion = fires_for_90pct / total_fires\n    proportion_rounded = round(proportion, 4)\n    return pd.DataFrame({\n        'fires_for_90pct': [fires_for_90pct],\n        'total_fires': [total_fires],\n        'exact_proportion': [proportion],\n        'proportion_4dp': [proportion_rounded]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the exact proportion (fires_for_90pct / total_fires) rounded to 4 decimal places.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_data": {
+        "x": 100,
+        "y": 400
+      },
+      "load_vars": {
+        "x": 100,
+        "y": 130
+      },
+      "check_vars": {
+        "x": 380,
+        "y": 40
+      },
+      "all_vars": {
+        "x": 380,
+        "y": 220
+      },
+      "filter_2008": {
+        "x": 380,
+        "y": 400
+      },
+      "pareto_analysis": {
+        "x": 660,
+        "y": 400
+      },
+      "final_answer": {
+        "x": 940,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_vars-->check_vars",
+        "source": {
+          "operatorID": "load_vars",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_vars",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_vars-->all_vars",
+        "source": {
+          "operatorID": "load_vars",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "all_vars",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_data-->filter_2008",
+        "source": {
+          "operatorID": "load_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_2008",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_2008-->pareto_analysis",
+        "source": {
+          "operatorID": "filter_2008",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "pareto_analysis",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "pareto_analysis-->final_answer",
+        "source": {
+          "operatorID": "pareto_analysis",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

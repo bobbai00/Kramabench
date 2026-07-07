@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-32-11-1781033601982",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Number_of_Reports_by_Type.csv', skiprows=1)\n    df.columns = ['Year', 'Fraud', 'Identity Theft', 'Other']\n    df = df.dropna(how='all')\n    df = df[df['Year'] != 'Year']\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSN Number of Reports by Type from 2024_CSN_Number_of_Reports_by_Type.csv, set columns to Year, Fraud, Identity Theft, Other, remove empty rows and duplicate headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "analyze_other_reports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_reports) -> pd.DataFrame:\n    df = load_reports.copy()\n    \n    # Remove the source row (where Year contains 'Source:')\n    df = df[~df['Year'].str.contains('Source', na=False)]\n    \n    # Convert columns to numeric, removing commas\n    df['Fraud'] = df['Fraud'].str.replace(',', '').astype(int)\n    df['Identity Theft'] = df['Identity Theft'].str.replace(',', '').astype(int)\n    df['Other'] = df['Other'].str.replace(',', '').astype(int)\n    df['Year'] = df['Year'].astype(int)\n    \n    # Calculate total reports\n    df['Total'] = df['Fraud'] + df['Identity Theft'] + df['Other']\n    \n    # Check if Other is more than half\n    df['Other_More_Than_Half'] = df['Other'] > (df['Total'] / 2)\n    \n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert numeric columns from string to int, calculate total reports, determine if 'Other' reports exceed 50% of total for each year 2001-2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(analyze_other_reports) -> pd.DataFrame:\n    any_year_more_than_half = analyze_other_reports['Other_More_Than_Half'].any()\n    result = \"Yes\" if any_year_more_than_half else \"No\"\n    return pd.DataFrame({\"Answer\": [result]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check if any year between 2001-2024 had 'Other' reports more than half of total reports. Returns Yes or No.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "analyze_other_reports": {
+        "x": 380,
+        "y": 40
+      },
+      "final_answer": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_reports-->analyze_other_reports",
+        "source": {
+          "operatorID": "load_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "analyze_other_reports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_other_reports-->final_answer",
+        "source": {
+          "operatorID": "analyze_other_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

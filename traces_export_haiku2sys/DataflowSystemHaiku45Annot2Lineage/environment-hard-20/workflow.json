@@ -1,0 +1,589 @@
+{
+  "headId": "step-agent-257-17-1781041960220",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_precipitation_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/monthly_precipitations_*.csv')\n    dfs = []\n    for file in sorted(files):\n        df = pd.read_csv(file)\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all monthly precipitation files (ashburnham, chatham, amherst, boston) and concatenate them into a single DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_beach_testing",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2015.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water body testing data from 2015 containing beach pollution measurements.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "summer_rainfall_2015",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_precipitation_data) -> pd.DataFrame:\n    df = load_precipitation_data.copy()\n    \n    # Convert columns to numeric, handling any non-numeric values\n    df['Jun'] = pd.to_numeric(df['Jun'], errors='coerce')\n    df['Jul'] = pd.to_numeric(df['Jul'], errors='coerce')\n    df['Aug'] = pd.to_numeric(df['Aug'], errors='coerce')\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    \n    # Filter for year 2015 only\n    df_2015 = df[df['Year'] == 2015].copy()\n    \n    # Calculate summer rainfall\n    df_2015['summer_rainfall'] = df_2015['Jun'] + df_2015['Jul'] + df_2015['Aug']\n    \n    return df_2015[['Year', 'Jun', 'Jul', 'Aug', 'summer_rainfall']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter precipitation data for 2015 and calculate summer (June, July, August) rainfall totals.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "least_rainfall_city",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(summer_rainfall_2015) -> pd.DataFrame:\n    min_rainfall = summer_rainfall_2015['summer_rainfall'].min()\n    city_data = summer_rainfall_2015[summer_rainfall_2015['summer_rainfall'] == min_rainfall]\n    return city_data\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify the city with the least summer rainfall in 2015 by finding the minimum summer_rainfall value.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "city_rainfall_mapping",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/monthly_precipitations_*.csv')\n    dfs = []\n    for file in sorted(files):\n        city_name = file.split('monthly_precipitations_')[1].replace('.csv', '')\n        df = pd.read_csv(file)\n        df['city'] = city_name\n        dfs.append(df)\n    result = pd.concat(dfs, ignore_index=True)\n    return result\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all monthly precipitation files with city names preserved, matching files using glob pattern data/environment/input/monthly_precipitations_*.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "city_summer_rainfall_2015",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(city_rainfall_mapping) -> pd.DataFrame:\n    df = city_rainfall_mapping.copy()\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'] == 2015].copy()\n    \n    df['Jun'] = pd.to_numeric(df['Jun'], errors='coerce')\n    df['Jul'] = pd.to_numeric(df['Jul'], errors='coerce')\n    df['Aug'] = pd.to_numeric(df['Aug'], errors='coerce')\n    \n    df['summer_rainfall'] = df['Jun'] + df['Jul'] + df['Aug']\n    return df[['city', 'Year', 'Jun', 'Jul', 'Aug', 'summer_rainfall']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter precipitation data for 2015 and calculate summer (June, July, August) rainfall totals with city names preserved.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "identify_least_rainfall_city",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(city_summer_rainfall_2015) -> pd.DataFrame:\n    return city_summer_rainfall_2015.nsmallest(1, 'summer_rainfall')"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify the city with the least summer rainfall in 2015.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "beaches_in_least_rainfall_city",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_beach_testing, identify_least_rainfall_city) -> pd.DataFrame:\n    beach_df = load_beach_testing\n    city_df = identify_least_rainfall_city\n    \n    target_city = city_df.iloc[0]['city'].strip()\n    \n    filtered = beach_df[beach_df['Community'].str.lower() == target_city.lower()]\n    \n    return filtered\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter beach testing data to only include beaches in Chatham (the city with least summer rainfall in 2015) using case-insensitive Community matching.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "most_polluted_beaches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(beaches_in_least_rainfall_city) -> pd.DataFrame:\n    df = beaches_in_least_rainfall_city.copy()\n    \n    pollution_score = df.groupby('Beach Name').agg({\n        'Violation': lambda x: (x == 'yes').sum(),\n        'Indicator Level': 'mean'\n    }).reset_index()\n    \n    pollution_score['pollution_rank'] = (\n        pollution_score['Violation'] * 100 + pollution_score['Indicator Level']\n    )\n    \n    top_3 = pollution_score.nlargest(3, 'pollution_rank')[['Beach Name', 'Violation', 'Indicator Level', 'pollution_rank']]\n    return top_3"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify the three most polluted beaches based on violation count and average indicator level (bacterial concentration).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_communities",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_beach_testing) -> pd.DataFrame:\n    return load_beach_testing[['Community', 'Community Code']].drop_duplicates().sort_values('Community')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect unique communities/cities in the beach testing data to understand how city names are represented.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_city_matching",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_beach_testing, identify_least_rainfall_city) -> pd.DataFrame:\n    beaches = load_beach_testing\n    rainfall = identify_least_rainfall_city\n    \n    target_city = rainfall['city'].iloc[0].lower()\n    communities = beaches['Community'].unique()\n    \n    matching = [c for c in communities if c.lower() == target_city]\n    partial_match = [c for c in communities if target_city in c.lower()]\n    \n    result = pd.DataFrame({\n        'target_city': [target_city],\n        'exact_match_found': [len(matching) > 0],\n        'exact_matches': [str(matching)],\n        'partial_matches': [str(partial_match)],\n        'sample_communities': [', '.join(sorted(communities)[:10])]\n    })\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug operator to understand city name matching between precipitation and beach data.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_city_names",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_beach_testing, identify_least_rainfall_city) -> pd.DataFrame:\n    beach_df = load_beach_testing\n    rainfall_df = identify_least_rainfall_city\n    \n    target_city = rainfall_df['city'].iloc[0]\n    \n    communities = beach_df['Community'].unique()\n    chatham_matches = [c for c in communities if 'chatham' in c.lower()]\n    \n    return pd.DataFrame({\n        'target_city': [target_city],\n        'chatham_matches': [chatham_matches],\n        'sample_beach_communities': [list(beach_df['Community'].unique()[:15])]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug operator to check city name matching between precipitation data (chatham) and beach testing data communities.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(most_polluted_beaches):\n    result = most_polluted_beaches.sort_values('pollution_rank', ascending=False)\n    beach_names = result['Beach Name'].tolist()\n    return pd.DataFrame({'Beach Name': beach_names})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract the three most polluted beaches as an ordered list from the pollution ranking results.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_precipitation_data": {
+        "x": 100,
+        "y": 610
+      },
+      "load_beach_testing": {
+        "x": 660,
+        "y": 280
+      },
+      "summer_rainfall_2015": {
+        "x": 380,
+        "y": 610
+      },
+      "least_rainfall_city": {
+        "x": 660,
+        "y": 610
+      },
+      "city_rainfall_mapping": {
+        "x": 100,
+        "y": 850
+      },
+      "city_summer_rainfall_2015": {
+        "x": 380,
+        "y": 850
+      },
+      "identify_least_rainfall_city": {
+        "x": 660,
+        "y": 850
+      },
+      "beaches_in_least_rainfall_city": {
+        "x": 940,
+        "y": 790
+      },
+      "most_polluted_beaches": {
+        "x": 1220,
+        "y": 790
+      },
+      "inspect_communities": {
+        "x": 940,
+        "y": 40
+      },
+      "debug_city_matching": {
+        "x": 940,
+        "y": 430
+      },
+      "debug_city_names": {
+        "x": 940,
+        "y": 610
+      },
+      "final_answer": {
+        "x": 1500,
+        "y": 790
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_precipitation_data-->summer_rainfall_2015",
+        "source": {
+          "operatorID": "load_precipitation_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "summer_rainfall_2015",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "summer_rainfall_2015-->least_rainfall_city",
+        "source": {
+          "operatorID": "summer_rainfall_2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "least_rainfall_city",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "city_rainfall_mapping-->city_summer_rainfall_2015",
+        "source": {
+          "operatorID": "city_rainfall_mapping",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "city_summer_rainfall_2015",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "city_summer_rainfall_2015-->identify_least_rainfall_city",
+        "source": {
+          "operatorID": "city_summer_rainfall_2015",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identify_least_rainfall_city",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "beaches_in_least_rainfall_city-->most_polluted_beaches",
+        "source": {
+          "operatorID": "beaches_in_least_rainfall_city",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "most_polluted_beaches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_beach_testing-->inspect_communities",
+        "source": {
+          "operatorID": "load_beach_testing",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_communities",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_beach_testing-->debug_city_matching",
+        "source": {
+          "operatorID": "load_beach_testing",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_city_matching",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identify_least_rainfall_city-->debug_city_matching",
+        "source": {
+          "operatorID": "identify_least_rainfall_city",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_city_matching",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "load_beach_testing-->debug_city_names",
+        "source": {
+          "operatorID": "load_beach_testing",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_city_names",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identify_least_rainfall_city-->debug_city_names",
+        "source": {
+          "operatorID": "identify_least_rainfall_city",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_city_names",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "load_beach_testing-->beaches_in_least_rainfall_city",
+        "source": {
+          "operatorID": "load_beach_testing",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beaches_in_least_rainfall_city",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identify_least_rainfall_city-->beaches_in_least_rainfall_city",
+        "source": {
+          "operatorID": "identify_least_rainfall_city",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "beaches_in_least_rainfall_city",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "most_polluted_beaches-->final_answer",
+        "source": {
+          "operatorID": "most_polluted_beaches",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-117-7-1781150040225",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_military_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv(\n        \"data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv\",\n        header=1\n    )\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the 2024 CSN Fraud, Identity Theft, and Other Reports by Military Consumers CSV file, using row index 1 as the header row.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "process_military_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_military_data) -> pd.DataFrame:\n    df = load_military_data.copy()\n    # Row 0 contains the real headers\n    df.columns = df.iloc[0]\n    df = df[1:].reset_index(drop=True)\n    # Drop rows with all NaN or where Military Status is NaN\n    df = df.dropna(subset=['Military Status'])\n    # Keep only relevant columns\n    df = df[['Military Status', 'Median Fraud Loss']].copy()\n    # Clean Median Fraud Loss: remove $, commas, spaces\n    df['Median Fraud Loss Clean'] = df['Median Fraud Loss'].str.replace('[$, ]', '', regex=True)\n    df['Median Fraud Loss Numeric'] = pd.to_numeric(df['Median Fraud Loss Clean'], errors='coerce')\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Process the military data: set row 0 as header, drop null rows, extract Military Status and Median Fraud Loss columns, clean and convert Median Fraud Loss to numeric.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_fraud_loss",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(process_military_data):\n    df = process_military_data.dropna(subset=['Median Fraud Loss Numeric']).copy()\n    df = df[['Military Status', 'Median Fraud Loss', 'Median Fraud Loss Numeric']]\n    df = df.sort_values('Median Fraud Loss Numeric', ascending=False)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the military branch with the largest Median Fraud Loss by dropping null rows, sorting by Median Fraud Loss Numeric descending to identify the top branch.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_military_data": {
+        "x": 100,
+        "y": 40
+      },
+      "process_military_data": {
+        "x": 380,
+        "y": 40
+      },
+      "find_max_fraud_loss": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_military_data-->process_military_data",
+        "source": {
+          "operatorID": "load_military_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "process_military_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "process_military_data-->find_max_fraud_loss",
+        "source": {
+          "operatorID": "process_military_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_fraud_loss",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

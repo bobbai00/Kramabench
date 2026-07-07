@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-122-9-1781150204322",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "raw_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/environment/input/constitution_beach_datasheet.csv', 'r', encoding='latin-1') as f:\n        lines = [f.readline() for _ in range(20)]\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Preview first 20 raw lines of constitution_beach_datasheet.csv to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "beach_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/constitution_beach_datasheet.csv', skiprows=2, header=0)\n    df.columns = ['Date', 'Rain_1Day', 'Rain_2Day', 'Rain_3Day',\n                  'Tag_North', 'Entero_North', 'Tag_Middle', 'Entero_Middle', 'Tag_South', 'Entero_South']\n    df = df.dropna(subset=['Date'])\n    df = df[df['Date'].str.strip() != '']\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load constitution_beach_datasheet.csv, skip first 2 rows, assign column names for Date, Rain (1/2/3-day), and Tag+Enterococcus for North/Middle/South sampling points. Drop rows with no Date.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mixed_standard_days",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(beach_data):\n    df = beach_data.copy()\n    df['Date_parsed'] = pd.to_datetime(df['Date'], errors='coerce')\n    df_2024 = df[df['Date_parsed'].dt.year == 2024].copy()\n    \n    # Check each point against the 104 threshold (meets standard if < 104)\n    df_2024['North_meets'] = df_2024['Entero_North'] < 104\n    df_2024['Middle_meets'] = df_2024['Entero_Middle'] < 104\n    df_2024['South_meets'] = df_2024['Entero_South'] < 104\n    \n    # Only consider points that have actual measurements (not NaN)\n    # A day is \"mixed\" if among the non-null measurements, at least one meets and at least one does not\n    def is_mixed(row):\n        meets = []\n        for col in ['North_meets', 'Middle_meets', 'South_meets']:\n            entero_col = col.replace('_meets', '').replace('North', 'Entero_North').replace('Middle', 'Entero_Middle').replace('South', 'Entero_South')\n        # Use the actual entero values to check for NaN\n        vals = {\n            'North': row['Entero_North'],\n            'Middle': row['Entero_Middle'],\n            'South': row['Entero_South'],\n        }\n        for key, v in vals.items():\n            if pd.notna(v):\n                meets.append(v < 104)\n        if len(meets) == 0:\n            return False\n        return any(meets) and not all(meets)\n    \n    df_2024['mixed'] = df_2024.apply(is_mixed, axis=1)\n    \n    result = df_2024[['Date', 'Date_parsed', 'Entero_North', 'Entero_Middle', 'Entero_South',\n                       'North_meets', 'Middle_meets', 'South_meets', 'mixed']]\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to 2024 dates, check each of North/Middle/South sampling points against the 104 count threshold (meets standard if Enterococcus < 104). Flag days as 'mixed' where at least one non-null point meets the standard and at least one non-null point does not meet the standard.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_mixed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(mixed_standard_days):\n    # Show all mixed days for manual verification\n    mixed = mixed_standard_days[mixed_standard_days['mixed'] == True][\n        ['Date', 'Entero_North', 'Entero_Middle', 'Entero_South', 'North_meets', 'Middle_meets', 'South_meets']\n    ].reset_index(drop=True)\n    return mixed\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Show all days flagged as 'mixed' (at least one sampling point meets standard, at least one does not) for manual verification of correctness.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "raw_data": {
+        "x": 100,
+        "y": 40
+      },
+      "beach_data": {
+        "x": 100,
+        "y": 220
+      },
+      "mixed_standard_days": {
+        "x": 380,
+        "y": 220
+      },
+      "verify_mixed": {
+        "x": 660,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "beach_data-->mixed_standard_days",
+        "source": {
+          "operatorID": "beach_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mixed_standard_days",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mixed_standard_days-->verify_mixed",
+        "source": {
+          "operatorID": "mixed_standard_days",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_mixed",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

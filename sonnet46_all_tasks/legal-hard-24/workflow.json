@@ -1,0 +1,353 @@
+{
+  "headId": "step-agent-151-14-1781159186341",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraud_other_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv(\n        'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv',\n        encoding='latin-1',\n        skiprows=2,\n        header=0\n    )\n    df.columns = ['Rank', 'State', 'Reports_per_100K', 'Num_Reports']\n    df = df.dropna(subset=['State'])\n    df = df[df['State'] != 'State']  # drop any repeated header rows\n    df = df[~df['Rank'].isna()]\n    df['Num_Reports'] = df['Num_Reports'].str.replace(',', '').astype(float)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv with latin-1 encoding, skip the empty first row, use row 1 as header, and clean up the # of Reports column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identity_theft_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv(\n        'data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv',\n        encoding='latin-1',\n        skiprows=2,\n        header=0\n    )\n    df.columns = ['Rank', 'State', 'Reports_per_100K', 'Num_Reports']\n    df = df.dropna(subset=['State'])\n    df = df[df['State'] != 'State']\n    df = df[~df['Rank'].isna()]\n    df['Num_Reports'] = df['Num_Reports'].str.replace(',', '').astype(float)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024_CSN_State_Rankings_Identity_Theft_Reports.csv with latin-1 encoding, skip the empty first row, use row 1 as header, and clean up the # of Reports column.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msa_identity_theft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "import glob\n\ndef load() -> pd.DataFrame:\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = []\n    for f in files:\n        try:\n            df = pd.read_csv(f, encoding='latin-1')\n            df['source_file'] = f\n            dfs.append(df)\n        except Exception as e:\n            pass\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from State MSA Identity Theft data folder using glob, combine into one DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "msa_identity_theft_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(msa_identity_theft):\n    import glob, re\n    \n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    \n    dfs = []\n    for f in files:\n        # Read raw to find the header row\n        raw = pd.read_csv(f, header=None, encoding='latin-1')\n        # Find the row where first column contains \"Metropolitan Area\"\n        header_row = None\n        for i, row in raw.iterrows():\n            if str(row[0]).strip() == \"Metropolitan Area\":\n                header_row = i\n                break\n        if header_row is None:\n            continue\n        df = pd.read_csv(f, header=header_row, encoding='latin-1')\n        df.columns = [c.strip() for c in df.columns]\n        # Keep only rows with valid data (not footer/source rows)\n        df = df.dropna(subset=[df.columns[0]])\n        df = df[df[df.columns[0]] != \"Metropolitan Area\"]\n        df = df[~df[df.columns[0]].str.startswith(\"Source:\", na=True)]\n        # Extract state from filename\n        state = f.split(\"/\")[-1].replace(\".csv\", \"\")\n        df[\"State\"] = state\n        dfs.append(df)\n    \n    result = pd.concat(dfs, ignore_index=True)\n    result.columns = [c.strip() for c in result.columns]\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all MSA Identity Theft CSV files, find the header row containing \"Metropolitan Area\", parse each file correctly, skip footer/source rows, and add a State column from filename. Combines all into one DataFrame.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_reports_by_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(fraud_other_reports, identity_theft_reports) -> pd.DataFrame:\n    # Merge both datasets on State\n    merged = fraud_other_reports[['State', 'Num_Reports']].merge(\n        identity_theft_reports[['State', 'Num_Reports']],\n        on='State', suffixes=('_fraud_other', '_identity_theft')\n    )\n    merged['Total_Reports'] = merged['Num_Reports_fraud_other'] + merged['Num_Reports_identity_theft']\n    return merged.sort_values('Total_Reports', ascending=False).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge fraud/other and identity theft state reports, sum to get total reports per state, sort descending to find the state with the highest total.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "california_msa",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob, os\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    # Check all available files\n    filenames = [os.path.basename(f) for f in sorted(files)]\n    return pd.DataFrame({'filename': filenames, 'path': sorted(files)})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all available CSV files in the State MSA Identity Theft data folder to check if California is present.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "california_msa_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    # Find California file\n    ca_files = [f for f in files if 'alifornia' in f or 'CA' in f]\n    \n    results = []\n    for f in ca_files:\n        # Read raw to find header\n        raw = pd.read_csv(f, header=None, encoding='latin-1')\n        results.append(pd.DataFrame({'file': [f], 'content': [str(raw.head(5).values.tolist())]}))\n    \n    # Also show all files to check naming\n    all_files_df = pd.DataFrame({'path': sorted(files)})\n    return all_files_df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check all available files in State MSA Identity Theft data folder, looking for California file specifically.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "california_msa_load",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob, os\n    files = sorted(glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"))\n    # Print all filenames to check\n    names = [os.path.basename(f) for f in files]\n    return pd.DataFrame({'filename': names, 'path': files})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all CSV files in State MSA Identity Theft data folder to find the California file name.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "all_msa_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob, os\n    files = sorted(glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\"))\n    results = []\n    for f in files:\n        state = os.path.basename(f).replace('.csv', '')\n        # Insert spaces before capitals for multi-word states (e.g. WestVirginia -> West Virginia)\n        import re\n        state = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', state)\n        try:\n            raw = pd.read_csv(f, header=None, encoding='latin-1')\n            # Find header row\n            header_row = None\n            for i, row in raw.iterrows():\n                if row.astype(str).str.contains('Metropolitan Area', case=False).any():\n                    header_row = i\n                    break\n            if header_row is None:\n                continue\n            df = pd.read_csv(f, header=header_row, encoding='latin-1')\n            # Keep only rows with actual MSA data (not footer/source lines)\n            col_msa = [c for c in df.columns if 'Metropolitan Area' in str(c)]\n            col_rep = [c for c in df.columns if 'Report' in str(c) or '#' in str(c)]\n            if not col_msa or not col_rep:\n                continue\n            df = df[[col_msa[0], col_rep[0]]].copy()\n            df.columns = ['Metropolitan Area', '# of Reports']\n            # Drop rows where Metropolitan Area is NaN or contains 'Source:' or 'defined by'\n            df = df[df['Metropolitan Area'].notna()]\n            df = df[~df['Metropolitan Area'].astype(str).str.startswith('Source')]\n            df = df[~df['Metropolitan Area'].astype(str).str.contains('defined by', case=False)]\n            df = df[df['Metropolitan Area'].astype(str) != 'Metropolitan Area']\n            df['State'] = state\n            results.append(df)\n        except Exception:\n            continue\n    return pd.concat(results, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from State MSA Identity Theft data folder, parse each one correctly by finding the header row with \"Metropolitan Area\", extract state name from filename, and combine into one DataFrame with Metropolitan Area, # of Reports, and State columns.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "california_msa_top",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    import os\n    \n    results = []\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    \n    # Find California file\n    ca_file = None\n    for f in files:\n        basename = os.path.basename(f).lower()\n        if 'california' in basename or basename == 'ca.csv':\n            ca_file = f\n            break\n    \n    # If not found, check all filenames\n    if ca_file is None:\n        filenames = sorted([os.path.basename(f) for f in files])\n        return pd.DataFrame({'all_files': filenames})\n    \n    # Load and inspect the California file\n    with open(ca_file, 'r', encoding='latin-1') as fh:\n        lines = fh.readlines()\n    \n    return pd.DataFrame({'line_num': range(len(lines)), 'content': [l.strip() for l in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the California MSA identity theft CSV file to understand its structure. Lists all files if California is not found. Shows raw content line by line.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "california_msa_final",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv(\n        \"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/California.csv\",\n        skiprows=2,\n        header=0,\n        encoding='latin-1'\n    )\n    df.columns = ['Metropolitan Area', '# of Reports']\n    # Drop rows where Metropolitan Area is NaN or doesn't contain \"Statistical Area\"\n    df = df[df['Metropolitan Area'].str.contains('Statistical Area', na=False)]\n    # Convert # of Reports to numeric\n    df['# of Reports'] = df['# of Reports'].astype(str).str.replace(',', '').str.strip()\n    df['# of Reports'] = pd.to_numeric(df['# of Reports'], errors='coerce')\n    df = df.dropna(subset=['# of Reports'])\n    df = df.sort_values('# of Reports', ascending=False).reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load California MSA Identity Theft CSV, skip 2 header rows, parse Metropolitan Area and # of Reports columns, filter to valid Statistical Area rows, convert reports to numeric, and sort descending to find top MSA.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "fraud_other_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "identity_theft_reports": {
+        "x": 100,
+        "y": 220
+      },
+      "msa_identity_theft": {
+        "x": 100,
+        "y": 400
+      },
+      "msa_identity_theft_clean": {
+        "x": 380,
+        "y": 400
+      },
+      "total_reports_by_state": {
+        "x": 380,
+        "y": 130
+      },
+      "california_msa": {
+        "x": 100,
+        "y": 580
+      },
+      "california_msa_data": {
+        "x": 100,
+        "y": 760
+      },
+      "california_msa_load": {
+        "x": 100,
+        "y": 940
+      },
+      "all_msa_data": {
+        "x": 100,
+        "y": 1120
+      },
+      "california_msa_top": {
+        "x": 100,
+        "y": 1300
+      },
+      "california_msa_final": {
+        "x": 100,
+        "y": 1480
+      }
+    },
+    "links": [
+      {
+        "linkID": "msa_identity_theft-->msa_identity_theft_clean",
+        "source": {
+          "operatorID": "msa_identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "msa_identity_theft_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fraud_other_reports-->total_reports_by_state",
+        "source": {
+          "operatorID": "fraud_other_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_reports_by_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identity_theft_reports-->total_reports_by_state",
+        "source": {
+          "operatorID": "identity_theft_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_reports_by_state",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

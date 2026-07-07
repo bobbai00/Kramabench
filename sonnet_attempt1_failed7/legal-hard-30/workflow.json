@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-124-8-1781150300048",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "identity_theft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv\")\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, encoding='latin-1')\n        df['source_file'] = f\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from the State MSA Identity Theft data folder: data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fraud",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob(\"data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv\")\n    dfs = []\n    for f in files:\n        df = pd.read_csv(f, encoding='latin-1')\n        df['source_file'] = f\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all CSV files from the State MSA Fraud and Other data folder: data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compare_msa",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identity_theft, fraud):\n    def clean(df, col_name):\n        # col0 = metro name, col1 = # of reports\n        col0 = df.columns[0]\n        col1 = df.columns[1]\n        d = df[[col0, col1]].copy()\n        d.columns = ['metro_area', 'reports']\n        # Remove header/footer/NaN rows\n        d = d[d['metro_area'].notna()]\n        d = d[d['metro_area'] != 'Metropolitan Area']\n        d = d[~d['metro_area'].str.startswith('Source:', na=False)]\n        d['reports'] = pd.to_numeric(d['reports'], errors='coerce')\n        d = d[d['reports'].notna()]\n        d['metro_area'] = d['metro_area'].str.strip()\n        result = d.groupby('metro_area', as_index=False)['reports'].sum()\n        result.columns = ['metro_area', col_name]\n        return result\n\n    it = clean(identity_theft, 'identity_theft_reports')\n    fr = clean(fraud, 'fraud_reports')\n\n    merged = pd.merge(it, fr, on='metro_area', how='outer')\n    merged['identity_theft_reports'] = merged['identity_theft_reports'].fillna(0)\n    merged['fraud_reports'] = merged['fraud_reports'].fillna(0)\n    merged['theft_exceeds_fraud'] = merged['identity_theft_reports'] > merged['fraud_reports']\n    return merged.sort_values('metro_area').reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean and merge identity theft and fraud MSA data. Skip header/footer rows. Convert report counts to numeric. Sum counts per metro area. Use outer join to retain all metros, then check if any identity_theft_reports > fraud_reports.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_identity",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identity_theft) -> pd.DataFrame:\n    df = identity_theft.copy()\n    # Show first 20 rows for Arkansas to understand structure\n    ark = df[df['source_file'].str.contains('Arkansas')]\n    return ark.head(20)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 20 rows of the Arkansas identity theft file to understand the raw structure before cleaning.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "identity_theft": {
+        "x": 100,
+        "y": 295
+      },
+      "fraud": {
+        "x": 100,
+        "y": 40
+      },
+      "compare_msa": {
+        "x": 380,
+        "y": 115
+      },
+      "inspect_identity": {
+        "x": 380,
+        "y": 370
+      }
+    },
+    "links": [
+      {
+        "linkID": "identity_theft-->inspect_identity",
+        "source": {
+          "operatorID": "identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_identity",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identity_theft-->compare_msa",
+        "source": {
+          "operatorID": "identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_msa",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fraud-->compare_msa",
+        "source": {
+          "operatorID": "fraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_msa",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

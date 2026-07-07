@@ -1,0 +1,500 @@
+{
+  "headId": "step-agent-420-11-1781055436226",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_file1",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data from file 1-s2.0-S0092867420301070-mmc1.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_file2",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data from file 1-s2.0-S0092867420301070-mmc4.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "explore_file2",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import openpyxl\n    wb = openpyxl.load_workbook('data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx')\n    sheet_names = wb.sheetnames\n    result_data = []\n    for sheet_name in sheet_names:\n        result_data.append({'sheet_name': sheet_name})\n    return pd.DataFrame(result_data)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Explore sheet names in mmc4.xlsx using openpyxl",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_peptides",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    file_path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx'\n    # Load the sheet with peptide information\n    df = pd.read_excel(file_path, sheet_name='A-Variants', header=0)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load peptide data from sheet A-Variants in mmc4.xlsx containing peptide sequences and their associated tumor samples",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_target_peptide",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_peptides) -> pd.DataFrame:\n    target_peptide = 'HPKPEVLGSSADGALLVSLDGLR'\n    df = load_peptides.copy()\n    \n    # Find the column with peptide sequences (likely first column)\n    peptide_col = df.columns[0]\n    samples_col = df.columns[-1] if len(df.columns) > 1 else None\n    \n    # Filter for the target peptide\n    mask = df[peptide_col].astype(str).str.contains(target_peptide, na=False, case=True)\n    result = df[mask]\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter peptide data to find rows containing the target peptide HPKPEVLGSSADGALLVSLDGLR",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_peptide_content",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_peptides) -> pd.DataFrame:\n    df = load_peptides.copy()\n    target = 'HPKPEVLGSSADGALLVSLDGLR'\n    \n    # Check if target peptide exists in any form\n    matching = df[df['Peptide'].str.contains(target, case=True, na=False)]\n    if len(matching) == 0:\n        # Check with whitespace stripped\n        df['Peptide_clean'] = df['Peptide'].str.strip()\n        matching = df[df['Peptide_clean'] == target]\n    \n    # Also show a few sample peptides to understand the format\n    return pd.DataFrame({\n        'matching_rows': [len(matching)],\n        'sample_peptides': ['; '.join(df['Peptide'].dropna().head(5).tolist())]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Check if target peptide exists and examine sample peptides",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "load_splice_junctions",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx', sheet_name='B-Novel Splice Junctions')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load peptide data from sheet B-Novel Splice Junctions in mmc4.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_alt_splice",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc4.xlsx', sheet_name='C-Alternate Splice Junctions')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load peptide data from sheet C-Alternate Splice Junctions in mmc4.xlsx",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_target_peptide_alt_splice",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_alt_splice) -> pd.DataFrame:\n    return load_alt_splice[load_alt_splice['Peptide'] == 'HPKPEVLGSSADGALLVSLDGLR']"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter alternate splice junctions data to find rows with target peptide HPKPEVLGSSADGALLVSLDGLR",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_sample_ids",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(find_target_peptide_alt_splice) -> pd.DataFrame:\n    if len(find_target_peptide_alt_splice) == 0:\n        return pd.DataFrame(columns=['sample_id'])\n    samples_str = find_target_peptide_alt_splice.iloc[0]['Samples_With_Peptide']\n    sample_list = [s.strip() for s in str(samples_str).split(',')]\n    return pd.DataFrame({'sample_id': sample_list})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract sample IDs from the Samples_With_Peptide column (comma-separated values)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "get_clinical_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_file1) -> pd.DataFrame:\n    return load_file1[['idx', 'Histologic_Grade_FIGO']].drop_duplicates()"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract sample ID (idx) and histological grade from clinical data file",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "join_samples_with_grades",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_sample_ids, get_clinical_data) -> pd.DataFrame:\n    merged = extract_sample_ids.merge(get_clinical_data, left_on='sample_id', right_on='idx', how='inner')\n    return merged[['sample_id', 'Histologic_Grade_FIGO']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join extracted sample IDs with clinical histological grades data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_grades_list",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(join_samples_with_grades) -> pd.DataFrame:\n    grades = join_samples_with_grades['Histologic_Grade_FIGO'].dropna().unique().tolist()\n    return pd.DataFrame({'grades': [grades]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract unique histological grades from the joined samples data as a list",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_file1": {
+        "x": 380,
+        "y": 1030
+      },
+      "load_file2": {
+        "x": 100,
+        "y": 40
+      },
+      "explore_file2": {
+        "x": 100,
+        "y": 220
+      },
+      "load_peptides": {
+        "x": 100,
+        "y": 760
+      },
+      "filter_target_peptide": {
+        "x": 380,
+        "y": 670
+      },
+      "check_peptide_content": {
+        "x": 380,
+        "y": 850
+      },
+      "load_splice_junctions": {
+        "x": 100,
+        "y": 580
+      },
+      "load_alt_splice": {
+        "x": 100,
+        "y": 400
+      },
+      "find_target_peptide_alt_splice": {
+        "x": 380,
+        "y": 400
+      },
+      "extract_sample_ids": {
+        "x": 660,
+        "y": 400
+      },
+      "get_clinical_data": {
+        "x": 660,
+        "y": 1030
+      },
+      "join_samples_with_grades": {
+        "x": 940,
+        "y": 670
+      },
+      "extract_grades_list": {
+        "x": 1220,
+        "y": 670
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_peptides-->filter_target_peptide",
+        "source": {
+          "operatorID": "load_peptides",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_target_peptide",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_peptides-->check_peptide_content",
+        "source": {
+          "operatorID": "load_peptides",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_peptide_content",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_alt_splice-->find_target_peptide_alt_splice",
+        "source": {
+          "operatorID": "load_alt_splice",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_target_peptide_alt_splice",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "find_target_peptide_alt_splice-->extract_sample_ids",
+        "source": {
+          "operatorID": "find_target_peptide_alt_splice",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_sample_ids",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_file1-->get_clinical_data",
+        "source": {
+          "operatorID": "load_file1",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "get_clinical_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_sample_ids-->join_samples_with_grades",
+        "source": {
+          "operatorID": "extract_sample_ids",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "join_samples_with_grades",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "get_clinical_data-->join_samples_with_grades",
+        "source": {
+          "operatorID": "get_clinical_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "join_samples_with_grades",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "join_samples_with_grades-->extract_grades_list",
+        "source": {
+          "operatorID": "join_samples_with_grades",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_grades_list",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

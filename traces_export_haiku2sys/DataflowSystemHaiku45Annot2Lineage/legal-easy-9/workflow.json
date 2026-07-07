@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-69-11-1781034119723",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv', skiprows=2)\n    df = df.dropna(how='all')\n    df = df[df['Year'].notna()]\n    df = df[df['Year'] != '']\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'].notna()]\n    df['Year'] = df['Year'].astype(int)\n    df['# of Reports'] = df['# of Reports'].str.replace(',', '').astype(int)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSN Report Count data from 2024_CSN_Report_Count.csv, skip first 2 rows (title and empty), convert Year to int, and convert # of Reports from comma-separated str to int. Filter out non-numeric rows.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv', 'r') as f:\n        lines = [f.readline().rstrip('\\n') for _ in range(30)]\n    return pd.DataFrame({'line_num': range(len(lines)), 'content': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 30 lines of raw CSV file to understand structure and identify header row and footer rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calculate_year_over_year_growth",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_csn_data):\n    df = load_csn_data.copy()\n    df = df.sort_values('Year').reset_index(drop=True)\n    df['YoY_Growth'] = df['# of Reports'].pct_change() * 100\n    df['Absolute_Increase'] = df['# of Reports'].diff()\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate year-over-year growth rate (%) and absolute increase in total reports from load_csn_data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_and_find_max_growth",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(calculate_year_over_year_growth) -> pd.DataFrame:\n    df = calculate_year_over_year_growth[(calculate_year_over_year_growth['Year'] >= 2002) & (calculate_year_over_year_growth['Year'] <= 2024)]\n    max_growth_idx = df['YoY_Growth'].idxmax()\n    result = df.loc[[max_growth_idx], ['Year', 'YoY_Growth', '# of Reports']]\n    return result"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter data to years 2002-2024 inclusive, find the year with the greatest year-over-year growth rate in total reports",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_file": {
+        "x": 100,
+        "y": 220
+      },
+      "calculate_year_over_year_growth": {
+        "x": 380,
+        "y": 40
+      },
+      "filter_and_find_max_growth": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "calculate_year_over_year_growth-->filter_and_find_max_growth",
+        "source": {
+          "operatorID": "calculate_year_over_year_growth",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_and_find_max_growth",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_csn_data-->calculate_year_over_year_growth",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_year_over_year_growth",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

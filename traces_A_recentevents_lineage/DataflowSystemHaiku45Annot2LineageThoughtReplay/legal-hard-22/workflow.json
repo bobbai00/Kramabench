@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-71-9-1781034140204",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "identity_theft_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Identity_Theft_Reports_by_Type.csv', \n                      encoding='cp1252', header=0)\n    df.columns = ['Theft Type', 'Theft Subtype', 'Number of Reports', 'Percent Difference']\n    df = df.dropna(how='all')\n    df = df[~df['Theft Type'].isna()]\n    df['Number of Reports'] = df['Number of Reports'].astype(str).str.replace(',', '').str.strip()\n    df = df[df['Number of Reports'].str.match(r'^\\d+$', na=False)]\n    df['Number of Reports'] = pd.to_numeric(df['Number of Reports'], errors='coerce')\n    df = df.dropna(subset=['Number of Reports'])\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load identity theft reports by type, clean column names, remove empty rows, convert report counts to numeric",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "report_type",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Type.csv', \n                      encoding='cp1252', header=1)\n    df.columns = ['Report Type', 'Number of Reports', 'Percent of Total', 'col4', 'col5', 'col6']\n    df = df.dropna(how='all')\n    df = df[~df['Report Type'].isna()]\n    df['Number of Reports'] = df['Number of Reports'].astype(str).str.replace(',', '').str.strip()\n    df = df[df['Number of Reports'].str.match(r'^\\d+$', na=False)]\n    df['Number of Reports'] = pd.to_numeric(df['Number of Reports'], errors='coerce')\n    df = df.dropna(subset=['Number of Reports'])\n    return df[['Report Type', 'Number of Reports']]\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load report type summary, clean column names, remove empty rows, convert counts to numeric",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "bank_account_new_accounts",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identity_theft_reports) -> pd.DataFrame:\n    filtered = identity_theft_reports[\n        (identity_theft_reports['Theft Type'] == 'Bank Account') & \n        (identity_theft_reports['Theft Subtype'] == 'New Accounts')\n    ]\n    return filtered"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter identity theft reports for Theft Type = \"Bank Account\" and Theft Subtype = \"New Accounts\"",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_identity_theft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(report_type) -> pd.DataFrame:\n    total = report_type[report_type['Report Type'] == 'Identity Theft']\n    return total"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract total Identity Theft reports from report type summary",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_proportion",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(bank_account_new_accounts, total_identity_theft) -> pd.DataFrame:\n    bank_account_new = bank_account_new_accounts['Number of Reports'].iloc[0]\n    total_identity = total_identity_theft['Number of Reports'].iloc[0]\n    proportion = bank_account_new / total_identity\n    proportion_rounded = round(proportion, 4)\n    return pd.DataFrame({'Proportion': [proportion_rounded]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the proportion of Bank Account + New Accounts reports to total Identity Theft reports, rounded to 4 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "identity_theft_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "report_type": {
+        "x": 100,
+        "y": 220
+      },
+      "bank_account_new_accounts": {
+        "x": 380,
+        "y": 40
+      },
+      "total_identity_theft": {
+        "x": 380,
+        "y": 220
+      },
+      "calculate_proportion": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "identity_theft_reports-->bank_account_new_accounts",
+        "source": {
+          "operatorID": "identity_theft_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bank_account_new_accounts",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "report_type-->total_identity_theft",
+        "source": {
+          "operatorID": "report_type",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_identity_theft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "bank_account_new_accounts-->calculate_proportion",
+        "source": {
+          "operatorID": "bank_account_new_accounts",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_proportion",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "total_identity_theft-->calculate_proportion",
+        "source": {
+          "operatorID": "total_identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_proportion",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

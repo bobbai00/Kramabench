@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-213-6-1781039306928",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fire_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fire weather data from Fire_Weather_Data_2002-2014_2016.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "analyze_start_distribution",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_fire_data) -> pd.DataFrame:\n    df = load_fire_data.copy()\n    \n    # Group by start_year and calculate mean start_day_of_year\n    yearly_mean = df.groupby('start_year')['start_day_of_year'].mean().reset_index()\n    yearly_mean.columns = ['year', 'mean_start_day']\n    \n    return yearly_mean.sort_values('year')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate mean start day of year by year to track temporal shift in fire start distribution",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "trend_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(analyze_start_distribution) -> pd.DataFrame:\n    df = analyze_start_distribution.copy()\n    df = df.sort_values('year')\n    \n    # Calculate correlation between year and mean_start_day\n    correlation = df['year'].corr(df['mean_start_day'])\n    \n    # Perform linear regression to determine trend\n    from scipy import stats\n    slope, intercept, r_value, p_value, std_err = stats.linregress(df['year'], df['mean_start_day'])\n    \n    # Positive slope = later, negative slope = earlier\n    trend = \"later\" if slope > 0 else \"earlier\"\n    \n    return pd.DataFrame({\n        'slope': [slope],\n        'correlation': [correlation],\n        'trend': [trend],\n        'p_value': [p_value]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Perform linear regression to determine if fire start distribution shifted earlier or later over time (2002-2016)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fire_data": {
+        "x": 100,
+        "y": 40
+      },
+      "analyze_start_distribution": {
+        "x": 380,
+        "y": 40
+      },
+      "trend_analysis": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fire_data-->analyze_start_distribution",
+        "source": {
+          "operatorID": "load_fire_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "analyze_start_distribution",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "analyze_start_distribution-->trend_analysis",
+        "source": {
+          "operatorID": "analyze_start_distribution",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "trend_analysis",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

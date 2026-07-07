@@ -1,0 +1,181 @@
+{
+  "headId": "step-agent-297-9-1781045011742",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_monthly_stats.csv', skiprows=2)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires monthly statistics from noaa_wildfires_monthly_stats.csv, skipping 2 metadata lines (Title and Missing fields)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/wildfire/input/noaa_wildfires_monthly_stats.csv', 'r') as f:\n        lines = f.readlines()[:20]\n    content = ''.join(lines)\n    return pd.DataFrame({'raw_content': [content]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 20 lines of the raw CSV file to understand its structure and identify parsing issues",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "view_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/wildfire/input/noaa_wildfires_monthly_stats.csv', 'r') as f:\n        lines = f.readlines()[:30]\n    return pd.DataFrame({'line': [line.rstrip('\\n') for line in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "View the first 30 raw lines of the CSV file to identify the header row and metadata",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "rolling_3month",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_wildfires) -> pd.DataFrame:\n    df = load_wildfires.copy()\n    df['Date'] = df['Date'].astype(str)\n    df = df.sort_values('Date').reset_index(drop=True)\n    \n    # Create a rolling 3-month sum\n    df['Acres_Burned_3m'] = df['Acres Burned'].rolling(window=3, min_periods=3).sum()\n    \n    # Get the period details (start date and end date for each 3-month window)\n    df['Start_Date'] = df['Date'].shift(2)\n    df['End_Date'] = df['Date']\n    \n    # Filter to rows where we have a complete 3-month window\n    result = df[df['Acres_Burned_3m'].notna()][['Start_Date', 'End_Date', 'Acres_Burned_3m']].copy()\n    \n    return result"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate rolling 3-month total acres burned by computing sum over a 3-month window for each consecutive period",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "max_3month",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(rolling_3month) -> pd.DataFrame:\n    max_row = rolling_3month.loc[rolling_3month['Acres_Burned_3m'].idxmax()]\n    return pd.DataFrame([{\n        'Start_Date': max_row['Start_Date'],\n        'End_Date': max_row['End_Date'],\n        'Acres_Burned_3m': max_row['Acres_Burned_3m']\n    }])"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the 3-month period with the highest total acres burned by selecting the row with maximum Acres_Burned_3m value",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_wildfires": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_raw_file": {
+        "x": 100,
+        "y": 220
+      },
+      "view_raw_file": {
+        "x": 100,
+        "y": 400
+      },
+      "rolling_3month": {
+        "x": 380,
+        "y": 40
+      },
+      "max_3month": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_wildfires-->rolling_3month",
+        "source": {
+          "operatorID": "load_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "rolling_3month",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "rolling_3month-->max_3month",
+        "source": {
+          "operatorID": "rolling_3month",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "max_3month",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

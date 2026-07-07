@@ -1,0 +1,590 @@
+{
+  "headId": "step-agent-164-22-1781161647611",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_omni2",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/astronomy/input/STORM-AI/warmup/v2/OMNI2/omni2-wu590-20181001_to_20181130.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load OMNI2 data from data/astronomy/input/STORM-AI/warmup/v2/OMNI2/omni2-wu590-20181001_to_20181130.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_sat_density",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu???-201810??_to_201810??.csv')\n    dfs = [pd.read_csv(f) for f in sorted(files)]\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Sat_Density data from data/astronomy/input/STORM-AI/warmup/v2/Sat_Density/swarma-wu???-201810??_to_201810??.csv using glob",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "list_sp3_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201810??T235942_201810??T235942_0201/*.sp3')\n    return pd.DataFrame({'filepath': sorted(files)})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all SP3 files from the Swarm-A POD data directory using glob pattern",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_sp3_altitude",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob\n    files = sorted(glob.glob('data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201810??T235942_201810??T235942_0201/*.sp3'))\n    lines = []\n    with open(files[0], 'r') as f:\n        for i, line in enumerate(f):\n            if i >= 40:\n                break\n            lines.append({'line_no': i, 'content': line.rstrip()})\n    return pd.DataFrame(lines)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Swarm-A SP3 files from data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201810??T235942_201810??T235942_0201/*.sp3. Print first 30 lines of first file for format inspection.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_sp3_altitude",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    from datetime import datetime\n    import math\n\n    EARTH_RADIUS = 6371.0\n    sp3_files = sorted(glob.glob(\n        \"data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201810??T235942_201810??T235942_0201/*.sp3\"\n    ))\n\n    records = []\n    for fpath in sp3_files:\n        with open(fpath, 'r') as f:\n            lines = f.readlines()\n        current_epoch = None\n        for line in lines:\n            line = line.rstrip('\\n')\n            if line.startswith('*'):\n                # Epoch line: * YYYY MM DD HH MM SS.sssssss\n                parts = line.split()\n                yr, mo, dy = int(parts[1]), int(parts[2]), int(parts[3])\n                hh, mm = int(parts[4]), int(parts[5])\n                ss = float(parts[6])\n                current_epoch = datetime(yr, mo, dy, hh, mm, int(ss))\n            elif line.startswith('PL47') or line.startswith('P L47'):\n                if current_epoch is None:\n                    continue\n                parts = line.split()\n                # parts[0] = 'PL47', parts[1..3] = X, Y, Z in km\n                x = float(parts[1])\n                y = float(parts[2])\n                z = float(parts[3])\n                r = math.sqrt(x**2 + y**2 + z**2)\n                alt = r - EARTH_RADIUS\n                records.append({'timestamp': current_epoch, 'altitude_km': alt})\n\n    df = pd.DataFrame(records)\n    df = df.sort_values('timestamp').reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load Swarm-A SP3 files and extract timestamp + altitude (km above Earth surface, using radius 6371.0 km) from PL47 position records. Returns one row per epoch (10-second intervals).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "hourly_altitude_change",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_sp3_altitude) -> pd.DataFrame:\n    df = parse_sp3_altitude.copy()\n    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).dt.tz_localize(None)\n    # Filter to 2018-10-01 to 2018-10-10\n    df = df[(df['timestamp'] >= '2018-10-01') & (df['timestamp'] < '2018-10-11')]\n    # Floor to hour\n    df['hour'] = df['timestamp'].dt.floor('h')\n    # For each hour, compute mean altitude (or use first/last - use mean of first and last minute to get hourly change)\n    # Strategy: get altitude at start and end of each hour, compute change\n    # Better: resample to hourly, take mean at each hour boundary, then diff\n    hourly = df.groupby('hour')['altitude_km'].mean().reset_index()\n    hourly.columns = ['timestamp', 'altitude_km']\n    hourly = hourly.sort_values('timestamp').reset_index(drop=True)\n    hourly['change_altitude'] = hourly['altitude_km'].diff()\n    # Drop first row (NaN diff)\n    hourly = hourly.dropna(subset=['change_altitude']).reset_index(drop=True)\n    return hourly[['timestamp', 'change_altitude']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute hourly altitude change (diff of hourly mean altitude) for Swarm-A from SP3 data, filtered to 2018-10-01 to 2018-10-10. Returns timestamp (hour) and change_altitude (km/hr).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_omni2",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_omni2) -> pd.DataFrame:\n    df = load_omni2.copy()\n    # Parse the Timestamp column - it may have timezone info like '+00:00' or 'Z'\n    ts = pd.to_datetime(df['Timestamp'], utc=True).dt.tz_localize(None)\n    df['Timestamp'] = ts.dt.floor('h')\n    mask = (df['Timestamp'] >= pd.Timestamp('2018-10-01')) & (df['Timestamp'] <= pd.Timestamp('2018-10-10 23:59:59'))\n    return df[mask].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter OMNI2 data to 2018-10-01 to 2018-10-10. Parse Timestamp as UTC-aware string, convert to naive UTC datetime, floor to hour. Returns DataFrame with 'Timestamp' column as tz-naive datetime.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "hourly_sat_density",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_sat_density):\n    df = load_sat_density.copy()\n    df['Timestamp'] = pd.to_datetime(df['Timestamp'])\n    df = df[(df['Timestamp'] >= '2018-10-01') & (df['Timestamp'] <= '2018-10-10 23:59:59')]\n    df = df.set_index('Timestamp')\n    hourly = df.resample('1H').mean()\n    return hourly.reset_index()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter Sat_Density to 2018-10-01 to 2018-10-10, resample to hourly means of 'Orbit Mean Density (kg/m^3)'. Returns timestamp and hourly mean density.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compute_correlations",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_omni2, hourly_sat_density, hourly_altitude_change):\n    import numpy as np\n\n    # Prepare altitude change\n    alt = hourly_altitude_change.copy()\n    alt['timestamp'] = pd.to_datetime(alt['timestamp'], utc=True).dt.tz_localize(None)\n    alt = alt.set_index('timestamp')\n\n    # Prepare OMNI2 - rebuild timestamp index\n    omni2 = filter_omni2.copy()\n    # The index is positional; reconstruct timestamp from YEAR and DOY + hour offset\n    # Actually, the original had Timestamp column - let's recompute from position\n    # filter_omni2 has 240 rows = 10 days * 24 hours, starting 2018-10-01 00:00\n    omni2.index = pd.date_range('2018-10-01', periods=240, freq='1H')\n    omni2.index.name = 'timestamp'\n\n    # Prepare Sat_Density\n    sat = hourly_sat_density.copy()\n    sat['Timestamp'] = pd.to_datetime(sat['Timestamp'], utc=True).dt.tz_localize(None)\n    sat = sat.set_index('Timestamp')\n    sat.index.name = 'timestamp'\n\n    # Merge all on timestamp (inner join to keep only matching hours)\n    merged = alt.join(omni2, how='inner').join(sat, how='inner')\n\n    # Drop YEAR column (constant) and other non-informative columns\n    target = 'change_altitude'\n    feature_cols = [c for c in merged.columns if c != target]\n\n    # Replace sentinel values with NaN\n    # OMNI2 uses 999999.99, 99999.99, 9999.99, 9999, 999 as fill values\n    sentinel_map = {\n        999999.99: np.nan, 99999.99: np.nan, 9999.99: np.nan,\n        9999.9: np.nan, 9999: np.nan, 999.9: np.nan, 999: np.nan\n    }\n    for col in feature_cols:\n        merged[col] = merged[col].replace(sentinel_map)\n\n    # Compute Pearson correlation with change_altitude\n    results = []\n    for col in feature_cols:\n        sub = merged[[target, col]].dropna()\n        if len(sub) > 5:\n            corr = sub[target].corr(sub[col])\n            results.append({'variable': col, 'pearson_corr': corr})\n\n    result_df = pd.DataFrame(results).sort_values('pearson_corr', key=abs, ascending=False)\n    return result_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge OMNI2 (filter_omni2), Sat_Density (hourly_sat_density), and hourly altitude change (hourly_altitude_change) on timestamp, then compute Pearson correlation of all variables against change_altitude. Returns sorted correlation table.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_correlations",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_omni2, hourly_sat_density, hourly_altitude_change):\n    import numpy as np\n\n    # Work with the data as-is from filter_omni2\n    omni = filter_omni2.copy()\n    \n    # The Timestamp column shows as 1970-01-01 when read downstream.\n    # This means the datetime values are stored as tz-aware but read as epoch.\n    # Let's check the actual raw values and re-parse if needed.\n    ts_col = omni['Timestamp']\n    \n    # Try to detect: if all timestamps are 1970-01-01, they might be stored with tz info\n    # that got lost. Re-parse from the original DOY/YEAR columns as fallback.\n    sample = ts_col.iloc[0]\n    \n    if hasattr(sample, 'year') and sample.year == 1970:\n        # Timestamps are broken - reconstruct from YEAR and DOY columns\n        # OMNI2 is hourly data; DOY starts at 1, need to add hour offset\n        # We have 24 hours per DOY, and data is sorted\n        # Reconstruct: base = year + doy - 1 days, then add hour index within day\n        # Actually, let's just use pd.to_datetime with unit inference from the int values\n        # The timestamp might be stored as nanoseconds since epoch but tz-aware\n        # Try: convert the underlying int64 values back to timestamps\n        ts_ns = ts_col.values.astype('int64')\n        # These might be nanoseconds since epoch - convert back\n        reconstructed = pd.to_datetime(ts_ns, unit='ns', utc=True).tz_localize(None)\n        if reconstructed.iloc[0].year == 2018:\n            omni['Timestamp'] = reconstructed\n        else:\n            # Last resort: rebuild from YEAR + DOY + row position within DOY\n            # DOY=274 is 2018-10-01, each day has 24 hourly rows\n            hours = []\n            day_counts = {}\n            for _, row in omni.iterrows():\n                doy = int(row['DOY'])\n                if doy not in day_counts:\n                    day_counts[doy] = 0\n                h = day_counts[doy]\n                day_counts[doy] += 1\n                base = pd.Timestamp(year=int(row['YEAR']), month=1, day=1) + pd.Timedelta(days=doy-1)\n                hours.append(base + pd.Timedelta(hours=h))\n            omni['Timestamp'] = hours\n    \n    # Normalize all timestamps to tz-naive datetime64[ns]\n    def normalize_ts(series):\n        s = pd.to_datetime(series, utc=False)\n        if hasattr(s.dtype, 'tz') and s.dtype.tz is not None:\n            s = s.dt.tz_localize(None)\n        return s.dt.floor('h')\n    \n    omni['Timestamp'] = normalize_ts(omni['Timestamp'])\n    \n    sat = hourly_sat_density.copy()\n    sat['Timestamp'] = normalize_ts(sat['Timestamp'])\n    \n    alt = hourly_altitude_change.copy()\n    alt['timestamp'] = normalize_ts(alt['timestamp'])\n    \n    # Merge on timestamp\n    merged = alt.merge(omni, left_on='timestamp', right_on='Timestamp', how='inner')\n    merged = merged.merge(sat, left_on='timestamp', right_on='Timestamp', how='inner')\n    \n    # Drop non-numeric / identifier columns\n    drop_cols = ['timestamp', 'Timestamp_x', 'Timestamp_y', 'Timestamp', 'YEAR', 'DOY',\n                 'ID_for_IMF_spacecraft', 'ID_for_SW_Plasma_spacecraft', 'Flux_FLAG',\n                 'Bartels_rotation_number']\n    feature_cols = [c for c in merged.columns if c not in drop_cols and c != 'change_altitude']\n    \n    results = []\n    for col in feature_cols:\n        series = pd.to_numeric(merged[col], errors='coerce')\n        valid = merged[['change_altitude']].join(series.rename('x')).dropna()\n        if len(valid) > 10 and valid['x'].std() > 0:\n            corr = valid['change_altitude'].corr(valid['x'])\n            if not np.isnan(corr):\n                results.append({'variable': col, 'pearson_corr': corr})\n    \n    result_df = pd.DataFrame(results)\n    result_df['abs_corr'] = result_df['pearson_corr'].abs()\n    result_df = result_df.sort_values('abs_corr', ascending=False).drop(columns='abs_corr').reset_index(drop=True)\n    \n    # Also show debug info\n    result_df['omni_ts_sample'] = str(omni['Timestamp'].iloc[:3].tolist())\n    result_df['merged_shape'] = str(merged.shape)\n    \n    return result_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge OMNI2 (re-parsing Timestamp from string in load_omni2), Sat_Density, and hourly altitude change on normalized timestamps. Compute Pearson correlation of all variables vs change_altitude, sort by absolute value descending.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_timestamps",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(filter_omni2, hourly_sat_density, hourly_altitude_change):\n    import pandas as pd\n    \n    omni = filter_omni2.copy()\n    sat = hourly_sat_density.copy()\n    alt = hourly_altitude_change.copy()\n    \n    # Check OMNI2 index\n    print(\"OMNI index type:\", type(omni.index))\n    print(\"OMNI index sample:\", omni.index[:3].tolist())\n    print(\"OMNI columns:\", omni.columns.tolist()[:5])\n    print(\"OMNI dtypes index:\", omni.index.dtype)\n    \n    # Check if there's a Timestamp column\n    if 'Timestamp' in omni.columns:\n        print(\"Has Timestamp col:\", omni['Timestamp'].iloc[:3].tolist())\n    \n    # Check sat\n    print(\"\\nSat Timestamp col type:\", sat['Timestamp'].dtype)\n    print(\"Sat Timestamp sample:\", sat['Timestamp'].iloc[:3].tolist())\n    \n    # Check alt\n    print(\"\\nAlt timestamp col type:\", alt['timestamp'].dtype)\n    print(\"Alt timestamp sample:\", alt['timestamp'].iloc[:3].tolist())\n    \n    return pd.DataFrame({'info': ['check console']})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug operator to inspect timestamp types and values across all three datasets.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_final_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_omni2, hourly_sat_density, hourly_altitude_change):\n    import numpy as np\n    \n    # Normalize timestamps\n    omni = filter_omni2.copy()\n    omni['ts'] = pd.to_datetime(omni['Timestamp']).dt.tz_localize(None).dt.floor('h')\n    \n    sat = hourly_sat_density.copy()\n    sat['ts'] = pd.to_datetime(sat['Timestamp']).dt.tz_localize(None).dt.floor('h')\n    \n    alt = hourly_altitude_change.copy()\n    alt['ts'] = pd.to_datetime(alt['timestamp']).dt.tz_localize(None).dt.floor('h')\n    \n    # Merge all on ts\n    merged = alt[['ts', 'change_altitude']].merge(\n        omni.drop(columns=['Timestamp']), on='ts', how='inner'\n    ).merge(\n        sat[['ts', 'Orbit Mean Density (kg/m^3)']], on='ts', how='inner'\n    )\n    \n    # Replace sentinel values with NaN\n    sentinel_vals = [999999.99, 99999.99, 9999.99, 9999, 99999, 999999]\n    for col in merged.columns:\n        if merged[col].dtype in [np.float64, np.int64]:\n            for sv in sentinel_vals:\n                merged[col] = merged[col].replace(sv, np.nan)\n    \n    # Compute Pearson correlations vs change_altitude\n    results = []\n    target = merged['change_altitude']\n    for col in merged.columns:\n        if col in ['ts', 'change_altitude', 'DOY', 'YEAR']:\n            continue\n        series = merged[col]\n        # Only correlate if numeric and has variance\n        if series.dtype not in [np.float64, np.int64, float, int]:\n            continue\n        valid = merged[['change_altitude', col]].dropna()\n        if len(valid) < 10 or valid[col].std() == 0:\n            continue\n        corr = valid['change_altitude'].corr(valid[col])\n        if not np.isnan(corr):\n            results.append({'variable': col, 'pearson_corr': corr})\n    \n    df = pd.DataFrame(results)\n    df['abs_corr'] = df['pearson_corr'].abs()\n    df = df.sort_values('abs_corr', ascending=False).drop(columns='abs_corr').reset_index(drop=True)\n    \n    # Add metadata\n    df['merged_rows'] = len(merged)\n    df['merged_cols'] = len(merged.columns)\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean final analysis: merge OMNI2 (filter_omni2), Sat_Density (hourly_sat_density), and hourly altitude change on normalized timestamps. Replace sentinel values (999999.99, 99999.99, etc.) with NaN. Compute Pearson correlation of all variables vs change_altitude, sort by absolute correlation descending. Excludes DOY, YEAR, constant columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_omni2": {
+        "x": 100,
+        "y": 550
+      },
+      "load_sat_density": {
+        "x": 100,
+        "y": 730
+      },
+      "list_sp3_files": {
+        "x": 100,
+        "y": 910
+      },
+      "load_sp3_altitude": {
+        "x": 100,
+        "y": 1090
+      },
+      "parse_sp3_altitude": {
+        "x": 100,
+        "y": 1270
+      },
+      "hourly_altitude_change": {
+        "x": 380,
+        "y": 1270
+      },
+      "filter_omni2": {
+        "x": 380,
+        "y": 550
+      },
+      "hourly_sat_density": {
+        "x": 380,
+        "y": 730
+      },
+      "compute_correlations": {
+        "x": 660,
+        "y": 40
+      },
+      "final_correlations": {
+        "x": 660,
+        "y": 1270
+      },
+      "debug_timestamps": {
+        "x": 660,
+        "y": 550
+      },
+      "clean_final_analysis": {
+        "x": 660,
+        "y": 1720
+      }
+    },
+    "links": [
+      {
+        "linkID": "parse_sp3_altitude-->hourly_altitude_change",
+        "source": {
+          "operatorID": "parse_sp3_altitude",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "hourly_altitude_change",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_sat_density-->hourly_sat_density",
+        "source": {
+          "operatorID": "load_sat_density",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "hourly_sat_density",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_omni2-->compute_correlations",
+        "source": {
+          "operatorID": "filter_omni2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_correlations",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hourly_sat_density-->compute_correlations",
+        "source": {
+          "operatorID": "hourly_sat_density",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_correlations",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "hourly_altitude_change-->compute_correlations",
+        "source": {
+          "operatorID": "hourly_altitude_change",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_correlations",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "filter_omni2-->debug_timestamps",
+        "source": {
+          "operatorID": "filter_omni2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_timestamps",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hourly_sat_density-->debug_timestamps",
+        "source": {
+          "operatorID": "hourly_sat_density",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_timestamps",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "hourly_altitude_change-->debug_timestamps",
+        "source": {
+          "operatorID": "hourly_altitude_change",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_timestamps",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "load_omni2-->filter_omni2",
+        "source": {
+          "operatorID": "load_omni2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_omni2",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_omni2-->final_correlations",
+        "source": {
+          "operatorID": "filter_omni2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_correlations",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hourly_sat_density-->final_correlations",
+        "source": {
+          "operatorID": "hourly_sat_density",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_correlations",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "hourly_altitude_change-->final_correlations",
+        "source": {
+          "operatorID": "hourly_altitude_change",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_correlations",
+          "portID": "input-2"
+        }
+      },
+      {
+        "linkID": "filter_omni2-->clean_final_analysis",
+        "source": {
+          "operatorID": "filter_omni2",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_final_analysis",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hourly_sat_density-->clean_final_analysis",
+        "source": {
+          "operatorID": "hourly_sat_density",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_final_analysis",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "hourly_altitude_change-->clean_final_analysis",
+        "source": {
+          "operatorID": "hourly_altitude_change",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_final_analysis",
+          "portID": "input-2"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

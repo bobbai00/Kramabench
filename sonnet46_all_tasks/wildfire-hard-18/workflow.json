@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-145-7-1781158938234",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_description",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='cp1252')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the variable description file from data/wildfire/input/noaa_wildfires_variabledescrip.csv with cp1252 encoding.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the main wildfire dataset from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "check_variables",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_description, load_wildfires):\n    # Check relevant variables for suppression, duration, buildings, and weather\n    suppression_vars = load_description[load_description['Variable Name '].str.contains(\n        'strat|suppress|dom_strat', case=False, na=False)]\n    weather_vars = load_description[load_description['Variable Name '].str.contains(\n        'wind|rain|erc|avrh|weather', case=False, na=False)]\n    building_vars = load_description[load_description['Variable Name '].str.contains(\n        'threat|build|struct|comm|prim|outb', case=False, na=False)]\n    duration_vars = load_description[load_description['Variable Name '].str.contains(\n        'duration|control|start', case=False, na=False)]\n    \n    relevant = pd.concat([suppression_vars, weather_vars, building_vars, duration_vars]).drop_duplicates()\n    return relevant[['Variable Name ', 'Young et al. 2020, Table 1', 'Alternative description']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Examine variable descriptions for suppression, weather, building impact, and duration variables to understand what's available for analysis.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "regression_analysis",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_wildfires) -> pd.DataFrame:\n    from scipy import stats\n    import numpy as np\n\n    df = load_wildfires.copy()\n\n    # Suppression indicator: 1 = Full Suppression, 0 = Other\n    df['full_suppression'] = (df['dominant_strategy_50_s'] == 'Full Suppression').astype(int)\n\n    # Outcome variables\n    # Buildings affected: primary + commercial threatened\n    df['buildings_affected'] = df['prim_threatened_aggregate'] + df['comm_threatened_aggregate']\n\n    # Drop rows with missing key variables\n    weather_vars = ['wind_med', 'avrh_mean', 'erc_med', 'rain_sum']\n    key_vars = ['duration', 'buildings_affected', 'full_suppression'] + weather_vars\n    df_clean = df[key_vars].dropna()\n\n    # Log-transform skewed outcomes\n    df_clean = df_clean.copy()\n    df_clean['log_duration'] = np.log1p(df_clean['duration'])\n    df_clean['log_buildings'] = np.log1p(df_clean['buildings_affected'])\n\n    results = []\n\n    for outcome_col, label in [('log_duration', 'Log(Duration+1)'), ('log_buildings', 'Log(Buildings+1)')]:\n        # Build design matrix: suppression + weather controls\n        X = df_clean[['full_suppression'] + weather_vars].values\n        y = df_clean[outcome_col].values\n\n        # Add intercept\n        X_int = np.column_stack([np.ones(len(X)), X])\n\n        # OLS via normal equations\n        coef, residuals, rank, sv = np.linalg.lstsq(X_int, y, rcond=None)\n\n        # Compute standard errors\n        y_hat = X_int @ coef\n        resid = y - y_hat\n        n, k = X_int.shape\n        s2 = (resid @ resid) / (n - k)\n        cov = s2 * np.linalg.inv(X_int.T @ X_int)\n        se = np.sqrt(np.diag(cov))\n\n        # t-stat and p-value for suppression coefficient (index 1)\n        t_stat = coef[1] / se[1]\n        p_val = 2 * stats.t.sf(abs(t_stat), df=n - k)\n\n        # R-squared\n        ss_res = resid @ resid\n        ss_tot = ((y - y.mean()) ** 2).sum()\n        r2 = 1 - ss_res / ss_tot\n\n        results.append({\n            'Outcome': label,\n            'Suppression_Coef': round(coef[1], 4),\n            'Std_Error': round(se[1], 4),\n            't_stat': round(t_stat, 4),\n            'p_value': round(p_val, 6),\n            'R_squared': round(r2, 4),\n            'N': n,\n            'Significant (p<0.05)': p_val < 0.05,\n            'Direction': 'Lower' if coef[1] < 0 else 'Higher'\n        })\n\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "OLS regression analysis: regress log(duration+1) and log(buildings_affected+1) on full_suppression indicator (dominant_strategy_50_s == 'Full Suppression') controlling for weather variables (wind_med, avrh_mean, erc_med, rain_sum). Reports coefficient, SE, t-stat, p-value, R-squared, N for suppression effect on each outcome.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_description": {
+        "x": 100,
+        "y": 40
+      },
+      "load_wildfires": {
+        "x": 100,
+        "y": 295
+      },
+      "check_variables": {
+        "x": 380,
+        "y": 115
+      },
+      "regression_analysis": {
+        "x": 380,
+        "y": 370
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_description-->check_variables",
+        "source": {
+          "operatorID": "load_description",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_variables",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_wildfires-->check_variables",
+        "source": {
+          "operatorID": "load_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_variables",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "load_wildfires-->regression_analysis",
+        "source": {
+          "operatorID": "load_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "regression_analysis",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

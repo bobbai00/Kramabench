@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-17-16-1781033463229",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_theft_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv', \n                      skiprows=2, \n                      sep=',',\n                      usecols=[0, 1, 2])\n    df.columns = ['Year', 'Theft_Type', 'Reports']\n    df = df.dropna()\n    df['Reports'] = df['Reports'].str.replace(',', '').astype(int)\n    df['Year'] = df['Year'].astype(int)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load identity theft reports data from 2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv, parsing columns as Year, Theft_Type, Reports with proper numeric conversion, dropping NaN rows first before type conversion",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Top_Three_Identity_Theft_Reports_by_Year.csv', 'r') as f:\n        lines = f.readlines()[:20]\n    return pd.DataFrame({'raw_line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw lines from the CSV file to inspect structure and formatting",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calculate_growth_rates",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_theft_data):\n    df = load_theft_data.copy()\n    \n    # Get 2020 and 2024 data for each theft type\n    data_2020 = df[df['Year'] == 2020].set_index('Theft_Type')['Reports']\n    data_2024 = df[df['Year'] == 2024].set_index('Theft_Type')['Reports']\n    \n    # Get all unique theft types\n    all_types = set(data_2020.index) | set(data_2024.index)\n    \n    results = []\n    for theft_type in sorted(all_types):\n        reports_2020 = data_2020.get(theft_type, None)\n        reports_2024 = data_2024.get(theft_type, None)\n        \n        if reports_2020 is not None and reports_2024 is not None:\n            absolute_growth = reports_2024 - reports_2020\n            relative_growth_pct = ((reports_2024 - reports_2020) / reports_2020) * 100\n            \n            results.append({\n                'Theft_Type': theft_type,\n                'Reports_2020': reports_2020,\n                'Reports_2024': reports_2024,\n                'Absolute_Growth': absolute_growth,\n                'Relative_Growth_Percent': relative_growth_pct\n            })\n    \n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate relative growth rates (percentage change) for each identity theft category between 2020 and 2024, including all categories with data for both years",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_theft_data": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_raw_file": {
+        "x": 100,
+        "y": 220
+      },
+      "calculate_growth_rates": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_theft_data-->calculate_growth_rates",
+        "source": {
+          "operatorID": "load_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_growth_rates",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

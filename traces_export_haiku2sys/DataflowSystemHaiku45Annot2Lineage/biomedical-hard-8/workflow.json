@@ -1,0 +1,374 @@
+{
+  "headId": "step-agent-446-6-1781055906317",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "hyperactivated_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/biomedical/input/hyperactivated.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load hyperactivated.csv containing protein site hyperactivation data",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc1.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load mmc1.xlsx file containing supplementary data (likely metadata or sample information)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc6_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load mmc6.xlsx file containing supplementary data (likely drug targeting information)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "mmc1_cnv_class",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(mmc1_data) -> pd.DataFrame:\n    return mmc1_data[['idx', 'CNV_class', 'Histologic_type']].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract CNV class and histologic type from mmc1 to identify CNV-high endometroid samples",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "read_fda_drugs",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    xls = pd.ExcelFile('data/biomedical/input/1-s2.0-S0092867420301070-mmc6.xlsx')\n    df = pd.read_excel(xls, sheet_name='G-FDA approved drugs')\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load FDA approved drugs sheet from mmc6.xlsx file",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cnv_high_endometroid",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(mmc1_cnv_class):\n    return mmc1_cnv_class[(mmc1_cnv_class['CNV_class'] == 'CNV_HIGH') & \n                          (mmc1_cnv_class['Histologic_type'] == 'Endometrioid')][['idx']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to CNV_HIGH and Endometrioid samples from mmc1_cnv_class",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "hyperactivated_in_cnv_high",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(cnv_high_endometroid, hyperactivated_data):\n    merged = cnv_high_endometroid.merge(hyperactivated_data, left_on='idx', right_on='sample_id')\n    return merged[['protein']].drop_duplicates()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find proteins hyperactivated in CNV-high endometroid samples",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fda_targeted_genes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(read_fda_drugs):\n    return read_fda_drugs[['gene_name']].drop_duplicates()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract unique gene names targeted by FDA-approved drugs",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_result",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(hyperactivated_in_cnv_high, fda_targeted_genes):\n    result = hyperactivated_in_cnv_high.merge(fda_targeted_genes, left_on='protein', right_on='gene_name')\n    return result[['protein']].drop_duplicates().sort_values('protein')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find intersection of hyperactivated proteins in CNV-high endometroid samples and FDA-approved drug targets",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "hyperactivated_data": {
+        "x": 660,
+        "y": 220
+      },
+      "mmc1_data": {
+        "x": 100,
+        "y": 40
+      },
+      "mmc6_data": {
+        "x": 100,
+        "y": 220
+      },
+      "mmc1_cnv_class": {
+        "x": 380,
+        "y": 40
+      },
+      "read_fda_drugs": {
+        "x": 660,
+        "y": 400
+      },
+      "cnv_high_endometroid": {
+        "x": 660,
+        "y": 40
+      },
+      "hyperactivated_in_cnv_high": {
+        "x": 940,
+        "y": 130
+      },
+      "fda_targeted_genes": {
+        "x": 940,
+        "y": 400
+      },
+      "final_result": {
+        "x": 1220,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "mmc1_data-->mmc1_cnv_class",
+        "source": {
+          "operatorID": "mmc1_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "mmc1_cnv_class",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "mmc1_cnv_class-->cnv_high_endometroid",
+        "source": {
+          "operatorID": "mmc1_cnv_class",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cnv_high_endometroid",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cnv_high_endometroid-->hyperactivated_in_cnv_high",
+        "source": {
+          "operatorID": "cnv_high_endometroid",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "hyperactivated_in_cnv_high",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hyperactivated_data-->hyperactivated_in_cnv_high",
+        "source": {
+          "operatorID": "hyperactivated_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "hyperactivated_in_cnv_high",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "read_fda_drugs-->fda_targeted_genes",
+        "source": {
+          "operatorID": "read_fda_drugs",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fda_targeted_genes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "hyperactivated_in_cnv_high-->final_result",
+        "source": {
+          "operatorID": "hyperactivated_in_cnv_high",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_result",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fda_targeted_genes-->final_result",
+        "source": {
+          "operatorID": "fda_targeted_genes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_result",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

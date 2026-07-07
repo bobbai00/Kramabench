@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-94-7-1781034435118",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv', header=0, skiprows=1)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN State Top Ten Report Categories data from CSV file with header in row 1 and skip initial metadata row",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identity_theft_top_states",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_csn_data) -> pd.DataFrame:\n    df = load_csn_data.copy()\n    \n    # Rename columns properly\n    df.columns = ['State', 'Category', 'Reports', 'Percentage']\n    \n    # Drop rows with all NaN values and the source row\n    df = df.dropna(how='all')\n    df = df[df['State'].notna() & (df['State'] != 'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission')]\n    \n    # Get the top category for each state (first occurrence per state since they're ordered by rank)\n    top_categories = df.groupby('State').first().reset_index()\n    \n    # Filter for states where \"Identity Theft\" is the top category\n    identity_theft_states = top_categories[top_categories['Category'] == 'Identity Theft']\n    \n    return identity_theft_states[['State']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter for states where \"Identity Theft\" is the top (first) report category. Groups by state and takes the first category (which is the top-ranked), then filters for \"Identity Theft\".",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "identity_theft_top_states": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_csn_data-->identity_theft_top_states",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identity_theft_top_states",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

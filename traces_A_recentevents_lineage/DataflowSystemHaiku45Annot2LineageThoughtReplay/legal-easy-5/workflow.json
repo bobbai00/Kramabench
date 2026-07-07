@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-14-13-1781033369531",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv', header=1)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fraud reports by payment method from 2024 CSN data book CSV using row 1 as headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calculate_total_fraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data\n    \n    # The actual data is in rows 1-12 (payment methods)\n    # The \"Total $ Loss\" column is at index 2 (Unnamed: 2)\n    loss_values = []\n    for val in df.iloc[1:13, 2]:\n        if isinstance(val, str) and 'M' in val:\n            # Remove $, M, and commas, then convert to float\n            numeric_val = float(val.replace('$', '').replace('M', '').replace(',', '').strip())\n            loss_values.append(numeric_val)\n    \n    # Sum all loss values (already in millions)\n    total_millions = sum(loss_values)\n    \n    return pd.DataFrame({'Total Fraud (Millions)': [int(total_millions)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate total money defrauded across all payment methods by extracting numeric values from the Total $ Loss column (removing $, M, and commas) and summing them to get total in millions of dollars",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 40
+      },
+      "calculate_total_fraud": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->calculate_total_fraud",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_total_fraud",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-166-22-1781162065099",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "list_sp3_files",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob, os\n    pattern = \"data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909??T????_201909??T????_0201/*.sp3\"\n    files = glob.glob(pattern)\n    if not files:\n        # Try recursive search\n        files = glob.glob(\"data/astronomy/input/swarm/POD/**/*.sp3\", recursive=True)\n    if not files:\n        # List what's there\n        base = \"data/astronomy/input/swarm/POD\"\n        rows = []\n        for root, dirs, fnames in os.walk(base):\n            for f in fnames:\n                rows.append({\"filepath\": os.path.join(root, f), \"filename\": f})\n        return pd.DataFrame(rows) if rows else pd.DataFrame({\"filepath\": [], \"filename\": []})\n    return pd.DataFrame({\"filepath\": sorted(files), \"filename\": [os.path.basename(f) for f in sorted(files)]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "List all SP3 files by glob and fallback os.walk under data/astronomy/input/swarm/POD for Swarm-A September 2019 POD data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "fix_filter_sp3",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    import os\n    \n    # Find all SP3 files\n    pattern = \"data/astronomy/input/swarm/POD/SW_OPER_SP3ACOM_2__201909??T????_201909??T????_0201/*.sp3\"\n    files = glob.glob(pattern, recursive=False)\n    \n    if not files:\n        # Try os.walk fallback\n        base = \"data/astronomy/input/swarm/POD\"\n        files = []\n        for root, dirs, fnames in os.walk(base):\n            for fn in fnames:\n                if fn.endswith('.sp3'):\n                    files.append(os.path.join(root, fn))\n    \n    rows = []\n    for fp in sorted(files):\n        fn = os.path.basename(fp)\n        rows.append({'filepath': fp, 'filename': fn})\n    \n    df = pd.DataFrame(rows)\n    \n    # Filter for September 2-29, 2019 based on filename date\n    # Filename format: SW_OPER_SP3ACOM_2__20190902T235942_20190903T235942_0201.sp3\n    import re\n    def extract_start_date(fn):\n        m = re.search(r'__(\\d{8})T', fn)\n        if m:\n            return m.group(1)\n        return None\n    \n    df['start_date'] = df['filename'].apply(extract_start_date)\n    # Keep Sep 2 to Sep 29, 2019\n    mask = df['start_date'].apply(lambda d: d is not None and d >= '20190902' and d <= '20190929')\n    df = df[mask].reset_index(drop=True)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter SP3 files for Swarm-A from September 2 to 29, 2019. Uses glob pattern for 201909 files and filters by start date extracted from filename (20190902 to 20190929).",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_sp3_positions",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fix_filter_sp3) -> pd.DataFrame:\n    from datetime import datetime\n    records = []\n    for fp in fix_filter_sp3['filepath']:\n        try:\n            with open(fp, 'r') as f:\n                lines = f.readlines()\n        except Exception:\n            continue\n        current_epoch = None\n        for line in lines:\n            if line.startswith('*'):\n                parts = line.split()\n                try:\n                    yr, mo, dy, hr, mn = int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5])\n                    sec = float(parts[6])\n                    current_epoch = datetime(yr, mo, dy, hr, mn, int(sec))\n                except Exception:\n                    current_epoch = None\n            elif current_epoch is not None and (line.startswith('PL47') or line.startswith('PA')):\n                parts = line.split()\n                try:\n                    x, y, z = float(parts[1]), float(parts[2]), float(parts[3])\n                    if abs(x) < 1e8 and abs(y) < 1e8 and abs(z) < 1e8:\n                        records.append({'epoch': current_epoch, 'x_km': x, 'y_km': y, 'z_km': z})\n                except Exception:\n                    pass\n    return pd.DataFrame(records)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse all 28 SP3 files (Sep 2-29, 2019) for Swarm-A satellite. Extracts epoch timestamps and ECEF XYZ positions (km) from lines starting with '*' (epoch) and 'PL47' or 'PA' (position). Skips bad/missing values (>1e8). Returns DataFrame with columns: epoch, x_km, y_km, z_km.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "list_sp3_files": {
+        "x": 100,
+        "y": 220
+      },
+      "fix_filter_sp3": {
+        "x": 100,
+        "y": 940
+      },
+      "parse_sp3_positions": {
+        "x": 380,
+        "y": 940
+      }
+    },
+    "links": [
+      {
+        "linkID": "fix_filter_sp3-->parse_sp3_positions",
+        "source": {
+          "operatorID": "fix_filter_sp3",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_sp3_positions",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

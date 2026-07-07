@@ -1,0 +1,178 @@
+{
+  "headId": "step-agent-109-7-1781149854179",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "human_caused",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv(\n        'data/wildfire/input/nifc_human_caused_acres.csv',\n        sep='\\t',\n        engine='python',\n        on_bad_lines='skip'\n    )\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load human-caused wildfire acres data from data/wildfire/input/nifc_human_caused_acres.csv using tab separator, skipping bad lines.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "lightning_caused",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv(\n        'data/wildfire/input/nifc_lightning_caused_acres.csv',\n        sep='\\t',\n        engine='python',\n        on_bad_lines='skip'\n    )\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load lightning-caused wildfire acres data from data/wildfire/input/nifc_lightning_caused_acres.csv using tab separator, skipping bad lines.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_human",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_human_caused_acres.csv', 'r') as f:\n        lines = f.readlines()[:20]\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 20 raw lines of nifc_human_caused_acres.csv to understand structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_lightning",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_lightning_caused_acres.csv', 'r') as f:\n        lines = f.readlines()[:20]\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 20 raw lines of nifc_lightning_caused_acres.csv to understand structure.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "combined_acres",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(human_caused, lightning_caused) -> pd.DataFrame:\n    import numpy as np\n\n    geo_cols = ['Alaska', 'Northwest', 'Northern California', 'Southern California',\n                'Northern Rockies', 'Great Basin', 'Southwest', 'Rocky Mountains',\n                'Eastern Area', 'Southern Area']\n\n    def clean_df(df, cause):\n        d = df[['Year'] + [c for c in geo_cols if c in df.columns]].copy()\n        d['Year'] = d['Year'].astype(int)\n        for c in geo_cols:\n            if c in d.columns:\n                d[c] = d[c].astype(str).str.replace(',', '').str.strip()\n                d[c] = pd.to_numeric(d[c], errors='coerce').fillna(0)\n        return d\n\n    h = clean_df(human_caused, 'human')\n    l = clean_df(lightning_caused, 'lightning')\n\n    # Sum human + lightning for each area\n    merged = h.set_index('Year').add(l.set_index('Year'), fill_value=0).reset_index()\n\n    # Melt to long format\n    melted = merged.melt(id_vars='Year', var_name='geo_area', value_name='acres')\n\n    # Compute Z-score per geographic area\n    def zscore(x):\n        mu, sigma = x.mean(), x.std(ddof=1)\n        return (x - mu) / sigma if sigma > 0 else pd.Series(0, index=x.index)\n\n    melted['zscore'] = melted.groupby('geo_area')['acres'].transform(zscore)\n\n    # Find the row with the maximum absolute Z-score\n    melted['abs_zscore'] = melted['zscore'].abs()\n    idx = melted['abs_zscore'].idxmax()\n    result = melted.loc[[idx], ['geo_area', 'Year', 'acres', 'zscore', 'abs_zscore']]\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Combine human and lightning caused acres, melt to long format by geographic area, compute Z-scores per area across years, and find the area+year with the maximum absolute Z-score.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "human_caused": {
+        "x": 100,
+        "y": 40
+      },
+      "lightning_caused": {
+        "x": 100,
+        "y": 220
+      },
+      "inspect_human": {
+        "x": 100,
+        "y": 400
+      },
+      "inspect_lightning": {
+        "x": 100,
+        "y": 580
+      },
+      "combined_acres": {
+        "x": 380,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "human_caused-->combined_acres",
+        "source": {
+          "operatorID": "human_caused",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combined_acres",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "lightning_caused-->combined_acres",
+        "source": {
+          "operatorID": "lightning_caused",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combined_acres",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

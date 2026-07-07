@@ -1,0 +1,155 @@
+{
+  "headId": "step-agent-25-9-1781033524242",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv', header=2)\n    df = df.dropna(how='all')\n    df = df[df['Year'].notna()]\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df = df[df['Year'].notna()]\n    df['# of Reports'] = df['# of Reports'].str.replace(',', '').astype(int)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSN Report Count data from 2024_CSN_Report_Count.csv with headers on row 2. Remove empty rows, convert Year to numeric, and parse report counts by removing commas.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv', 'r') as f:\n        lines = f.readlines()[:20]\n    return pd.DataFrame({'raw_lines': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect the first 20 lines of the raw CSV file to understand its structure, headers, and formatting.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calculate_relative_increase",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_csn_data) -> pd.DataFrame:\n    df = load_csn_data.copy()\n    df = df.sort_values('Year').reset_index(drop=True)\n    \n    df['Previous_Year_Reports'] = df['# of Reports'].shift(1)\n    df['Relative_Increase'] = ((df['# of Reports'] - df['Previous_Year_Reports']) / df['Previous_Year_Reports'] * 100)\n    \n    # Filter to years 2002 and later\n    df = df[df['Year'] >= 2002].reset_index(drop=True)\n    \n    return df[['Year', '# of Reports', 'Previous_Year_Reports', 'Relative_Increase']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate year-over-year relative increase in reports. For each year from 2002 onwards, compute the percentage change from the previous year's total reports.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "max_relative_increase_year",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(calculate_relative_increase) -> pd.DataFrame:\n    max_row = calculate_relative_increase.loc[calculate_relative_increase['Relative_Increase'].idxmax()]\n    return pd.DataFrame([{'Year': int(max_row['Year']), 'Max_Relative_Increase': max_row['Relative_Increase']}])\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the year with the greatest relative increase in total reports (Fraud, Identity Theft and Other) between 2002 and 2024. Returns the year and its corresponding relative increase percentage.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_raw_file": {
+        "x": 100,
+        "y": 220
+      },
+      "calculate_relative_increase": {
+        "x": 380,
+        "y": 40
+      },
+      "max_relative_increase_year": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_csn_data-->calculate_relative_increase",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_relative_increase",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_relative_increase-->max_relative_increase_year",
+        "source": {
+          "operatorID": "calculate_relative_increase",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "max_relative_increase_year",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,474 @@
+{
+  "headId": "step-agent-26-11-1781033570442",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_html",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/metropolitan_statistics.html', 'r') as f:\n        html_content = f.read()\n    tables = pd.read_html(html_content)\n    return tables[0] if tables else pd.DataFrame()\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load metropolitan statistics from HTML file (metropolitan_statistics.html). Extracts the first table containing metro area data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_identity_theft",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\nimport glob\ndef load() -> pd.DataFrame:\n    pattern = 'data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*'\n    files = glob.glob(pattern)\n    dfs = []\n    for file in files:\n        try:\n            df = pd.read_csv(file)\n            dfs.append(df)\n        except:\n            pass\n    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all identity theft data CSV files from State MSA Identity Theft data folder using glob pattern matching.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_html_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import os\n    with open('data/legal/input/metropolitan_statistics.html', 'r', encoding='utf-8') as f:\n        content = f.read()\n    return pd.DataFrame([content[:2000]])\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw HTML content from metropolitan_statistics.html to inspect structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_html_table",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    from bs4 import BeautifulSoup\n    \n    with open('data/legal/input/metropolitan_statistics.html', 'r', encoding='utf-8') as f:\n        html_content = f.read()\n    \n    soup = BeautifulSoup(html_content, 'html.parser')\n    \n    # Find all tables and extract the one with metropolitan area data\n    tables = soup.find_all('table')\n    \n    for table in tables:\n        # Look for table with metro area names and population data\n        rows = table.find_all('tr')\n        if len(rows) > 0:\n            # Try to extract data\n            data = []\n            for row in rows:\n                cells = row.find_all(['td', 'th'])\n                if cells:\n                    row_data = [cell.get_text(strip=True) for cell in cells]\n                    data.append(row_data)\n            \n            if data and len(data) > 1:\n                # Check if this looks like metro area data\n                first_row = ' '.join(data[0]).lower()\n                if 'metro' in first_row or 'area' in first_row or 'population' in first_row:\n                    df = pd.DataFrame(data[1:], columns=data[0] if data[0] else None)\n                    if len(df) > 5:  # Likely the right table\n                        return df\n    \n    # Fallback: return first substantial table\n    if tables:\n        rows = tables[0].find_all('tr')\n        data = []\n        for row in rows:\n            cells = row.find_all(['td', 'th'])\n            if cells:\n                row_data = [cell.get_text(strip=True) for cell in cells]\n                data.append(row_data)\n        \n        if data:\n            df = pd.DataFrame(data[1:], columns=data[0] if data[0] else None)\n            return df\n    \n    return pd.DataFrame()\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse HTML table from metropolitan_statistics.html to extract metropolitan area names and population data",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_html_metro",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import re\n    with open('data/legal/input/metropolitan_statistics.html', 'r', encoding='utf-8') as f:\n        html_content = f.read()\n    \n    # Use pandas to read HTML tables\n    tables = pd.read_html(html_content)\n    \n    # Look for the table with metropolitan area data\n    for i, table in enumerate(tables):\n        if table.shape[1] >= 2:\n            # Check if this looks like it contains metro area names and population\n            cols = table.columns.tolist()\n            first_col = str(table.iloc[0, 0]).lower() if len(table) > 0 else \"\"\n            if any(keyword in str(cols[0]).lower() or keyword in first_col for keyword in ['metro', 'area', 'statistical', 'rank']):\n                return table.reset_index(drop=True)\n    \n    if len(tables) > 0:\n        return tables[1].reset_index(drop=True)\n    \n    return pd.DataFrame()\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse HTML file to extract metropolitan statistical area table with names and population data",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_identity_theft",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_identity_theft) -> pd.DataFrame:\n    df = load_identity_theft.copy()\n    \n    df = df.dropna(how='all')\n    \n    if df.iloc[0, 0] == 'Metropolitan Area':\n        df.columns = df.iloc[0]\n        df = df.iloc[1:].reset_index(drop=True)\n    \n    df = df[df.iloc[:, 0].notna()]\n    df = df[~df.iloc[:, 0].str.contains('Source:', na=False, case=False)]\n    df = df[df.iloc[:, 0].str.strip() != '']\n    \n    df.columns = ['Metropolitan Area', '# of Reports']\n    df['# of Reports'] = pd.to_numeric(df['# of Reports'], errors='coerce')\n    df = df.dropna(subset=['# of Reports'])\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft data: remove empty rows, extract proper headers, remove metadata rows, convert report counts to numeric",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "normalize_metro_names_html",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_html_metro) -> pd.DataFrame:\n    df = parse_html_metro.copy()\n    df['normalized_name'] = df['Metropolitan statistical area'].str.replace(r'\\s*(MSA|Metropolitan Statistical Area)\\s*$', '', regex=True, case=False).str.replace(r'[\u2013\u2014-]', '-', regex=True).str.strip()\n    return df[['normalized_name', '2024 estimate', '2020 census']].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize metropolitan area names from HTML by removing MSA/MSA suffixes and standardizing punctuation",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "normalize_theft_names",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(clean_identity_theft) -> pd.DataFrame:\n    df = clean_identity_theft.copy()\n    df['normalized_name'] = df['Metropolitan Area'].str.replace(r'\\s*(MSA|Metropolitan Statistical Area|Micropolitan Statistical Area)\\s*$', '', regex=True, case=False).str.replace(r'[\u2013\u2014-]', '-', regex=True).str.strip()\n    return df[['normalized_name', '# of Reports', 'Metropolitan Area']].copy()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Normalize metropolitan area names from theft data by removing MSA/Micropolitan suffixes and standardizing punctuation",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "interpolate_2023_population",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(normalize_metro_names_html):\n    df = normalize_metro_names_html.copy()\n    \n    # Interpolate 2023 population from 2020 census and 2024 estimate\n    # 2023 is 3 years after 2020, and 4 years before 2024\n    # Linear interpolation: pop_2023 = pop_2020 + (pop_2024 - pop_2020) * (3/4)\n    df['population_2023'] = df['2020 census'] + (df['2024 estimate'] - df['2020 census']) * (3.0 / 4.0)\n    \n    return df[['normalized_name', 'population_2023']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Interpolate 2023 population from 2020 census and 2024 estimate using linear interpolation (2023 is 3 years after 2020 and 4 years before 2024)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "merge_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(normalize_theft_names, interpolate_2023_population):\n    theft = normalize_theft_names.copy()\n    pop = interpolate_2023_population.copy()\n    \n    # Merge on normalized names\n    merged = theft.merge(pop, on='normalized_name', how='inner')\n    \n    return merged\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge normalized theft data with 2023 interpolated population on normalized metropolitan area names (inner join to keep only matched areas)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_theft_rate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(merge_data):\n    df = merge_data.copy()\n    \n    # Calculate identity theft rate per 100,000 population\n    df['theft_rate_per_100k'] = (df['# of Reports'] / df['population_2023']) * 100000\n    \n    return df[['normalized_name', '# of Reports', 'population_2023', 'theft_rate_per_100k', 'Metropolitan Area']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate identity theft rate per 100,000 population for each metropolitan area",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_theft_rate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(calculate_theft_rate):\n    df = calculate_theft_rate.copy()\n    \n    # Find the metropolitan area with the highest theft rate\n    max_idx = df['theft_rate_per_100k'].idxmax()\n    result = df.loc[[max_idx], ['Metropolitan Area', 'normalized_name', '# of Reports', 'population_2023', 'theft_rate_per_100k']]\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify the metropolitan area with the highest identity theft rate per 100,000 population",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_html": {
+        "x": 100,
+        "y": 40
+      },
+      "load_identity_theft": {
+        "x": 100,
+        "y": 220
+      },
+      "load_html_raw": {
+        "x": 100,
+        "y": 400
+      },
+      "parse_html_table": {
+        "x": 100,
+        "y": 580
+      },
+      "parse_html_metro": {
+        "x": 100,
+        "y": 760
+      },
+      "clean_identity_theft": {
+        "x": 380,
+        "y": 220
+      },
+      "normalize_metro_names_html": {
+        "x": 380,
+        "y": 760
+      },
+      "normalize_theft_names": {
+        "x": 660,
+        "y": 220
+      },
+      "interpolate_2023_population": {
+        "x": 660,
+        "y": 760
+      },
+      "merge_data": {
+        "x": 940,
+        "y": 490
+      },
+      "calculate_theft_rate": {
+        "x": 1220,
+        "y": 490
+      },
+      "find_max_theft_rate": {
+        "x": 1500,
+        "y": 490
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_identity_theft-->clean_identity_theft",
+        "source": {
+          "operatorID": "load_identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_identity_theft",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_html_metro-->normalize_metro_names_html",
+        "source": {
+          "operatorID": "parse_html_metro",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "normalize_metro_names_html",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_identity_theft-->normalize_theft_names",
+        "source": {
+          "operatorID": "clean_identity_theft",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "normalize_theft_names",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "normalize_metro_names_html-->interpolate_2023_population",
+        "source": {
+          "operatorID": "normalize_metro_names_html",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "interpolate_2023_population",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "normalize_theft_names-->merge_data",
+        "source": {
+          "operatorID": "normalize_theft_names",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "merge_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "interpolate_2023_population-->merge_data",
+        "source": {
+          "operatorID": "interpolate_2023_population",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "merge_data",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "merge_data-->calculate_theft_rate",
+        "source": {
+          "operatorID": "merge_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_theft_rate",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "calculate_theft_rate-->find_max_theft_rate",
+        "source": {
+          "operatorID": "calculate_theft_rate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_theft_rate",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

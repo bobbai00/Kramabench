@@ -1,0 +1,219 @@
+{
+  "headId": "step-agent-412-9-1781055320171",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_sunspot_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/astronomy/input/SILSO/SN_y_tot_V2.0.csv', sep=';', header=None)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load yearly mean sunspot numbers from SILSO data file at data/astronomy/input/SILSO/SN_y_tot_V2.0.csv with semicolon delimiter and no header row",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "prepare_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_sunspot_data) -> pd.DataFrame:\n    df = load_sunspot_data.copy()\n    df.columns = ['year', 'mean_sunspot_number', 'std_dev', 'observations', 'defined_observations']\n    df = df[(df['year'] >= 1960) & (df['year'] <= 2020)]\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Prepare sunspot data by renaming columns and filtering to years 1960-2020",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_extrema",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "from scipy.signal import find_peaks\nimport numpy as np\n\ndef process(prepare_data):\n    df = prepare_data.copy()\n    \n    # Extract years and sunspot numbers\n    years = df['year'].values\n    sunspots = df['mean_sunspot_number'].values\n    \n    # Find peaks (maxima) with prominence >= 20 and distance >= 5\n    peaks, peak_props = find_peaks(sunspots, prominence=20, distance=5)\n    \n    # Find troughs (minima) by inverting the signal\n    troughs, trough_props = find_peaks(-sunspots, prominence=20, distance=5)\n    \n    # Create result dataframe with extrema information\n    result_data = []\n    for idx, year_val, sunspot_val in zip(range(len(df)), years, sunspots):\n        extrema_type = None\n        if idx in peaks:\n            extrema_type = 'maximum'\n        elif idx in troughs:\n            extrema_type = 'minimum'\n        \n        result_data.append({\n            'year': year_val,\n            'mean_sunspot_number': sunspot_val,\n            'extrema_type': extrema_type\n        })\n    \n    result_df = pd.DataFrame(result_data)\n    return result_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify peaks (maxima) and troughs (minima) in sunspot numbers using scipy find_peaks with prominence=20 and distance=5 parameters",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_extrema",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(find_extrema) -> pd.DataFrame:\n    df = find_extrema.dropna(subset=['extrema_type'])\n    maxima = df[df['extrema_type'] == 'maximum'].sort_values('year')\n    minima = df[df['extrema_type'] == 'minimum'].sort_values('year')\n    \n    result = pd.DataFrame({\n        'type': ['maxima'] * 5 + ['minima'] * 5,\n        'rank': list(range(1, 6)) + list(range(1, 6)),\n        'year': list(maxima['year'].values) + list(minima['year'].values),\n        'sunspot_number': list(maxima['mean_sunspot_number'].values) + list(minima['mean_sunspot_number'].values)\n    })\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract and organize the identified maxima and minima peaks with their years and sunspot numbers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_period",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_extrema) -> pd.DataFrame:\n    maxima = extract_extrema[extract_extrema['type'] == 'maxima'].sort_values('year')\n    \n    # Calculate periods between consecutive maxima\n    years = maxima['year'].values\n    periods = []\n    for i in range(len(years) - 1):\n        period = years[i + 1] - years[i]\n        periods.append(period)\n    \n    avg_period = sum(periods) / len(periods) if periods else 0\n    \n    result_data = {\n        'metric': ['average_period', 'num_periods_calculated'],\n        'value': [round(avg_period, 1), len(periods)]\n    }\n    \n    return pd.DataFrame(result_data)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the average period of solar activity cycles by computing intervals between consecutive maxima",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_sunspot_data": {
+        "x": 100,
+        "y": 40
+      },
+      "prepare_data": {
+        "x": 380,
+        "y": 40
+      },
+      "find_extrema": {
+        "x": 660,
+        "y": 40
+      },
+      "extract_extrema": {
+        "x": 940,
+        "y": 40
+      },
+      "calculate_period": {
+        "x": 1220,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_sunspot_data-->prepare_data",
+        "source": {
+          "operatorID": "load_sunspot_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prepare_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "prepare_data-->find_extrema",
+        "source": {
+          "operatorID": "prepare_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_extrema",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "find_extrema-->extract_extrema",
+        "source": {
+          "operatorID": "find_extrema",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_extrema",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_extrema-->calculate_period",
+        "source": {
+          "operatorID": "extract_extrema",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_period",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

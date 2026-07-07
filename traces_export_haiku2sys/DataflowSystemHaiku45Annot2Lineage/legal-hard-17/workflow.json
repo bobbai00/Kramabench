@@ -1,0 +1,223 @@
+{
+  "headId": "step-agent-100-11-1781034576415",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_report_count",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv')\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw 2024 CSN Report Count data to inspect structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_report_categories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv', encoding='cp1252')\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw 2024 CSN Report Categories data to inspect structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_report_count_clean",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Count.csv', \n                      skiprows=2, header=None, names=['Year', 'Reports'])\n    df = df.dropna(how='all')\n    df = df[df['Year'] != 'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission']\n    df = df[df['Year'].notna()]\n    df = df[df['Year'] != 'Year']\n    df['Year'] = pd.to_numeric(df['Year'], errors='coerce')\n    df['Reports'] = pd.to_numeric(df['Reports'].astype(str).str.replace(',', ''), errors='coerce')\n    df = df.dropna(subset=['Year', 'Reports'])\n    df['Year'] = df['Year'].astype(int)\n    df['Reports'] = df['Reports'].astype(int)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and clean 2024 CSN Report Count data. Skip metadata rows, convert Year to int, remove commas from Reports and convert to int using coerce to handle NaN values.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_categories_clean",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv',\n                      encoding='cp1252', skiprows=2, header=None, names=['Rank', 'Category', 'Reports_2024', 'Percentage'])\n    df = df.dropna(how='all')\n    df = df[df['Category'] != 'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission']\n    df = df[df['Category'].notna()]\n    df = df[df['Category'] != 'Category']\n    df['Reports_2024'] = df['Reports_2024'].astype(str).str.replace(',', '').astype(int)\n    df['Percentage'] = df['Percentage'].astype(str).str.replace('%', '').astype(float)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and clean 2024 CSN Report Categories data with cp1252 encoding. Skip metadata, clean percentage and report counts, convert to appropriate types.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "find_auto_related",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_categories_clean) -> pd.DataFrame:\n    return load_categories_clean[load_categories_clean['Category'].str.contains('Auto', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter 2024 categories to find Auto-related entry with its percentage",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_auto_2007",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_report_count_clean, find_auto_related) -> pd.DataFrame:\n    reports_2007 = load_report_count_clean[load_report_count_clean['Year'] == 2007]['Reports'].values[0]\n    auto_percentage = find_auto_related['Percentage'].values[0]\n    \n    auto_2007 = reports_2007 * (auto_percentage / 100)\n    auto_2007_rounded = round(auto_2007)\n    \n    return pd.DataFrame({\n        'Year': [2007],\n        'Total_Reports': [reports_2007],\n        'Auto_Percentage_2024': [auto_percentage],\n        'Auto_Reports_2007': [auto_2007_rounded]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate how many Auto Related reports would exist in 2007 if it had the same distribution as 2024. Takes 2007 total reports (1,070,447) and multiplies by 2024 Auto Related percentage (3.04%), rounding to nearest integer.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_report_count": {
+        "x": 100,
+        "y": 40
+      },
+      "load_report_categories": {
+        "x": 100,
+        "y": 220
+      },
+      "load_report_count_clean": {
+        "x": 380,
+        "y": 220
+      },
+      "load_categories_clean": {
+        "x": 100,
+        "y": 400
+      },
+      "find_auto_related": {
+        "x": 380,
+        "y": 400
+      },
+      "calculate_auto_2007": {
+        "x": 660,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_categories_clean-->find_auto_related",
+        "source": {
+          "operatorID": "load_categories_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_auto_related",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_report_count_clean-->calculate_auto_2007",
+        "source": {
+          "operatorID": "load_report_count_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_auto_2007",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "find_auto_related-->calculate_auto_2007",
+        "source": {
+          "operatorID": "find_auto_related",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_auto_2007",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

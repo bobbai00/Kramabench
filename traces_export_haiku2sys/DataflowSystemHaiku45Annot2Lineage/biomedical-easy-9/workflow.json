@@ -1,0 +1,358 @@
+{
+  "headId": "step-agent-447-12-1781055954234",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import openpyxl\n    return pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load data from Excel file: 1-s2.0-S0092867420301070-mmc3.xlsx. This file contains biomedical data with gene information.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "explore_sheets",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import openpyxl\n    xls = pd.ExcelFile('data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx')\n    sheet_names = xls.sheet_names\n    results = []\n    for sheet in sheet_names:\n        df = pd.read_excel('data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx', sheet_name=sheet, nrows=5)\n        results.append({\n            'Sheet': sheet,\n            'Columns': ', '.join(df.columns.tolist()),\n            'First_Few_Rows': df.shape[0]\n        })\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Explore all sheets in the Excel file to understand structure and identify which sheet contains FDR and gene information including CBX3.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_excel_all_sheets",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load():\n    import openpyxl\n    xl_file = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    xls = pd.ExcelFile(xl_file)\n    results = []\n    for sheet_name in xls.sheet_names:\n        try:\n            df = pd.read_excel(xl_file, sheet_name=sheet_name)\n            results.append({\n                'Sheet': sheet_name,\n                'Columns': ', '.join(df.columns.tolist()),\n                'Shape': f\"({df.shape[0]}, {df.shape[1]})\",\n                'Sample_Data': str(df.head(1).to_dict())\n            })\n        except Exception as e:\n            results.append({\n                'Sheet': sheet_name,\n                'Columns': f'Error: {str(e)}',\n                'Shape': 'N/A',\n                'Sample_Data': 'N/A'\n            })\n    return pd.DataFrame(results)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all sheets from Excel file and display their structure with column names and sample data to identify which sheet contains FDR and gene information.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_fdr_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import openpyxl\n    file_path = 'data/biomedical/input/1-s2.0-S0092867420301070-mmc3.xlsx'\n    df = pd.read_excel(file_path, sheet_name='F-SS-phospho')\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load F-SS-phospho sheet from Excel file which contains Gene, Feature, FoldChange, p-values, and FDR.phos columns for phosphoproteomics data.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "cbx3_genes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fdr_data) -> pd.DataFrame:\n    return load_fdr_data[load_fdr_data['Gene'] == 'CBX3']"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter FDR data to extract only CBX3 genes",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "other_genes",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fdr_data) -> pd.DataFrame:\n    return load_fdr_data[load_fdr_data['Gene'] != 'CBX3']"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter FDR data to extract all genes except CBX3",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avg_fdr_cbx3",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(cbx3_genes) -> pd.DataFrame:\n    avg_fdr = cbx3_genes['FDR.phos'].mean()\n    return pd.DataFrame({'avg_fdr_cbx3': [avg_fdr]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the average FDR.phos for CBX3 genes",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avg_fdr_other",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(other_genes) -> pd.DataFrame:\n    avg_fdr = other_genes['FDR.phos'].mean()\n    return pd.DataFrame({'avg_fdr_other': [avg_fdr]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the average FDR.phos for all genes except CBX3",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_difference",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(avg_fdr_cbx3, avg_fdr_other) -> pd.DataFrame:\n    cbx3_val = avg_fdr_cbx3['avg_fdr_cbx3'].iloc[0]\n    other_val = avg_fdr_other['avg_fdr_other'].iloc[0]\n    difference = cbx3_val - other_val\n    return pd.DataFrame({'difference': [round(difference, 9)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the difference between average FDR of CBX3 genes and average FDR of all other genes, rounded to 9 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_data": {
+        "x": 100,
+        "y": 40
+      },
+      "explore_sheets": {
+        "x": 100,
+        "y": 220
+      },
+      "load_excel_all_sheets": {
+        "x": 100,
+        "y": 400
+      },
+      "load_fdr_data": {
+        "x": 100,
+        "y": 580
+      },
+      "cbx3_genes": {
+        "x": 380,
+        "y": 490
+      },
+      "other_genes": {
+        "x": 380,
+        "y": 670
+      },
+      "avg_fdr_cbx3": {
+        "x": 660,
+        "y": 490
+      },
+      "avg_fdr_other": {
+        "x": 660,
+        "y": 670
+      },
+      "calculate_difference": {
+        "x": 940,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fdr_data-->cbx3_genes",
+        "source": {
+          "operatorID": "load_fdr_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cbx3_genes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_fdr_data-->other_genes",
+        "source": {
+          "operatorID": "load_fdr_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "other_genes",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "cbx3_genes-->avg_fdr_cbx3",
+        "source": {
+          "operatorID": "cbx3_genes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avg_fdr_cbx3",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "other_genes-->avg_fdr_other",
+        "source": {
+          "operatorID": "other_genes",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avg_fdr_other",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "avg_fdr_cbx3-->calculate_difference",
+        "source": {
+          "operatorID": "avg_fdr_cbx3",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_difference",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "avg_fdr_other-->calculate_difference",
+        "source": {
+          "operatorID": "avg_fdr_other",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_difference",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-153-5-1781159206478",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_worldcities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_roman_cities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/roman_cities.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load roman_cities.csv from data/archeology/input/roman_cities.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "compute_correlation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_roman_cities, load_worldcities) -> pd.DataFrame:\n    import numpy as np\n\n    roman = load_roman_cities.copy()\n    world = load_worldcities.copy()\n\n    # Parse rank: handle 'or' by averaging, skip '-'\n    def parse_rank(r):\n        r = str(r).strip()\n        if r == '-' or r == 'nan':\n            return np.nan\n        if 'or' in r:\n            parts = r.split('or')\n            return np.mean([float(p.strip()) for p in parts])\n        return float(r)\n\n    roman['rank_numeric'] = roman['Barrington Atlas Rank'].apply(parse_rank)\n    roman = roman.dropna(subset=['rank_numeric'])\n\n    # Filter world cities with population > 1 million\n    world_pop = world[world['population'] > 1_000_000].copy()\n\n    # For each world city, find matching roman cities within 0.1 degrees distance\n    # Distance = max(|lat diff|, |lng diff|) \u2014 using Chebyshev \u2014 but let's use Euclidean on degrees\n    # \"distance between the two is less than 0.1 degrees\" \u2014 interpret as Euclidean distance in lat/lng\n    # sqrt((dlat)^2 + (dlng)^2) < 0.1\n\n    roman_lat = roman['Latitude (Y)'].values\n    roman_lng = roman['Longitude (X)'].values\n    world_lat = world_pop['lat'].values\n    world_lng = world_pop['lng'].values\n\n    results = []\n    for i, wrow in enumerate(world_pop.itertuples()):\n        dlat = roman_lat - wrow.lat\n        dlng = roman_lng - wrow.lng\n        dist = np.sqrt(dlat**2 + dlng**2)\n        matches_idx = np.where(dist < 0.1)[0]\n        if len(matches_idx) > 0:\n            # Take last sample in data among matches\n            last_idx = matches_idx[-1]\n            rank_val = roman['rank_numeric'].iloc[last_idx]\n            results.append({\n                'city': wrow.city,\n                'population': wrow.population,\n                'rank': rank_val\n            })\n\n    result_df = pd.DataFrame(results)\n    corr = result_df['rank'].corr(result_df['population'])\n    corr_rounded = round(corr, 6)\n\n    summary_df = pd.DataFrame({\n        'n_pairs': [len(result_df)],\n        'correlation': [corr_rounded]\n    })\n    # Also return the full detail for inspection\n    result_df['correlation'] = corr_rounded\n    return result_df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Match Roman cities to modern world cities (population > 1M) within 0.1 degrees Euclidean distance. Parse Barrington Atlas Rank (averaging 'or' values). For multiple Roman city matches, take the last sample. Compute Pearson correlation between rank and population, rounded to 6 decimal places.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_worldcities": {
+        "x": 100,
+        "y": 220
+      },
+      "load_roman_cities": {
+        "x": 100,
+        "y": 40
+      },
+      "compute_correlation": {
+        "x": 380,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_roman_cities-->compute_correlation",
+        "source": {
+          "operatorID": "load_roman_cities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_correlation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_worldcities-->compute_correlation",
+        "source": {
+          "operatorID": "load_worldcities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compute_correlation",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

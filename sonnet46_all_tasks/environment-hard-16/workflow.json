@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-157-5-1781159406792",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_all_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/water-body-testing-*.csv')\n    dfs = []\n    for f in sorted(files):\n        df = pd.read_csv(f)\n        dfs.append(df)\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water-body-testing CSV files from data/environment/input/ using glob, concatenate into a single DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marine_no_violation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_all_data) -> pd.DataFrame:\n    df = load_all_data.copy()\n    \n    # Filter marine beaches, years 2002-2023\n    df = df[(df['Beach Type Description'] == 'Marine') & (df['Year'] >= 2002) & (df['Year'] <= 2023)]\n    \n    # Normalize violation column to boolean\n    df['is_violation'] = df['Violation'].str.strip().str.lower() == 'yes'\n    \n    # Find all unique marine beach names\n    all_marine_beaches = df['Beach Name'].unique()\n    \n    # Find beaches that had at least one violation\n    violated_beaches = df[df['is_violation']]['Beach Name'].unique()\n    \n    # Beaches with no violation at all\n    safe_beaches = set(all_marine_beaches) - set(violated_beaches)\n    \n    result = pd.DataFrame({'safe_beach_count': [len(safe_beaches)], \n                           'total_marine_beaches': [len(all_marine_beaches)],\n                           'violated_beaches': [len(violated_beaches)]})\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter marine beaches from 2002-2023, normalize Violation column, find beaches with zero violations across all their data. Returns count of always-safe marine beaches.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_all_data": {
+        "x": 100,
+        "y": 40
+      },
+      "marine_no_violation": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_all_data-->marine_no_violation",
+        "source": {
+          "operatorID": "load_all_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marine_no_violation",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

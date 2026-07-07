@@ -1,0 +1,219 @@
+{
+  "headId": "step-agent-118-20-1781035083932",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv', skiprows=2)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fraud, identity theft, and other reports by military consumers from 2024 CSN data book CSV file, skipping the first 2 rows to use the correct header row",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_fraud_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data.copy()\n    df = df.dropna(how='all')\n    df = df.drop_duplicates()\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the fraud data by removing all-null rows and duplicate rows",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_branches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_fraud_data):\n    branches = ['U.S. Air Force', 'U.S. Army', 'U.S. Coast Guard', 'U.S. Marines', 'U.S. Navy', 'U.S. Space Force']\n    return clean_fraud_data[clean_fraud_data['Military Status'].isin(branches)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to only military branch rows (U.S. Air Force, U.S. Army, U.S. Coast Guard, U.S. Marines, U.S. Navy, U.S. Space Force) from the cleaned fraud data",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_statuses",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(clean_fraud_data) -> pd.DataFrame:\n    return clean_fraud_data[['Military Status']].drop_duplicates().sort_values('Military Status')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect unique values in Military Status column to understand the data structure",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_median_loss",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_branches):\n    df = extract_branches.copy()\n    df['Median_Loss_Numeric'] = df['Median Fraud Loss'].str.replace('$', '').str.replace(',', '').astype(int)\n    max_idx = df['Median_Loss_Numeric'].idxmax()\n    return df.loc[[max_idx], ['Military Status', 'Median Fraud Loss']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the military branch with the largest Median Fraud Loss by removing currency symbols and commas, converting to numeric, and identifying the maximum value",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 130
+      },
+      "clean_fraud_data": {
+        "x": 380,
+        "y": 130
+      },
+      "extract_branches": {
+        "x": 660,
+        "y": 40
+      },
+      "inspect_statuses": {
+        "x": 660,
+        "y": 220
+      },
+      "find_max_median_loss": {
+        "x": 940,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->clean_fraud_data",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_fraud_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_fraud_data-->inspect_statuses",
+        "source": {
+          "operatorID": "clean_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_statuses",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_fraud_data-->extract_branches",
+        "source": {
+          "operatorID": "clean_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_branches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_branches-->find_max_median_loss",
+        "source": {
+          "operatorID": "extract_branches",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_median_loss",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

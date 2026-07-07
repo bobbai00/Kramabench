@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-139-7-1781158871928",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_sunspots",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/astronomy/input/SILSO/SN_y_tot_V2.0.csv', sep=';', header=None)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load yearly sunspot data from SN_y_tot_V2.0.csv using semicolon delimiter and no header.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "analyze_solar_cycles",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_sunspots) -> pd.DataFrame:\n    from scipy.signal import find_peaks\n    import numpy as np\n\n    df = load_sunspots.iloc[:, [0, 1]].copy()\n    df.columns = ['year_f', 'sunspots']\n    df['year'] = df['year_f'].apply(lambda x: int(x))\n\n    years_all = df['year'].values\n    sunspots_all = df['sunspots'].values\n\n    # Compute average period from ALL historical data maxima (no distance/prominence restriction for period calc)\n    all_max_idx, _ = find_peaks(sunspots_all, prominence=20, distance=5)\n    all_max_years = years_all[all_max_idx]\n    avg_period = np.mean(np.diff(all_max_years)) if len(all_max_years) > 1 else None\n\n    # Filter to 1960-2020\n    mask = (df['year'] >= 1960) & (df['year'] <= 2020)\n    df_range = df[mask].reset_index(drop=True)\n    years = df_range['year'].values\n    sunspots = df_range['sunspots'].values\n\n    # Find maxima in range\n    max_idx, max_props = find_peaks(sunspots, prominence=20, distance=5)\n    max_years = years[max_idx]\n    max_proms = max_props['prominences']\n\n    # Find minima in range (invert signal)\n    min_idx, min_props = find_peaks(-sunspots, prominence=20, distance=5)\n    min_years = years[min_idx]\n    min_proms = min_props['prominences']\n\n    # Top 5 by prominence, then sort chronologically\n    top5_max_idx = np.argsort(max_proms)[::-1][:5]\n    top5_max_years = sorted(max_years[top5_max_idx].tolist())\n\n    top5_min_idx = np.argsort(min_proms)[::-1][:5]\n    top5_min_years = sorted(min_years[top5_min_idx].tolist())\n\n    return pd.DataFrame({\n        'avg_period': [round(avg_period, 2)],\n        'top5_maxima': [top5_max_years],\n        'top5_minima': [top5_min_years],\n        'all_maxima_in_range': [max_years.tolist()],\n        'all_minima_in_range': [min_years.tolist()],\n        'num_maxima': [len(max_years)],\n        'num_minima': [len(min_years)],\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Analyze solar cycles using scipy.signal.find_peaks with prominence=20 and distance=5 on sunspot data between 1960-2020. Uses iloc to access first two columns (year x.5 format, yearly mean sunspots). Computes average period from full historical maxima gaps. Returns top 5 maxima and minima by prominence in chronological order.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_sunspots": {
+        "x": 100,
+        "y": 40
+      },
+      "analyze_solar_cycles": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_sunspots-->analyze_solar_cycles",
+        "source": {
+          "operatorID": "load_sunspots",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "analyze_solar_cycles",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-158-6-1781159317630",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_cities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/worldcities.csv', encoding='latin-1')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_conflicts",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/conflict_brecke.csv', encoding='latin-1')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load conflict_brecke.csv from data/archeology/input/conflict_brecke.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_conflicts",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_conflicts) -> pd.DataFrame:\n    df = load_conflicts.copy()\n    # Filter: StartYear >= 800, EndYear <= 1400, duration >= 1 year (EndYear - StartYear >= 1)\n    filtered = df[\n        (df['StartYear'] >= 800) &\n        (df['StartYear'] <= 1400) &\n        (df['EndYear'] - df['StartYear'] >= 1)\n    ]\n    return filtered.reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter conflicts to those starting between 800 and 1400 AD (inclusive) where duration is at least 1 year (EndYear - StartYear >= 1). This implements the task definition: conflicts between two actors lasting at least a year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "attribute_to_countries",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_conflicts, load_cities) -> pd.DataFrame:\n    import re\n\n    df = filter_conflicts.copy()\n    countries = load_cities['country'].dropna().unique().tolist()\n    countries_lower = {c.lower(): c for c in countries}\n\n    # Also build a mapping from common historical names / regions to modern countries\n    historical_map = {\n        'england': 'United Kingdom',\n        'britain': 'United Kingdom',\n        'scotland': 'United Kingdom',\n        'wales': 'United Kingdom',\n        'ireland': 'Ireland',\n        'france': 'France',\n        'germany': 'Germany',\n        'spain': 'Spain',\n        'italy': 'Italy',\n        'portugal': 'Portugal',\n        'poland': 'Poland',\n        'russia': 'Russia',\n        'denmark': 'Denmark',\n        'sweden': 'Sweden',\n        'norway': 'Norway',\n        'hungary': 'Hungary',\n        'bohemia': 'Czech Republic',\n        'moravia': 'Czech Republic',\n        'byzantium': 'Turkey',\n        'byzantine': 'Turkey',\n        'ottoman': 'Turkey',\n        'turkey': 'Turkey',\n        'persia': 'Iran',\n        'iran': 'Iran',\n        'egypt': 'Egypt',\n        'syria': 'Syria',\n        'iraq': 'Iraq',\n        'arabia': 'Saudi Arabia',\n        'arabia': 'Saudi Arabia',\n        'arabia (saudi)': 'Saudi Arabia',\n        'india': 'India',\n        'china': 'China',\n        'japan': 'Japan',\n        'korea': 'South Korea',\n        'mongols': 'Mongolia',\n        'mongolia': 'Mongolia',\n        'tartars': 'Russia',\n        'tatars': 'Russia',\n        'vikings': 'Norway',\n        'danish': 'Denmark',\n        'norman': 'France',\n        'normans': 'France',\n        'lombards': 'Italy',\n        'lombardy': 'Italy',\n        'venice': 'Italy',\n        'milan': 'Italy',\n        'florence': 'Italy',\n        'naples': 'Italy',\n        'sicily': 'Italy',\n        'papal': 'Italy',\n        'pope': 'Italy',\n        'aragon': 'Spain',\n        'castile': 'Spain',\n        'castilla': 'Spain',\n        'leon': 'Spain',\n        'navarre': 'Spain',\n        'catalonia': 'Spain',\n        'moorish': 'Morocco',\n        'moors': 'Morocco',\n        'morocco': 'Morocco',\n        'algeria': 'Algeria',\n        'tunisi': 'Tunisia',\n        'tunisia': 'Tunisia',\n        'libya': 'Libya',\n        'crusade': 'Multiple',\n        'crusaders': 'Multiple',\n        'flanders': 'Belgium',\n        'belgium': 'Belgium',\n        'netherlands': 'Netherlands',\n        'holland': 'Netherlands',\n        'swiss': 'Switzerland',\n        'switzerland': 'Switzerland',\n        'austria': 'Austria',\n        'habsburg': 'Austria',\n        'holy roman': 'Germany',\n        'saxony': 'Germany',\n        'bavaria': 'Germany',\n        'prussia': 'Germany',\n        'silesia': 'Poland',\n        'lithuania': 'Lithuania',\n        'latvia': 'Latvia',\n        'estonia': 'Estonia',\n        'finland': 'Finland',\n        'ukraine': 'Ukraine',\n        'bulgaria': 'Bulgaria',\n        'serbia': 'Serbia',\n        'croatia': 'Croatia',\n        'bosnia': 'Bosnia and Herzegovina',\n        'albania': 'Albania',\n        'greece': 'Greece',\n        'macedon': 'North Macedonia',\n        'romania': 'Romania',\n        'wallachia': 'Romania',\n        'moldavia': 'Moldova',\n        'georgia': 'Georgia',\n        'armenia': 'Armenia',\n        'azerbaijan': 'Azerbaijan',\n        'uzbek': 'Uzbekistan',\n        'afghan': 'Afghanistan',\n        'pakistan': 'Pakistan',\n        'punjab': 'India',\n        'bengal': 'Bangladesh',\n        'ceylon': 'Sri Lanka',\n        'burma': 'Myanmar',\n        'vietnam': 'Vietnam',\n        'cambodia': 'Cambodia',\n        'thailand': 'Thailand',\n        'siam': 'Thailand',\n        'java': 'Indonesia',\n        'indonesia': 'Indonesia',\n        'philippines': 'Philippines',\n        'mali': 'Mali',\n        'ghana': 'Ghana',\n        'nubia': 'Sudan',\n        'ethiopia': 'Ethiopia',\n        'abyssinia': 'Ethiopia',\n        'somalia': 'Somalia',\n        'kenya': 'Kenya',\n        'zimbabwe': 'Zimbabwe',\n        'congo': 'Democratic Republic of the Congo',\n        'mexico': 'Mexico',\n        'aztec': 'Mexico',\n        'peru': 'Peru',\n        'inca': 'Peru',\n        'maya': 'Guatemala',\n        'saracens': 'Saudi Arabia',\n        'saracen': 'Saudi Arabia',\n        'turks': 'Turkey',\n        'seljuk': 'Turkey',\n        'seljuks': 'Turkey',\n        'cuman': 'Ukraine',\n        'cumans': 'Ukraine',\n        'khmer': 'Cambodia',\n        'pagan': 'Myanmar',\n        'tibet': 'China',\n        'tangut': 'China',\n        'jurchen': 'China',\n        'manchu': 'China',\n        'dai viet': 'Vietnam',\n        'champa': 'Vietnam',\n        'genoa': 'Italy',\n        'pisa': 'Italy',\n        'papal states': 'Italy',\n        'galicia': 'Spain',\n        'kiev': 'Ukraine',\n        'novgorod': 'Russia',\n        'muscovy': 'Russia',\n        'tver': 'Russia',\n        'ryazan': 'Russia',\n        'sweden-norway': 'Sweden',\n    }\n\n    def find_countries(conflict_name):\n        name_lower = conflict_name.lower()\n        found = set()\n        # Check historical map entries\n        for key, country in historical_map.items():\n            if key in name_lower:\n                found.add(country)\n        # Check direct country names\n        for c_lower, c_orig in countries_lower.items():\n            if c_lower in name_lower:\n                found.add(c_orig)\n        return list(found) if found else ['Unknown']\n\n    df['countries'] = df['Conflict'].apply(find_countries)\n\n    # Explode to one row per country attribution\n    exploded = df.explode('countries').rename(columns={'countries': 'attributed_country'})\n\n    # Summary: count of conflicts per country\n    summary = (\n        exploded.groupby('attributed_country')['Conflict']\n        .count()\n        .reset_index()\n        .rename(columns={'Conflict': 'conflict_count'})\n        .sort_values('conflict_count', ascending=False)\n    )\n\n    return summary\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse the Conflict column from the filtered 800-1400 AD dataset. Map actor/place names to modern countries using a historical name dictionary. Explode conflicts with multiple actors into multiple rows, then count conflicts per modern country. Returns a DataFrame with attributed_country and conflict_count columns.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_cities": {
+        "x": 380,
+        "y": 220
+      },
+      "load_conflicts": {
+        "x": 100,
+        "y": 40
+      },
+      "filter_conflicts": {
+        "x": 380,
+        "y": 40
+      },
+      "attribute_to_countries": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_conflicts-->filter_conflicts",
+        "source": {
+          "operatorID": "load_conflicts",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_conflicts",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_conflicts-->attribute_to_countries",
+        "source": {
+          "operatorID": "filter_conflicts",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "attribute_to_countries",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_cities-->attribute_to_countries",
+        "source": {
+          "operatorID": "load_cities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "attribute_to_countries",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

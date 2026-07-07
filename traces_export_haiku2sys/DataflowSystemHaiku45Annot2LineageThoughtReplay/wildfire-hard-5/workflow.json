@@ -1,0 +1,480 @@
+{
+  "headId": "step-agent-303-13-1781045181469",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "nifc_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/nifc_wildfires.csv', sep='\\t')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NIFC wildfires data from nifc_wildfires.csv using tab separator for Year, Fires, and Acres columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaa_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_monthly_stats.csv', skiprows=3)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires monthly statistics data from noaa_wildfires_monthly_stats.csv, skipping the first 3 metadata lines",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_noaa_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/wildfire/input/noaa_wildfires_monthly_stats.csv', 'r') as f:\n        lines = f.readlines()[:10]\n    return pd.DataFrame({'raw_lines': lines})"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 10 raw lines of NOAA CSV file to understand its structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifc_annual",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(nifc_data) -> pd.DataFrame:\n    df = nifc_data.drop_duplicates()\n    df = df[df['Year'] >= 2000]\n    return df[['Year', 'Fires']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter NIFC data to years >= 2000, remove duplicates, and select Year and Fires columns",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "noaa_annual",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaa_data) -> pd.DataFrame:\n    df = noaa_data.copy()\n    # Extract year from Date (first 4 digits)\n    df['Year'] = df['Date'] // 100\n    # Filter for years >= 2000\n    df = df[df['Year'] >= 2000]\n    # Aggregate monthly data to annual\n    annual = df.groupby('Year').agg({'Number of Fires': 'sum'}).reset_index()\n    annual.columns = ['Year', 'Fires']\n    return annual"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract year from Date field, filter for years >= 2000, aggregate monthly fires to annual totals",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_nifc_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/wildfire/input/nifc_wildfires.csv', 'r') as f:\n        lines = [f.readline() for _ in range(10)]\n    return pd.DataFrame({'raw_lines': lines})"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 10 raw lines of NIFC CSV file to understand its structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifc_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(nifc_annual) -> pd.DataFrame:\n    df = nifc_annual.copy()\n    df['Fires'] = df['Fires'].astype(str).str.replace(',', '').astype(int)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Convert NIFC Fires column from string (with commas) to numeric integers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "noaa_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(noaa_annual) -> pd.DataFrame:\n    df = noaa_annual[noaa_annual['Year'] <= 2024].copy()\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter NOAA data to years 2000-2024 (exclude 2025 to match NIFC period)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_difference",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(nifc_clean, noaa_clean) -> pd.DataFrame:\n    nifc_avg = nifc_clean['Fires'].mean()\n    noaa_avg = noaa_clean['Fires'].mean()\n    difference = round(noaa_avg - nifc_avg)\n    \n    return pd.DataFrame({\n        'NIFC_Avg': [nifc_avg],\n        'NOAA_Avg': [noaa_avg],\n        'Difference': [difference]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate average annual fires for NIFC and NOAA (2000-2024), then compute NOAA - NIFC difference rounded to nearest integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_calculation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(nifc_clean, noaa_clean) -> pd.DataFrame:\n    nifc_avg = nifc_clean['Fires'].mean()\n    noaa_avg = noaa_clean['Fires'].mean()\n    difference = noaa_avg - nifc_avg\n    \n    return pd.DataFrame({\n        'NIFC_Count': [len(nifc_clean)],\n        'NIFC_Sum': [nifc_clean['Fires'].sum()],\n        'NIFC_Avg': [nifc_avg],\n        'NOAA_Count': [len(noaa_clean)],\n        'NOAA_Sum': [noaa_clean['Fires'].sum()],\n        'NOAA_Avg': [noaa_avg],\n        'Difference': [difference],\n        'Difference_Rounded': [round(difference)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Verify the calculation: count records, sum fires, calculate averages for both NIFC and NOAA (2000-2024), and compute NOAA - NIFC difference rounded to nearest integer",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_alignment",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(nifc_clean, noaa_clean):\n    merged = nifc_clean.merge(noaa_clean, on='Year', suffixes=('_nifc', '_noaa'))\n    merged['difference'] = merged['Fires_noaa'] - merged['Fires_nifc']\n    return merged.head(10)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Verify year-by-year alignment between NIFC and NOAA data (2000-2024)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "nifc_data": {
+        "x": 100,
+        "y": 280
+      },
+      "noaa_data": {
+        "x": 100,
+        "y": 460
+      },
+      "inspect_noaa_raw": {
+        "x": 100,
+        "y": 640
+      },
+      "nifc_annual": {
+        "x": 380,
+        "y": 280
+      },
+      "noaa_annual": {
+        "x": 380,
+        "y": 460
+      },
+      "inspect_nifc_raw": {
+        "x": 100,
+        "y": 820
+      },
+      "nifc_clean": {
+        "x": 660,
+        "y": 280
+      },
+      "noaa_clean": {
+        "x": 660,
+        "y": 460
+      },
+      "calculate_difference": {
+        "x": 940,
+        "y": 40
+      },
+      "verify_calculation": {
+        "x": 940,
+        "y": 355
+      },
+      "verify_alignment": {
+        "x": 940,
+        "y": 670
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaa_data-->noaa_annual",
+        "source": {
+          "operatorID": "noaa_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "noaa_annual",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifc_data-->nifc_annual",
+        "source": {
+          "operatorID": "nifc_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nifc_annual",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifc_annual-->nifc_clean",
+        "source": {
+          "operatorID": "nifc_annual",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nifc_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_annual-->noaa_clean",
+        "source": {
+          "operatorID": "noaa_annual",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "noaa_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifc_clean-->calculate_difference",
+        "source": {
+          "operatorID": "nifc_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_difference",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_clean-->calculate_difference",
+        "source": {
+          "operatorID": "noaa_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_difference",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "nifc_clean-->verify_calculation",
+        "source": {
+          "operatorID": "nifc_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_calculation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_clean-->verify_calculation",
+        "source": {
+          "operatorID": "noaa_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_calculation",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "nifc_clean-->verify_alignment",
+        "source": {
+          "operatorID": "nifc_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_alignment",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_clean-->verify_alignment",
+        "source": {
+          "operatorID": "noaa_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_alignment",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

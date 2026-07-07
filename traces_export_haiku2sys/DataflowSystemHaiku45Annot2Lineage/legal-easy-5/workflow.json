@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-37-15-1781033689946",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud_Reports_by_Payment_Method.csv', header=0)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fraud reports by payment method from 2024_CSN_Fraud_Reports_by_Payment_Method.csv with header at row 0",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_amounts",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraud_data) -> pd.DataFrame:\n    df = fraud_data.dropna(how='all').drop_duplicates().reset_index(drop=True)\n    col_names = df.columns.tolist()\n    payment_col = col_names[0]\n    amount_col = col_names[2]\n    \n    df = df[df[payment_col].notna()].reset_index(drop=True)\n    df = df[~df[payment_col].str.contains('Payment Method|Reports|Source|Total|#', na=False, regex=True)]\n    \n    def parse_amount(val):\n        if pd.isna(val):\n            return None\n        val = str(val).replace('$', '').replace('M', '').replace(',', '').strip()\n        try:\n            return float(val)\n        except:\n            return None\n    \n    df['amount_millions'] = df[amount_col].apply(parse_amount)\n    df = df[df['amount_millions'].notna()]\n    return df[[payment_col, 'amount_millions']]"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse the Total Loss column by removing dollar signs, M suffix, and commas, convert to float representing millions of dollars, filter to valid payment method rows and remove any unparseable values",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_fraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_amounts) -> pd.DataFrame:\n    total = parse_amounts['amount_millions'].sum()\n    return pd.DataFrame({'total_fraud_millions': [int(total)]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sum all fraud amounts across payment methods to get total in millions of dollars",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraud_data": {
+        "x": 100,
+        "y": 40
+      },
+      "parse_amounts": {
+        "x": 380,
+        "y": 40
+      },
+      "total_fraud": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "parse_amounts-->total_fraud",
+        "source": {
+          "operatorID": "parse_amounts",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_fraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fraud_data-->parse_amounts",
+        "source": {
+          "operatorID": "fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_amounts",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

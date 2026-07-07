@@ -1,0 +1,110 @@
+{
+  "headId": "step-agent-38-20-1781033724044",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_categories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv', \n                      encoding='cp1252', header=2)\n    df = df.dropna(how='all')\n    df = df[df['Rank'].notna()]\n    df = df[pd.to_numeric(df['Rank'], errors='coerce').notna()]\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Report Categories data from CSV file with cp1252 encoding, use row 2 as header (after 2 rows of metadata), remove empty rows and non-numeric rank rows",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv', 'r', encoding='cp1252') as f:\n        lines = f.readlines()\n    for i, line in enumerate(lines[:15]):\n        print(f\"Row {i}: {repr(line)}\")\n    return pd.DataFrame({'raw_inspection': [str(lines[:15])]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect raw file content to understand actual structure and header row location",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "calculate_ratio",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_categories) -> pd.DataFrame:\n    df = load_categories.copy()\n    \n    # Convert # of Reports to numeric (remove commas)\n    df[' # of Reports '] = df[' # of Reports '].astype(str).str.replace(',', '')\n    df[' # of Reports '] = pd.to_numeric(df[' # of Reports '], errors='coerce')\n    \n    # Remove any rows with NaN values\n    df = df.dropna(subset=[' # of Reports '])\n    \n    # Get max and min\n    max_reports = df[' # of Reports '].max()\n    min_reports = df[' # of Reports '].min()\n    \n    # Calculate ratio\n    ratio = max_reports / min_reports\n    ratio_rounded = round(ratio, 2)\n    \n    # Return result as DataFrame\n    result = pd.DataFrame({\n        'Most Frequent': [int(max_reports)],\n        'Least Frequent': [int(min_reports)],\n        'Ratio': [ratio_rounded]\n    })\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the ratio of reports between the most frequent category (max reports) and the least frequent category (min reports), rounded to 2 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_categories": {
+        "x": 100,
+        "y": 40
+      },
+      "inspect_raw": {
+        "x": 100,
+        "y": 220
+      },
+      "calculate_ratio": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_categories-->calculate_ratio",
+        "source": {
+          "operatorID": "load_categories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_ratio",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

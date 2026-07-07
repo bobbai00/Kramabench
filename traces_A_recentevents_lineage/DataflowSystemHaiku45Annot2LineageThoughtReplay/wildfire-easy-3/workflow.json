@@ -1,0 +1,216 @@
+{
+  "headId": "step-agent-301-8-1781045073731",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_nifc_areas",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/nifc_geographic_areas.gpkg')\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NIFC Geographic Areas from GeoPackage file (data/wildfire/input/nifc_geographic_areas.gpkg). Returns GeoDataFrame with geographic area information.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_usa_states",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import geopandas as gpd\n    gdf = gpd.read_file('data/wildfire/input/usa.gpkg')\n    return gdf\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load USA geographic data from GeoPackage file (data/wildfire/input/usa.gpkg). Returns GeoDataFrame with US state information.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "spatial_intersect",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_nifc_areas, load_usa_states) -> pd.DataFrame:\n    import geopandas as gpd\n    from shapely.geometry import shape\n    \n    # Convert tables to GeoDataFrames\n    nifc_df = load_nifc_areas.copy()\n    usa_df = load_usa_states.copy()\n    \n    # Create GeoDataFrames from the geometry columns\n    nifc_gdf = gpd.GeoDataFrame(nifc_df, geometry='geometry', crs='EPSG:4326')\n    usa_gdf = gpd.GeoDataFrame(usa_df, geometry='geometry', crs='EPSG:4326')\n    \n    # Perform spatial intersection\n    intersections = gpd.sjoin(usa_gdf, nifc_gdf, how='left', predicate='intersects')\n    \n    # Get unique combinations of state (adm1_name) and NIFC area (GACCName)\n    result = intersections[['adm1_name', 'GACCName']].drop_duplicates()\n    result = result.dropna(subset=['adm1_name', 'GACCName'])\n    \n    return result"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Perform spatial intersection between USA state boundaries and NIFC Geographic Areas. Convert to GeoDataFrames, perform sjoin with 'intersects' predicate, extract unique state-NIFC area combinations.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "count_nifc_per_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(spatial_intersect) -> pd.DataFrame:\n    return spatial_intersect.groupby('adm1_name')['GACCName'].nunique().reset_index().rename(columns={'GACCName': 'nifc_count'}).sort_values('nifc_count', ascending=False)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count the number of unique NIFC Geographic Areas each state falls into. Groups by state name and counts distinct NIFC areas, sorts descending by count.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "states_with_max_nifc",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(count_nifc_per_state):\n    max_count = count_nifc_per_state['nifc_count'].max()\n    result = count_nifc_per_state[count_nifc_per_state['nifc_count'] == max_count]\n    return result.sort_values('adm1_name')\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter to states with the maximum count of NIFC Geographic Areas. Returns states with the highest count, sorted alphabetically by state name.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_nifc_areas": {
+        "x": 100,
+        "y": 40
+      },
+      "load_usa_states": {
+        "x": 100,
+        "y": 220
+      },
+      "spatial_intersect": {
+        "x": 380,
+        "y": 130
+      },
+      "count_nifc_per_state": {
+        "x": 660,
+        "y": 130
+      },
+      "states_with_max_nifc": {
+        "x": 940,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_nifc_areas-->spatial_intersect",
+        "source": {
+          "operatorID": "load_nifc_areas",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "spatial_intersect",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_usa_states-->spatial_intersect",
+        "source": {
+          "operatorID": "load_usa_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "spatial_intersect",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "spatial_intersect-->count_nifc_per_state",
+        "source": {
+          "operatorID": "spatial_intersect",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "count_nifc_per_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "count_nifc_per_state-->states_with_max_nifc",
+        "source": {
+          "operatorID": "count_nifc_per_state",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "states_with_max_nifc",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

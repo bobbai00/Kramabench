@@ -1,0 +1,502 @@
+{
+  "headId": "step-agent-232-8-1781039850382",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "wildfires_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires data from noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "variable_description",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='latin-1')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load variable descriptions from noaa_wildfires_variabledescrip.csv with latin-1 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "examine_variables",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(variable_description):\n    # Filter for variables that might relate to residential damage\n    desc = variable_description.copy()\n    # Display all variables to identify residential damage\n    return desc[desc['Variable Name '].str.contains('residential|house|damage', case=False, na=False) | \n                desc['Alternative description'].str.contains('residential|house|damage', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions to find residential damage column",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "examine_all_variables",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(variable_description):\n    return variable_description[variable_description['Alternative description'].str.contains('damaged|houses', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions to find columns related to damaged houses",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "wildfires_2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires_data) -> pd.DataFrame:\n    return wildfires_data[wildfires_data['start_year'] == 2008].copy()"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter NOAA wildfires data to 2008 only (start_year == 2008)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_damage_2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires_2008) -> pd.DataFrame:\n    total = wildfires_2008['prim_threatened_aggregate'].sum()\n    return pd.DataFrame({'total_damage': [total]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate total residential houses at risk (prim_threatened_aggregate) for 2008 wildfires",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fires_sorted_by_damage",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires_2008) -> pd.DataFrame:\n    df = wildfires_2008[['incident_number', 'incident_name', 'prim_threatened_aggregate']].copy()\n    df = df.sort_values('prim_threatened_aggregate', ascending=False).reset_index(drop=True)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sort 2008 wildfires by prim_threatened_aggregate (residential damage) in descending order",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "cumulative_damage_calculation",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fires_sorted_by_damage, total_damage_2008) -> pd.DataFrame:\n    df = fires_sorted_by_damage.copy()\n    total = total_damage_2008['total_damage'].iloc[0]\n    df['cumulative_damage'] = df['prim_threatened_aggregate'].cumsum()\n    df['cumulative_pct'] = (df['cumulative_damage'] / total) * 100\n    df['fire_count'] = range(1, len(df) + 1)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate cumulative damage and cumulative percentage for 2008 fires, with fire count",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fires_for_90_percent",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(cumulative_damage_calculation) -> pd.DataFrame:\n    # Find first row where cumulative percentage >= 90\n    threshold_row = cumulative_damage_calculation[cumulative_damage_calculation['cumulative_pct'] >= 90.0]\n    if len(threshold_row) > 0:\n        fires_needed = threshold_row.iloc[0]['fire_count']\n        return pd.DataFrame({'fires_for_90pct': [fires_needed]})\n    else:\n        return pd.DataFrame({'fires_for_90pct': [len(cumulative_damage_calculation)]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the number of fires needed to account for at least 90% of residential damage",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_fires_2008",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(wildfires_2008) -> pd.DataFrame:\n    total_count = len(wildfires_2008)\n    return pd.DataFrame({'total_fires': [total_count]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Count total number of wildfires in 2008",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fires_for_90_percent, total_fires_2008) -> pd.DataFrame:\n    fires_needed = fires_for_90_percent['fires_for_90pct'].iloc[0]\n    total_fires = total_fires_2008['total_fires'].iloc[0]\n    percentage = (fires_needed / total_fires)\n    return pd.DataFrame({'percentage_of_fires': [percentage]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the percentage of fires (as decimal proportion) needed to account for 90% of residential damage",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "wildfires_data": {
+        "x": 100,
+        "y": 400
+      },
+      "variable_description": {
+        "x": 100,
+        "y": 40
+      },
+      "examine_variables": {
+        "x": 380,
+        "y": 40
+      },
+      "examine_all_variables": {
+        "x": 380,
+        "y": 220
+      },
+      "wildfires_2008": {
+        "x": 380,
+        "y": 400
+      },
+      "total_damage_2008": {
+        "x": 660,
+        "y": 310
+      },
+      "fires_sorted_by_damage": {
+        "x": 660,
+        "y": 130
+      },
+      "cumulative_damage_calculation": {
+        "x": 940,
+        "y": 220
+      },
+      "fires_for_90_percent": {
+        "x": 1220,
+        "y": 220
+      },
+      "total_fires_2008": {
+        "x": 1220,
+        "y": 482.5
+      },
+      "final_answer": {
+        "x": 1500,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "variable_description-->examine_variables",
+        "source": {
+          "operatorID": "variable_description",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "examine_variables",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "variable_description-->examine_all_variables",
+        "source": {
+          "operatorID": "variable_description",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "examine_all_variables",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfires_data-->wildfires_2008",
+        "source": {
+          "operatorID": "wildfires_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "wildfires_2008",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfires_2008-->total_damage_2008",
+        "source": {
+          "operatorID": "wildfires_2008",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_damage_2008",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfires_2008-->fires_sorted_by_damage",
+        "source": {
+          "operatorID": "wildfires_2008",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fires_sorted_by_damage",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fires_sorted_by_damage-->cumulative_damage_calculation",
+        "source": {
+          "operatorID": "fires_sorted_by_damage",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cumulative_damage_calculation",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "total_damage_2008-->cumulative_damage_calculation",
+        "source": {
+          "operatorID": "total_damage_2008",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "cumulative_damage_calculation",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "cumulative_damage_calculation-->fires_for_90_percent",
+        "source": {
+          "operatorID": "cumulative_damage_calculation",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fires_for_90_percent",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "wildfires_2008-->total_fires_2008",
+        "source": {
+          "operatorID": "wildfires_2008",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_fires_2008",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fires_for_90_percent-->final_answer",
+        "source": {
+          "operatorID": "fires_for_90_percent",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "total_fires_2008-->final_answer",
+        "source": {
+          "operatorID": "total_fires_2008",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

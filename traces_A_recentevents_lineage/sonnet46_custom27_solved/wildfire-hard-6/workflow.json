@@ -1,0 +1,171 @@
+{
+  "headId": "step-agent-106-9-1781149811760",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "noaa_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_monthly_stats.csv', skiprows=3)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires monthly stats from data/wildfire/input/noaa_wildfires_monthly_stats.csv, skipping 3 metadata rows to get Date, Acres Burned, Number of Fires, Acres Burned per Fire columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nifc_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/nifc_wildfires.csv', sep='\\t', thousands=',')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NIFC wildfires data from data/wildfire/input/nifc_wildfires.csv with tab separator and comma thousands separator, yielding Year, Fires, Acres columns",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "noaa_annual",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaa_data) -> pd.DataFrame:\n    df = noaa_data.copy()\n    df['Year'] = df['Date'].astype(str).str[:4].astype(int)\n    return df.groupby('Year', as_index=False).agg(\n        noaa_fires=('Number of Fires', 'sum'),\n        noaa_acres=('Acres Burned', 'sum')\n    )\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Aggregate NOAA monthly data to annual level by extracting Year from Date (YYYYMM), summing Number of Fires and Acres Burned per year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "correlation_result",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(noaa_annual, nifc_data) -> pd.DataFrame:\n    nifc = nifc_data.copy()\n    nifc['Acres'] = nifc['Acres'].str.replace('[,*]', '', regex=True).astype(float)\n    nifc = nifc.rename(columns={'Fires': 'nifc_fires', 'Acres': 'nifc_acres'})\n    \n    merged = noaa_annual.merge(nifc, on='Year')\n    \n    merged['diff_fires'] = merged['noaa_fires'] - merged['nifc_fires']\n    merged['diff_acres'] = merged['noaa_acres'] - merged['nifc_acres']\n    \n    corr = merged['diff_fires'].corr(merged['diff_acres'])\n    \n    return pd.DataFrame({\n        'correlation': [round(corr, 3)],\n        'n_years': [len(merged)],\n        'year_min': [merged['Year'].min()],\n        'year_max': [merged['Year'].max()]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge NOAA annual and NIFC data on Year, clean NIFC Acres by removing commas and asterisks, compute diff_fires (noaa_fires - nifc_fires) and diff_acres (noaa_acres - nifc_acres), then compute Pearson correlation between the two differences.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "noaa_data": {
+        "x": 100,
+        "y": 40
+      },
+      "nifc_data": {
+        "x": 380,
+        "y": 220
+      },
+      "noaa_annual": {
+        "x": 380,
+        "y": 40
+      },
+      "correlation_result": {
+        "x": 660,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "noaa_data-->noaa_annual",
+        "source": {
+          "operatorID": "noaa_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "noaa_annual",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "noaa_annual-->correlation_result",
+        "source": {
+          "operatorID": "noaa_annual",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlation_result",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "nifc_data-->correlation_result",
+        "source": {
+          "operatorID": "nifc_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "correlation_result",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

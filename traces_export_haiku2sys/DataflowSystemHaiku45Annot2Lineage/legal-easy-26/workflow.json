@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-120-7-1781035108917",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_csn_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv', skiprows=1)"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load the 2024 CSN State Top Ten Report Categories data from CSV file at data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Top_Ten_Report_Categories.csv, skipping the first metadata row to properly align headers.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_csn_data) -> pd.DataFrame:\n    df = load_csn_data.copy()\n    df.columns = ['State', 'Category', 'Reports', 'Percentage']\n    df = df.dropna(how='all')\n    df = df[df['State'] != 'State']\n    df = df[df['State'].notna()]\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean the loaded data by renaming columns to proper headers (State, Category, Reports, Percentage), removing all-null rows and the metadata source row, and keeping only valid state rows.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "identity_theft_top_states",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_data) -> pd.DataFrame:\n    df = clean_data.dropna(subset=['State', 'Category'])\n    df = df[df['State'].notna() & (df['State'].str.strip() != '')]\n    \n    # Filter out metadata/source rows (rows that don't look like state entries)\n    # Keep only rows where Category is a typical category name\n    valid_categories = ['Credit Bureaus and Information Furnishers', 'Identity Theft', \n                       'Imposter Scams', 'Banks and Lenders', 'Other', 'Telemarketing',\n                       'Internet Services', 'Prizes, Sweepstakes and Lotteries',\n                       'Shop-at-Home and Catalog Sales', 'Advance-Fee Loans and Goods']\n    \n    # More robust: filter out rows that contain \"Percentages are based\" or \"Source:\"\n    df = df[~df['State'].str.contains('Percentages|Source', na=False, regex=True)]\n    df = df[~df['Category'].str.contains('Percentages|Source', na=False, regex=True)]\n    \n    # Get the first (top) category for each state\n    top_categories = df.groupby('State').first().reset_index()\n    \n    # Filter to states where the top category is \"Identity Theft\"\n    identity_theft_states = top_categories[top_categories['Category'] == 'Identity Theft']['State'].tolist()\n    \n    return pd.DataFrame({'State': identity_theft_states})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Identify states where \"Identity Theft\" is the top (first listed) report category. Filter out metadata rows, group by state, take the first category for each state, and return states where that category is \"Identity Theft\".",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_csn_data": {
+        "x": 100,
+        "y": 40
+      },
+      "clean_data": {
+        "x": 380,
+        "y": 40
+      },
+      "identity_theft_top_states": {
+        "x": 660,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_csn_data-->clean_data",
+        "source": {
+          "operatorID": "load_csn_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_data-->identity_theft_top_states",
+        "source": {
+          "operatorID": "clean_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identity_theft_top_states",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -64,6 +64,7 @@ see `claude/CONTEXT-DESIGN.md §8b`). The lean canonical set:
 | `DataflowSystemGPT5MiniLatestSchemaConvergeFewShot` | `gpt-5-mini` | converge + few-shot prior (W2 cost win) |
 | `DataflowSystemGPT5MiniLatestSchemaConvergeCap20` | `gpt-5-mini` | converge + max_steps=20 (#31 step-cap) |
 | `DataflowSystemGPT5MiniLatestSchemaConvergeLevels` | `gpt-5-mini` | reference level config: flow_level=2, data_level=2 |
+| `DataflowSystemGPT5MiniLatestSchemaConvergeThoughtReplay` | `gpt-5-mini` | converge + thought-replay (SELECT reinjection, K=10; LATEST-only) |
 
 The 30+ one-off A/B + stats-sweep variants from the campaign were removed (their
 results live in `claude/seed1/` + `system_scratch/` by SUT name, which the
@@ -71,7 +72,9 @@ analysis tools read by string — unaffected by the class pruning).
 
 Add a new variant by subclassing `DataflowSystem`, passing `model_type`, `name`,
 `context_mode`, and `flow_level`/`data_level` (plus any ACT-side knobs:
-`max_steps`, `max_loaders_per_source`, `attempt_reflection`). Re-export from
+`max_steps`, `max_loaders_per_source`, `attempt_reflection`; and SELECT-side
+knobs: `few_shot_prompt`, `thought_replay`/`thought_replay_k` — LATEST-only).
+Re-export from
 `systems/__init__.py` so the dynamic lookup
 (`getattr(systems_module, system_name)`) can find it.
 

@@ -1,0 +1,242 @@
+{
+  "headId": "step-agent-209-7-1781039273852",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fires_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/wildfire_total_fires_p45_54.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wildfire total fires data from wildfire_total_fires_p45_54.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "acres_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/Wildfire_Acres_by_State.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load wildfire acres by state data from Wildfire_Acres_by_State.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "votes_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/democratic_vs_republican_votes_by_usa_state_2020.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2020 US election voting data by state from democratic_vs_republican_votes_by_usa_state_2020.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "classify_states",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(votes_data):\n    df = votes_data.copy()\n    df['state_classification'] = df['percent_democrat'].apply(\n        lambda x: 'Democratic' if x > 50 else 'Republican'\n    )\n    return df[['state', 'state_classification', 'percent_democrat']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Classify each state as Democratic or Republican based on 2020 election results. States with > 50% Democratic votes are classified as Democratic, otherwise Republican.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fires_by_classification",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(fires_data, classify_states) -> pd.DataFrame:\n    merged = fires_data.merge(classify_states, left_on='State', right_on='state', how='inner')\n    return merged[['State', 'Total Fires', 'state_classification']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Join fires data with state classification (Democratic/Republican) on state name",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "fires_by_party",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fires_by_classification) -> pd.DataFrame:\n    return fires_by_classification.groupby('state_classification')['Total Fires'].sum().reset_index().rename(columns={'Total Fires': 'Total_Fires_Count'})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Sum total fires by state classification (Democratic vs Republican) to compare fire counts",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fires_data": {
+        "x": 380,
+        "y": 40
+      },
+      "acres_data": {
+        "x": 100,
+        "y": 40
+      },
+      "votes_data": {
+        "x": 100,
+        "y": 220
+      },
+      "classify_states": {
+        "x": 380,
+        "y": 220
+      },
+      "fires_by_classification": {
+        "x": 660,
+        "y": 130
+      },
+      "fires_by_party": {
+        "x": 940,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "votes_data-->classify_states",
+        "source": {
+          "operatorID": "votes_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "classify_states",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "fires_data-->fires_by_classification",
+        "source": {
+          "operatorID": "fires_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fires_by_classification",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "classify_states-->fires_by_classification",
+        "source": {
+          "operatorID": "classify_states",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fires_by_classification",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "fires_by_classification-->fires_by_party",
+        "source": {
+          "operatorID": "fires_by_classification",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "fires_by_party",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

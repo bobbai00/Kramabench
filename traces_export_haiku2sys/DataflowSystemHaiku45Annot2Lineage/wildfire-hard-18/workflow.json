@@ -1,0 +1,457 @@
+{
+  "headId": "step-agent-227-16-1781039627659",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_wildfires",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load NOAA wildfires dataset from data/wildfire/input/noaa_wildfires.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_variables",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/noaa_wildfires_variabledescrip.csv', encoding='latin-1')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load variable descriptions from data/wildfire/input/noaa_wildfires_variabledescrip.csv with latin-1 encoding",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "explore_variables",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_variables) -> pd.DataFrame:\n    return load_variables\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Examine variable descriptions to understand suppression and outcome metrics",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "understand_suppression_metrics",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_variables):\n    return load_variables[load_variables['Variable Name '].str.contains('strat|duration|threatened|affected|buildings|structures', case=False, na=False)]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter variable descriptions to identify suppression strategy and outcome metrics (duration, threatened structures, buildings)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "examine_suppression_weather",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_wildfires, understand_suppression_metrics) -> pd.DataFrame:\n    wf = load_wildfires\n    metrics = understand_suppression_metrics\n    \n    # Display key columns for understanding the data\n    suppression_cols = ['dominant_strategy_25_s', 'dominant_strategy_50_s', 'dominant_strategy_75_s',\n                       'dom_strat_ind_25', 'dom_strat_ind_50', 'dom_strat_ind_75']\n    weather_cols = ['wind_med', 'erc_med', 'avrh_mean', 'rain_sum']\n    outcome_cols = ['duration', 'prim_threatened_aggregate', 'comm_threatened_aggregate', \n                    'outb_threatened_aggregate']\n    \n    cols_to_keep = ['incident_number', 'start_year'] + suppression_cols + weather_cols + outcome_cols\n    result = wf[cols_to_keep].copy()\n    \n    return result[[c for c in cols_to_keep if c in result.columns]]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract key columns: suppression indicators (dominant_strategy_*), weather variables (wind_med, erc_med, avrh_mean, rain_sum), and outcome metrics (duration, threatened structures)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "data_summary",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(examine_suppression_weather) -> pd.DataFrame:\n    df = examine_suppression_weather.copy()\n    \n    # Summary statistics by suppression strategy\n    summary = df.groupby('dominant_strategy_25_s').agg({\n        'duration': ['mean', 'median', 'std'],\n        'prim_threatened_aggregate': ['mean', 'median'],\n        'comm_threatened_aggregate': ['mean', 'median'],\n        'outb_threatened_aggregate': ['mean', 'median'],\n        'wind_med': ['mean'],\n        'erc_med': ['mean'],\n        'avrh_mean': ['mean'],\n        'rain_sum': ['mean'],\n        'incident_number': 'count'\n    }).round(2)\n    \n    return summary.reset_index()\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate summary statistics by suppression strategy (Full Suppression vs Other) for duration, threatened structures, and weather variables",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "prepare_analysis_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(examine_suppression_weather):\n    df = examine_suppression_weather.copy()\n    df = df.dropna(subset=['duration', 'wind_med', 'erc_med', 'avrh_mean', 'rain_sum', 'prim_threatened_aggregate', 'comm_threatened_aggregate', 'outb_threatened_aggregate', 'dom_strat_ind_75'])\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Remove rows with missing values in key variables for regression analysis: duration, weather variables (wind_med, erc_med, avrh_mean, rain_sum), threatened structures, and suppression indicator",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "regression_duration",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(prepare_analysis_data):\n    from sklearn.linear_model import LinearRegression\n    from sklearn.preprocessing import StandardScaler\n    \n    df = prepare_analysis_data.copy()\n    \n    # Prepare data for regression: duration as outcome, suppression & weather as predictors\n    X = df[['dom_strat_ind_25', 'wind_med', 'erc_med', 'avrh_mean', 'rain_sum']].copy()\n    y = df['duration'].copy()\n    \n    # Standardize predictors for easier interpretation\n    scaler = StandardScaler()\n    X_scaled = scaler.fit_transform(X)\n    \n    # Fit regression\n    model = LinearRegression()\n    model.fit(X_scaled, y)\n    \n    # Create results DataFrame\n    results = pd.DataFrame({\n        'Variable': ['dom_strat_ind_25 (Suppression)', 'wind_med (Weather)', 'erc_med (Weather)', 'avrh_mean (Weather)', 'rain_sum (Weather)'],\n        'Coefficient': model.coef_,\n        'R_squared': [model.score(X_scaled, y)] * 5\n    })\n    \n    return results\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Regression model predicting fire duration (days) from suppression indicator (dom_strat_ind_25=1 for Full Suppression, 0 for Other) and weather variables (wind_med, erc_med, avrh_mean, rain_sum), with standardized predictors. Positive coefficient = longer duration, negative = shorter duration.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "regression_buildings",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(prepare_analysis_data):\n    from sklearn.preprocessing import StandardScaler\n    from sklearn.linear_model import LinearRegression\n    \n    df = prepare_analysis_data.copy()\n    \n    # Total threatened buildings\n    df['total_threatened'] = (df['prim_threatened_aggregate'] + \n                              df['comm_threatened_aggregate'] + \n                              df['outb_threatened_aggregate'])\n    \n    # Prepare features: suppression indicator + weather\n    X = df[['dom_strat_ind_25', 'wind_med', 'erc_med', 'avrh_mean', 'rain_sum']].copy()\n    scaler = StandardScaler()\n    X_scaled = scaler.fit_transform(X)\n    \n    # Regression for total buildings threatened\n    y = df['total_threatened']\n    model = LinearRegression()\n    model.fit(X_scaled, y)\n    \n    results = pd.DataFrame({\n        'Variable': ['dom_strat_ind_25 (Suppression)', 'wind_med (Weather)', \n                     'erc_med (Weather)', 'avrh_mean (Weather)', 'rain_sum (Weather)'],\n        'Coefficient': model.coef_,\n        'R_squared': [model.score(X_scaled, y)] * 5\n    })\n    \n    return results\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Regression model predicting total threatened buildings (primary + commercial + other) from suppression indicator (dom_strat_ind_25=1 for Full Suppression, 0 for Other) and weather variables (wind_med, erc_med, avrh_mean, rain_sum), with standardized predictors. Positive coefficient = more buildings threatened, negative = fewer buildings threatened.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "interpret_results",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(regression_duration, regression_buildings):\n    import pandas as pd\n    \n    duration_results = regression_duration.copy()\n    buildings_results = regression_buildings.copy()\n    \n    suppression_duration = duration_results[duration_results['Variable'] == 'dom_strat_ind_25 (Suppression)']['Coefficient'].values[0]\n    suppression_buildings = buildings_results[buildings_results['Variable'] == 'dom_strat_ind_25 (Suppression)']['Coefficient'].values[0]\n    \n    r2_duration = duration_results['R_squared'].iloc[0]\n    r2_buildings = buildings_results['R_squared'].iloc[0]\n    \n    interpretation = pd.DataFrame({\n        'Metric': ['Fire Duration', 'Threatened Buildings'],\n        'Suppression_Effect': [suppression_duration, suppression_buildings],\n        'Interpretation': [\n            f'Full Suppression (vs Other) is associated with +{suppression_duration:.2f} additional days (negative = shorter)',\n            f'Full Suppression (vs Other) is associated with {suppression_buildings:.2f} fewer threatened buildings'\n        ],\n        'R_squared': [r2_duration, r2_buildings],\n        'Statistical_Strength': [\n            f'R\u00b2={r2_duration:.4f} (moderate explanatory power)',\n            f'R\u00b2={r2_buildings:.4f} (very weak explanatory power)'\n        ]\n    })\n    \n    return interpretation\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Interpret regression coefficients to answer whether aggressive suppression contributes to faster fire ending and fewer affected buildings, controlling for weather",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_wildfires": {
+        "x": 380,
+        "y": 40
+      },
+      "load_variables": {
+        "x": 100,
+        "y": 310
+      },
+      "explore_variables": {
+        "x": 380,
+        "y": 220
+      },
+      "understand_suppression_metrics": {
+        "x": 380,
+        "y": 400
+      },
+      "examine_suppression_weather": {
+        "x": 660,
+        "y": 220
+      },
+      "data_summary": {
+        "x": 940,
+        "y": 130
+      },
+      "prepare_analysis_data": {
+        "x": 940,
+        "y": 310
+      },
+      "regression_duration": {
+        "x": 1220,
+        "y": 220
+      },
+      "regression_buildings": {
+        "x": 1220,
+        "y": 400
+      },
+      "interpret_results": {
+        "x": 1500,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_variables-->explore_variables",
+        "source": {
+          "operatorID": "load_variables",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "explore_variables",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_variables-->understand_suppression_metrics",
+        "source": {
+          "operatorID": "load_variables",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "understand_suppression_metrics",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_wildfires-->examine_suppression_weather",
+        "source": {
+          "operatorID": "load_wildfires",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "examine_suppression_weather",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "understand_suppression_metrics-->examine_suppression_weather",
+        "source": {
+          "operatorID": "understand_suppression_metrics",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "examine_suppression_weather",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "examine_suppression_weather-->data_summary",
+        "source": {
+          "operatorID": "examine_suppression_weather",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "data_summary",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "examine_suppression_weather-->prepare_analysis_data",
+        "source": {
+          "operatorID": "examine_suppression_weather",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "prepare_analysis_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "prepare_analysis_data-->regression_duration",
+        "source": {
+          "operatorID": "prepare_analysis_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "regression_duration",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "prepare_analysis_data-->regression_buildings",
+        "source": {
+          "operatorID": "prepare_analysis_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "regression_buildings",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "regression_duration-->interpret_results",
+        "source": {
+          "operatorID": "regression_duration",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "interpret_results",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "regression_buildings-->interpret_results",
+        "source": {
+          "operatorID": "regression_buildings",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "interpret_results",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

@@ -1,0 +1,396 @@
+{
+  "headId": "step-agent-126-22-1781035654311",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Fraud and Other data/*.csv')\n    dfs = [pd.read_csv(f) for f in files]\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all fraud and other data CSV files from State MSA Fraud and Other data folder using glob pattern",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_identity_theft_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/legal/input/csn-data-book-2024-csv/CSVs/State MSA Identity Theft data/*.csv')\n    dfs = [pd.read_csv(f) for f in files]\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all identity theft data CSV files from State MSA Identity Theft data folder using glob pattern",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_fraud_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data.copy()\n    df = df.dropna(how='all')\n    df = df[df['Metropolitan Areas: Fraud and Other Reports'].notna()]\n    df = df[df['Metropolitan Areas: Fraud and Other Reports'] != 'Metropolitan Area']\n    df = df[df['Metropolitan Areas: Fraud and Other Reports'] != 'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission']\n    df = df[df['Unnamed: 1'].notna()]\n    df = df.drop_duplicates()\n    df.columns = ['metropolitan_area', 'fraud_reports']\n    df['fraud_reports'] = df['fraud_reports'].astype(str).str.replace(',', '').astype(int)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean fraud data: remove nulls, headers, footers, duplicates; convert report counts to integers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_identity_theft_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_identity_theft_data) -> pd.DataFrame:\n    df = load_identity_theft_data.copy()\n    df = df.dropna(how='all')\n    df = df[df['Metropolitan Areas: Identity Theft Reports'].notna()]\n    df = df[df['Metropolitan Areas: Identity Theft Reports'] != 'Metropolitan Area']\n    df = df[df['Metropolitan Areas: Identity Theft Reports'] != 'Source: Consumer Sentinel Network Data Book 2024, Federal Trade Commission']\n    df = df[df['Unnamed: 1'].notna()]\n    df = df.drop_duplicates()\n    df.columns = ['metropolitan_area', 'identity_theft_reports']\n    df['identity_theft_reports'] = df['identity_theft_reports'].astype(str).str.replace(',', '').astype(int)\n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft data: remove nulls, headers, footers, duplicates; convert report counts to integers",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compare_reports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_fraud_data, clean_identity_theft_data) -> pd.DataFrame:\n    merged = clean_fraud_data.merge(clean_identity_theft_data, on='metropolitan_area', how='inner')\n    merged['identity_theft_exceeds_fraud'] = merged['identity_theft_reports'] > merged['fraud_reports']\n    return merged\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Merge fraud and identity theft data by metropolitan area and check if identity theft reports exceed fraud reports",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "check_identity_theft_exceeds",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(compare_reports) -> pd.DataFrame:\n    result = compare_reports[compare_reports['identity_theft_exceeds_fraud'] == True]\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter metropolitan areas where identity theft reports exceeded fraud reports in 2024",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "verify_result",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(compare_reports) -> pd.DataFrame:\n    return compare_reports[compare_reports['identity_theft_exceeds_fraud'] == True]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter metropolitan areas where identity_theft_exceeds_fraud is True",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_answer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(check_identity_theft_exceeds) -> pd.DataFrame:\n    exists = len(check_identity_theft_exceeds) > 0\n    answer = \"Yes\" if exists else \"No\"\n    return pd.DataFrame({\"answer\": [answer]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Determine if any metropolitan area has identity theft reports exceeding fraud reports; return Yes or No",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "debug_compare",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(compare_reports) -> pd.DataFrame:\n    # Check for any True values in identity_theft_exceeds_fraud column\n    print(\"Column dtypes:\", compare_reports.dtypes)\n    print(\"Unique values in identity_theft_exceeds_fraud:\", compare_reports['identity_theft_exceeds_fraud'].unique())\n    print(\"Value counts:\", compare_reports['identity_theft_exceeds_fraud'].value_counts(dropna=False))\n    \n    # Show a few rows with identity_theft_reports >= fraud_reports\n    mask = compare_reports['identity_theft_reports'] >= compare_reports['fraud_reports']\n    print(f\"\\nRows where identity_theft_reports >= fraud_reports: {mask.sum()}\")\n    \n    return compare_reports[mask].head(20)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Debug operator to check identity theft vs fraud comparisons and data types",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 130
+      },
+      "load_identity_theft_data": {
+        "x": 100,
+        "y": 310
+      },
+      "clean_fraud_data": {
+        "x": 380,
+        "y": 130
+      },
+      "clean_identity_theft_data": {
+        "x": 380,
+        "y": 310
+      },
+      "compare_reports": {
+        "x": 660,
+        "y": 220
+      },
+      "check_identity_theft_exceeds": {
+        "x": 940,
+        "y": 40
+      },
+      "verify_result": {
+        "x": 940,
+        "y": 220
+      },
+      "final_answer": {
+        "x": 1220,
+        "y": 40
+      },
+      "debug_compare": {
+        "x": 940,
+        "y": 400
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->clean_fraud_data",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_fraud_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_identity_theft_data-->clean_identity_theft_data",
+        "source": {
+          "operatorID": "load_identity_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_identity_theft_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_fraud_data-->compare_reports",
+        "source": {
+          "operatorID": "clean_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_reports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_identity_theft_data-->compare_reports",
+        "source": {
+          "operatorID": "clean_identity_theft_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_reports",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "compare_reports-->check_identity_theft_exceeds",
+        "source": {
+          "operatorID": "compare_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "check_identity_theft_exceeds",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "check_identity_theft_exceeds-->final_answer",
+        "source": {
+          "operatorID": "check_identity_theft_exceeds",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_answer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "compare_reports-->verify_result",
+        "source": {
+          "operatorID": "compare_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "verify_result",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "compare_reports-->debug_compare",
+        "source": {
+          "operatorID": "compare_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "debug_compare",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

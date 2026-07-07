@@ -1,0 +1,126 @@
+{
+  "headId": "step-agent-67-6-1781073637343",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "roman_cities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/roman_cities.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load roman_cities.csv from data/archeology/input/roman_cities.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "world_cities",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/archeology/input/worldcities.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load worldcities.csv from data/archeology/input/worldcities.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "nearby_modern_cities",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(roman_cities, world_cities) -> pd.DataFrame:\n    rc = roman_cities[['Primary Key','Longitude (X)','Latitude (Y)']].dropna()\n    wc = world_cities[['id','city','lat','lng','population']].dropna(subset=['lat','lng','population'])\n    wc = wc[wc['population'] > 100000]\n    wc['__k'] = 1\n    rc['__k'] = 1\n    df = pd.merge(wc, rc, on='__k').drop('__k', axis=1)\n    df['dist_deg'] = ((df['lat'] - df['Latitude (Y)'])**2 + (df['lng'] - df['Longitude (X)'])**2)**0.5\n    df = df[df['dist_deg'] <= 0.1]\n    result = pd.DataFrame({'modern_city_count': [df['id'].nunique()]})\n    return result"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter world_cities to population >100000 and roman_cities to rows with coords; perform cross-join and compute Euclidean distance in degrees between (lat,lng) and (Latitude (Y), Longitude (X)); keep pairs with distance <= 0.1 degrees; return number of unique modern city ids as column modern_city_count.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "roman_cities": {
+        "x": 100,
+        "y": 40
+      },
+      "world_cities": {
+        "x": 100,
+        "y": 220
+      },
+      "nearby_modern_cities": {
+        "x": 380,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "roman_cities-->nearby_modern_cities",
+        "source": {
+          "operatorID": "roman_cities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nearby_modern_cities",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "world_cities-->nearby_modern_cities",
+        "source": {
+          "operatorID": "world_cities",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "nearby_modern_cities",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

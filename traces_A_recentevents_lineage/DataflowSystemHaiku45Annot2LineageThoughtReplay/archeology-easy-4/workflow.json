@@ -1,0 +1,129 @@
+{
+  "headId": "step-agent-417-14-1781055431128",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_climate",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load():\n    import openpyxl\n    import pandas as pd\n    \n    # Load the Excel file to examine its structure\n    wb = openpyxl.load_workbook('data/archeology/input/climateMeasurements.xlsx')\n    ws = wb.active\n    \n    # Print first 20 rows to understand structure\n    rows = []\n    for i, row in enumerate(ws.iter_rows(min_row=1, max_row=20, values_only=True)):\n        rows.append(row)\n    \n    # Find where actual data starts by looking for rows with numeric values\n    for i, row in enumerate(rows):\n        print(f\"Row {i}: {row[:10]}\")\n    \n    # Try to read starting from row 6 (0-indexed row 5)\n    df = pd.read_excel('data/archeology/input/climateMeasurements.xlsx', sheet_name=0, header=5)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load climateMeasurements.xlsx and examine structure to find proper header row",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_climate) -> pd.DataFrame:\n    df = load_climate.dropna(how='all')\n    print(\"Shape after removing all-null rows:\", df.shape)\n    print(\"\\nColumn names:\")\n    print(df.columns.tolist())\n    print(\"\\nFirst few rows:\")\n    print(df.head())\n    print(\"\\nData types:\")\n    print(df.dtypes)\n    print(\"\\nDust proxy column stats:\")\n    print(df['ODP 967 Dust proxy'].describe())\n    print(\"\\nWet-dry index column stats:\")\n    print(df['ODP 967 wet-dry index'].describe())\n    print(\"\\nCalcium column stats:\")\n    print(df['Ca'].describe())\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect data structure and column statistics",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_min_dust_calcium",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_climate) -> pd.DataFrame:\n    df = load_climate.copy()\n    \n    # Keep only rows with non-null values in the relevant columns\n    df = df[['ODP 967 Dust proxy', 'ODP 967 wet-dry index', 'Ca']].copy()\n    df = df.dropna()\n    \n    # Find the minimum dust proxy value\n    min_dust = df['ODP 967 Dust proxy'].min()\n    \n    # Filter to rows with minimum dust proxy\n    min_dust_rows = df[df['ODP 967 Dust proxy'] == min_dust]\n    \n    # If there are ties, break by minimum wet-dry index\n    result_row = min_dust_rows.loc[min_dust_rows['ODP 967 wet-dry index'].idxmin()]\n    \n    # Extract and round calcium value\n    calcium_value = result_row['Ca']\n    \n    return pd.DataFrame({'calcium_ppm': [round(calcium_value, 4)]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find calcium value when dust proxy is smallest, breaking ties by minimum wet-dry index, rounded to 4 decimal places",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_climate": {
+        "x": 100,
+        "y": 130
+      },
+      "inspect_data": {
+        "x": 380,
+        "y": 40
+      },
+      "find_min_dust_calcium": {
+        "x": 380,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_climate-->inspect_data",
+        "source": {
+          "operatorID": "load_climate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_climate-->find_min_dust_calcium",
+        "source": {
+          "operatorID": "load_climate",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_min_dust_calcium",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

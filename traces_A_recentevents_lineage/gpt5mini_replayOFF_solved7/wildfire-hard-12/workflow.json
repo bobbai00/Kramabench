@@ -1,0 +1,84 @@
+{
+  "headId": "step-agent-29-5-1781072819943",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fire_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv')"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load CSV file: data/wildfire/input/Fire_Weather_Data_2002-2014_2016.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "test_start_shift",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fire_data):\n    df = load_fire_data[['start_year','start_day_of_year']].dropna()\n    x = df['start_year'].astype(float).values\n    y = df['start_day_of_year'].astype(float).values\n    n = len(x)\n    mean_x = x.mean()\n    mean_y = y.mean()\n    slope = ((x-mean_x)*(y-mean_y)).sum() / ((x-mean_x)**2).sum()\n    intercept = mean_y - slope*mean_x\n    y_pred = intercept + slope*x\n    residuals = y - y_pred\n    ss_res = (residuals**2).sum()\n    df_resid = n - 2\n    residual_var = ss_res / df_resid\n    se_slope = (residual_var / ((x-mean_x)**2).sum())**0.5\n    t = slope / se_slope\n    from math import erf, sqrt\n    def norm_cdf(z):\n        return 0.5*(1+erf(z/sqrt(2)))\n    p = 2*(1 - norm_cdf(abs(t)))\n    shifted = bool(p < 0.05)\n    import pandas as pd\n    return pd.DataFrame({'slope':[slope],'pval':[p],'shifted':[shifted],'n':[n]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute linear trend of start_day_of_year over start_year using ordinary least squares; return slope, p-value (normal approx), boolean 'shifted' if p<0.05, and sample size. Uses columns start_year and start_day_of_year from load_fire_data.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_fire_data": {
+        "x": 100,
+        "y": 40
+      },
+      "test_start_shift": {
+        "x": 380,
+        "y": 40
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fire_data-->test_start_shift",
+        "source": {
+          "operatorID": "load_fire_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "test_start_shift",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

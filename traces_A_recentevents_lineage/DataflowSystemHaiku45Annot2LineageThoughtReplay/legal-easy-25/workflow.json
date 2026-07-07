@@ -1,0 +1,316 @@
+{
+  "headId": "step-agent-83-27-1781034411053",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_fraud_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv', skiprows=2)\n    return df"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Loads the 2024 CSN Fraud, Identity Theft, and Other Reports by Military Consumers data with proper headers from file: data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv. Skips first 2 rows to use row 2 as header.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "extract_military_branches",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data.copy()\n    \n    # Filter out rows where Military Status is null or contains non-data values\n    df = df[df['Military Status'].notna()]\n    df = df[df['Military Status'] != 'Military Status']  # Remove header row if it exists\n    \n    # Filter out rows that are footnotes or metadata\n    df = df[~df['Military Status'].str.contains('Of the|Source:', na=False, case=False)]\n    \n    # Keep only rows with numeric # of Reports (actual data rows)\n    df = df[df['# of Reports'].notna()]\n    df = df[df['# of Reports'] != '# of Reports']\n    \n    return df"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extracts valid military status/branch rows by filtering out null rows, header rows, and footnote rows. Keeps only rows with actual data (non-null # of Reports and no metadata/footnotes).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_median_fraud_loss",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(extract_military_branches) -> pd.DataFrame:\n    df = extract_military_branches.copy()\n    \n    # Convert Median Fraud Loss from string (e.g., \"$920 \", \"$1,300\") to numeric\n    # Remove $, spaces, and commas, then convert to float\n    df['Median_Numeric'] = df['Median Fraud Loss'].str.replace('$', '').str.replace(',', '').str.strip().astype(float)\n    \n    # Find the row with maximum median fraud loss\n    max_idx = df['Median_Numeric'].idxmax()\n    result_row = df.iloc[max_idx:max_idx+1][['Military Status', 'Median Fraud Loss']].copy()\n    \n    return result_row"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Finds the military branch/status with the largest Median Fraud Loss by converting the \"Median Fraud Loss\" column from string (removing $, commas, and spaces) to numeric, then selecting the maximum value. Returns the Military Status name and its Median Fraud Loss.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_data",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data\n    print(\"Column names:\")\n    print(df.columns.tolist())\n    print(\"\\nFirst 15 rows:\")\n    print(df.head(15))\n    print(\"\\nData types:\")\n    print(df.dtypes)\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspects the loaded data structure, column names, and first rows to understand the data layout.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "inspect_structure",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data\n    result_data = []\n    for idx, row in df.iterrows():\n        result_data.append({'row_index': idx, 'col_0': str(row[0])[:50], 'col_1': str(row[1])[:50] if len(row) > 1 else '', 'col_2': str(row[2])[:50] if len(row) > 2 else ''})\n    return pd.DataFrame(result_data)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspects the raw structure of the loaded data to identify which rows contain military branch information.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "view_raw_content",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_fraud_data) -> pd.DataFrame:\n    df = load_fraud_data\n    # Show all rows with their full content\n    result = []\n    for idx, row in df.iterrows():\n        result.append({\n            'row_idx': idx,\n            'col_0': str(row[0])[:80] if pd.notna(row[0]) else None,\n            'col_1': str(row[1])[:80] if pd.notna(row[1]) else None,\n            'col_2': str(row[2])[:80] if pd.notna(row[2]) else None,\n            'col_3': str(row[3])[:80] if pd.notna(row[3]) else None,\n            'col_4': str(row[4])[:80] if pd.notna(row[4]) else None,\n            'col_5': str(row[5])[:80] if pd.notna(row[5]) else None,\n        })\n    return pd.DataFrame(result)"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Displays full raw content of each row to understand data structure",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "load_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv', 'r') as f:\n        content = f.read()\n    \n    # Create a single-row DataFrame with the raw content\n    return pd.DataFrame({'raw_content': [content]})"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Loads raw file content as text to inspect the exact structure and delimiters",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "read_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Fraud, Identity Theft, and Other Reports by Military Consumers.csv', 'r') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'raw_lines': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Reads raw file lines to examine the exact CSV structure and delimiters",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      }
+    ],
+    "operatorPositions": {
+      "load_fraud_data": {
+        "x": 100,
+        "y": 310
+      },
+      "extract_military_branches": {
+        "x": 380,
+        "y": 40
+      },
+      "find_max_median_fraud_loss": {
+        "x": 660,
+        "y": 40
+      },
+      "inspect_data": {
+        "x": 380,
+        "y": 220
+      },
+      "inspect_structure": {
+        "x": 380,
+        "y": 400
+      },
+      "view_raw_content": {
+        "x": 380,
+        "y": 580
+      },
+      "load_raw_file": {
+        "x": 100,
+        "y": 490
+      },
+      "read_raw_file": {
+        "x": 100,
+        "y": 670
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_fraud_data-->inspect_data",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_data",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_fraud_data-->inspect_structure",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "inspect_structure",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_fraud_data-->view_raw_content",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "view_raw_content",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_fraud_data-->extract_military_branches",
+        "source": {
+          "operatorID": "load_fraud_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_military_branches",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "extract_military_branches-->find_max_median_fraud_loss",
+        "source": {
+          "operatorID": "extract_military_branches",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_median_fraud_loss",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

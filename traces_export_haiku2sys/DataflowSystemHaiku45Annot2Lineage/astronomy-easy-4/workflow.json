@@ -1,0 +1,245 @@
+{
+  "headId": "step-agent-411-8-1781055294109",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_sunspot_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/astronomy/input/SILSO/SN_y_tot_V2.0.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load yearly sunspot number data from SILSO file (SN_y_tot_V2.0.csv)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_sunspot_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import io\n    with open('data/astronomy/input/SILSO/SN_y_tot_V2.0.csv', 'r') as f:\n        content = f.read(500)\n    \n    df = pd.read_csv('data/astronomy/input/SILSO/SN_y_tot_V2.0.csv', \n                     sep=';', header=None, names=['year', 'mean_sn', 'std_dev', 'obs_count', 'group'])\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and parse SILSO sunspot data with semicolon delimiter, extracting year, mean sunspot number, standard deviation, observation count, and group.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "filter_1960_2020",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_sunspot_data) -> pd.DataFrame:\n    df = parse_sunspot_data.copy()\n    df['year_int'] = df['year'].astype(int)\n    return df[(df['year_int'] >= 1960) & (df['year_int'] <= 2020)].reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter sunspot data to years 1960-2020 and add integer year column for easier filtering",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "detect_extrema",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_1960_2020) -> pd.DataFrame:\n    from scipy.signal import find_peaks\n    \n    df = filter_1960_2020.copy()\n    \n    # Detect maxima with prominence=20 and distance=5\n    maxima_idx, _ = find_peaks(df['mean_sn'].values, prominence=20, distance=5)\n    \n    # Detect minima with prominence=20 and distance=5 (invert the signal)\n    minima_idx, _ = find_peaks(-df['mean_sn'].values, prominence=20, distance=5)\n    \n    # Create result dataframe with extrema\n    result_list = []\n    for idx in sorted(maxima_idx):\n        result_list.append({\n            'year_int': df.iloc[idx]['year_int'],\n            'mean_sn': df.iloc[idx]['mean_sn'],\n            'type': 'maximum'\n        })\n    \n    for idx in sorted(minima_idx):\n        result_list.append({\n            'year_int': df.iloc[idx]['year_int'],\n            'mean_sn': df.iloc[idx]['mean_sn'],\n            'type': 'minimum'\n        })\n    \n    result = pd.DataFrame(result_list)\n    result = result.sort_values('year_int').reset_index(drop=True)\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Detect sunspot cycle extrema (maxima and minima) using scipy.signal.find_peaks with prominence=20 and distance=5 parameters. Returns dataframe with year, mean sunspot number, and type (maximum/minimum).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_cycle_period",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(detect_extrema) -> pd.DataFrame:\n    maxima = detect_extrema[detect_extrema['type'] == 'maximum'].sort_values('year_int')\n    minima = detect_extrema[detect_extrema['type'] == 'minimum'].sort_values('year_int')\n    \n    periods = []\n    for i in range(len(maxima) - 1):\n        period = maxima.iloc[i+1]['year_int'] - maxima.iloc[i]['year_int']\n        periods.append(period)\n    \n    avg_period = sum(periods) / len(periods) if periods else 0\n    \n    return pd.DataFrame({\n        'metric': ['average_period'],\n        'value': [round(avg_period, 2)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate the average period of solar activity cycles by measuring the time intervals between successive maxima and computing their mean",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "extract_extrema_details",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(detect_extrema) -> pd.DataFrame:\n    maxima = detect_extrema[detect_extrema['type'] == 'maximum'].sort_values('mean_sn', ascending=False)\n    minima = detect_extrema[detect_extrema['type'] == 'minimum'].sort_values('mean_sn', ascending=True)\n    \n    top5_max = maxima.head(5)[['year_int', 'mean_sn']].sort_values('year_int')\n    top5_min = minima.head(5)[['year_int', 'mean_sn']].sort_values('year_int')\n    \n    result = pd.DataFrame({\n        'category': ['maxima']*5 + ['minima']*5,\n        'year': list(top5_max['year_int']) + list(top5_min['year_int']),\n        'sunspot_number': list(top5_max['mean_sn']) + list(top5_min['mean_sn'])\n    })\n    \n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract the top 5 years of maximum and minimum sunspot activity, sorted chronologically within each category",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_sunspot_data": {
+        "x": 100,
+        "y": 40
+      },
+      "parse_sunspot_data": {
+        "x": 100,
+        "y": 220
+      },
+      "filter_1960_2020": {
+        "x": 380,
+        "y": 220
+      },
+      "detect_extrema": {
+        "x": 660,
+        "y": 220
+      },
+      "calculate_cycle_period": {
+        "x": 940,
+        "y": 130
+      },
+      "extract_extrema_details": {
+        "x": 940,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "parse_sunspot_data-->filter_1960_2020",
+        "source": {
+          "operatorID": "parse_sunspot_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_1960_2020",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_1960_2020-->detect_extrema",
+        "source": {
+          "operatorID": "filter_1960_2020",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "detect_extrema",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "detect_extrema-->calculate_cycle_period",
+        "source": {
+          "operatorID": "detect_extrema",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_cycle_period",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "detect_extrema-->extract_extrema_details",
+        "source": {
+          "operatorID": "detect_extrema",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "extract_extrema_details",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

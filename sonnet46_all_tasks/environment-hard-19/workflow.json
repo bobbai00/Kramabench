@@ -1,0 +1,258 @@
+{
+  "headId": "step-agent-161-7-1781159758420",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "water_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    import glob\n    files = glob.glob('data/environment/input/water-body-testing-*.csv')\n    dfs = []\n    for f in files:\n        try:\n            df = pd.read_csv(f)\n            dfs.append(df)\n        except Exception:\n            pass\n    return pd.concat(dfs, ignore_index=True)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all water body testing CSV files from data/environment/input/water-body-testing-*.csv and concatenate into one DataFrame.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "boston_precip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/monthly_precipitations_boston.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly precipitation data for Boston from data/environment/input/monthly_precipitations_boston.csv.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "chatham_precip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/monthly_precipitations_chatham.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly precipitation data for Chatham from data/environment/input/monthly_precipitations_chatham.csv.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "marine_exceedance",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(water_data) -> pd.DataFrame:\n    # Filter to marine beaches only\n    marine = water_data[water_data['Beach Type Description'] == 'Marine'].copy()\n    \n    # Normalize violation column: treat 'yes' (case-insensitive) as exceedance\n    marine['is_violation'] = marine['Violation'].str.strip().str.lower() == 'yes'\n    \n    # Calculate exceedance rate per year\n    yearly = marine.groupby('Year').agg(\n        total_samples=('is_violation', 'count'),\n        total_violations=('is_violation', 'sum')\n    ).reset_index()\n    \n    yearly['exceedance_rate'] = yearly['total_violations'] / yearly['total_samples']\n    yearly = yearly.sort_values('Year').reset_index(drop=True)\n    \n    # Year-over-year difference in exceedance rate\n    yearly['exceedance_rate_diff'] = yearly['exceedance_rate'].diff()\n    \n    return yearly\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water_data to marine beaches, compute yearly exceedance rate (violations/total samples), then compute year-over-year difference in exceedance rate.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "rainfall_processed",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(boston_precip, chatham_precip) -> pd.DataFrame:\n    import numpy as np\n    \n    months = ['Jun', 'Jul', 'Aug']\n    \n    def clean_precip(df, location):\n        # Keep only rows where Year is a 4-digit number\n        df = df[df['Year'].str.match(r'^\\d{4}$', na=False)].copy()\n        df['Year'] = df['Year'].astype(int)\n        \n        for m in months:\n            # Replace 'M' (missing) with NaN\n            df[m] = pd.to_numeric(df[m], errors='coerce')\n        \n        # Impute missing values with median of that month across non-missing years\n        for m in months:\n            median_val = df[m].median()\n            df[m] = df[m].fillna(median_val)\n        \n        df['total_summer_rain'] = df[months].sum(axis=1)\n        df['location'] = location\n        return df[['Year', 'Jun', 'Jul', 'Aug', 'total_summer_rain', 'location']]\n    \n    boston_clean = clean_precip(boston_precip.copy(), 'Boston')\n    chatham_clean = clean_precip(chatham_precip.copy(), 'Chatham')\n    \n    # Combine both locations: sum rainfall per year\n    combined = pd.concat([boston_clean, chatham_clean])\n    yearly_rain = combined.groupby('Year')['total_summer_rain'].sum().reset_index()\n    yearly_rain.columns = ['Year', 'total_summer_rain']\n    yearly_rain = yearly_rain.sort_values('Year').reset_index(drop=True)\n    \n    # Year-over-year difference\n    yearly_rain['rain_diff'] = yearly_rain['total_summer_rain'].diff()\n    \n    return yearly_rain\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Process Boston and Chatham precipitation data: filter to valid years, convert Jun/Jul/Aug to numeric, impute missing ('M') values with monthly median of non-missing years, sum Jun+Jul+Aug per year per location, then combine both locations (Boston + Chatham) into total summer rainfall per year, then compute year-over-year difference.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "compare_years",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(marine_exceedance, rainfall_processed):\n    # Get year with highest exceedance rate difference (absolute or positive?)\n    # \"highest\" means max value\n    marine = marine_exceedance.dropna(subset=['exceedance_rate_diff'])\n    rain = rainfall_processed.dropna(subset=['rain_diff'])\n    \n    # Filter rain to only years that overlap with water testing data (2002-2023)\n    rain = rain[rain['Year'].between(2002, 2023)]\n    \n    best_exceedance_year = marine.loc[marine['exceedance_rate_diff'].idxmax(), 'Year']\n    best_rain_year = rain.loc[rain['rain_diff'].idxmax(), 'Year']\n    \n    result = pd.DataFrame({\n        'best_exceedance_year': [best_exceedance_year],\n        'best_rain_year': [best_rain_year],\n        'are_different': [best_exceedance_year != best_rain_year]\n    })\n    return result\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compare the year with the highest exceedance rate difference vs the year with the highest rainfall difference (restricted to 2002-2023 range). Returns both years and whether they differ.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "water_data": {
+        "x": 100,
+        "y": 40
+      },
+      "boston_precip": {
+        "x": 100,
+        "y": 220
+      },
+      "chatham_precip": {
+        "x": 100,
+        "y": 400
+      },
+      "marine_exceedance": {
+        "x": 380,
+        "y": 40
+      },
+      "rainfall_processed": {
+        "x": 380,
+        "y": 310
+      },
+      "compare_years": {
+        "x": 660,
+        "y": 220
+      }
+    },
+    "links": [
+      {
+        "linkID": "water_data-->marine_exceedance",
+        "source": {
+          "operatorID": "water_data",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "marine_exceedance",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "boston_precip-->rainfall_processed",
+        "source": {
+          "operatorID": "boston_precip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "rainfall_processed",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "chatham_precip-->rainfall_processed",
+        "source": {
+          "operatorID": "chatham_precip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "rainfall_processed",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "marine_exceedance-->compare_years",
+        "source": {
+          "operatorID": "marine_exceedance",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_years",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "rainfall_processed-->compare_years",
+        "source": {
+          "operatorID": "rainfall_processed",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "compare_years",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

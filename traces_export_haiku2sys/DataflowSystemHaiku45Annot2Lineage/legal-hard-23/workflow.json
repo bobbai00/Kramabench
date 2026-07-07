@@ -1,0 +1,306 @@
+{
+  "headId": "step-agent-113-8-1781034815614",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "fraud_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv', header=1, encoding='latin-1')\n    df = df.dropna(how='all')\n    df = df.drop_duplicates()\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load fraud and other reports data from 2024_CSN_State_Rankings_Fraud_and_Other_Reports.csv with header=1, drop empty rows and duplicates",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "identity_theft_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_State_Rankings_Identity_Theft_Reports.csv', header=1, encoding='latin-1')\n    df = df.dropna(how='all')\n    df = df.drop_duplicates()\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load identity theft reports data from 2024_CSN_State_Rankings_Identity_Theft_Reports.csv with header=1, drop empty rows and duplicates",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "clean_fraud",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(fraud_reports) -> pd.DataFrame:\n    df = fraud_reports.copy()\n    df.columns = ['Rank', 'State', 'Reports_per_100K', 'Total_Reports']\n    df = df[df['State'].notna() & (df['State'] != '') & ~df['State'].str.contains('District of Columbia and Puerto Rico', na=False) & ~df['State'].str.contains('Source:', na=False)]\n    df['Rank'] = pd.to_numeric(df['Rank'], errors='coerce')\n    df = df[df['Rank'].notna()]\n    df['Reports_per_100K'] = df['Reports_per_100K'].str.replace(',', '').astype(float)\n    df['Total_Reports'] = df['Total_Reports'].str.replace(',', '').astype(float)\n    df['Type'] = 'Fraud_and_Other'\n    return df[['State', 'Reports_per_100K', 'Type']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean fraud and other reports data: rename columns, filter out metadata rows and non-ranked entries, convert Reports_per_100K to numeric, add report type column",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "clean_identity",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identity_theft_reports) -> pd.DataFrame:\n    df = identity_theft_reports.copy()\n    df.columns = ['Rank', 'State', 'Reports_per_100K', 'Total_Reports']\n    df = df[df['State'].notna() & (df['State'] != '') & ~df['State'].str.contains('District of Columbia and Puerto Rico', na=False) & ~df['State'].str.contains('Source:', na=False)]\n    df['Rank'] = pd.to_numeric(df['Rank'], errors='coerce')\n    df = df[df['Rank'].notna()]\n    df['Reports_per_100K'] = df['Reports_per_100K'].str.replace(',', '').astype(float)\n    df['Total_Reports'] = df['Total_Reports'].str.replace(',', '').astype(float)\n    df['Type'] = 'Identity_Theft'\n    return df[['State', 'Reports_per_100K', 'Type']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean identity theft reports data: rename columns, filter out metadata rows and non-ranked entries, convert Reports_per_100K to numeric, add report type column",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "combined_reports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(clean_fraud, clean_identity) -> pd.DataFrame:\n    combined = pd.concat([clean_fraud, clean_identity], ignore_index=True)\n    return combined"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Combine fraud/other reports and identity theft reports into a single dataframe",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "total_density_by_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(combined_reports) -> pd.DataFrame:\n    total = combined_reports.groupby('State')['Reports_per_100K'].sum().reset_index()\n    total.columns = ['State', 'Total_Reports_per_100K']\n    total = total.sort_values('Total_Reports_per_100K', ascending=False)\n    return total"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Aggregate reports per 100K by state across all report types, sorted descending by total density",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "highest_density_state",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(total_density_by_state) -> pd.DataFrame:\n    highest = total_density_by_state.head(1)\n    return highest"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Select the state with the highest total report density across all report types",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "fraud_reports": {
+        "x": 100,
+        "y": 40
+      },
+      "identity_theft_reports": {
+        "x": 100,
+        "y": 220
+      },
+      "clean_fraud": {
+        "x": 380,
+        "y": 40
+      },
+      "clean_identity": {
+        "x": 380,
+        "y": 220
+      },
+      "combined_reports": {
+        "x": 660,
+        "y": 130
+      },
+      "total_density_by_state": {
+        "x": 940,
+        "y": 130
+      },
+      "highest_density_state": {
+        "x": 1220,
+        "y": 130
+      }
+    },
+    "links": [
+      {
+        "linkID": "fraud_reports-->clean_fraud",
+        "source": {
+          "operatorID": "fraud_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_fraud",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identity_theft_reports-->clean_identity",
+        "source": {
+          "operatorID": "identity_theft_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "clean_identity",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_fraud-->combined_reports",
+        "source": {
+          "operatorID": "clean_fraud",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combined_reports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "clean_identity-->combined_reports",
+        "source": {
+          "operatorID": "clean_identity",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "combined_reports",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "combined_reports-->total_density_by_state",
+        "source": {
+          "operatorID": "combined_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "total_density_by_state",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "total_density_by_state-->highest_density_state",
+        "source": {
+          "operatorID": "total_density_by_state",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "highest_density_state",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

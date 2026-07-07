@@ -1,0 +1,382 @@
+{
+  "headId": "step-agent-101-18-1781034648932",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_categories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Report_Categories.csv', encoding='cp1252', skiprows=2)\n    df = df.dropna(how='all')\n    df = df.drop_duplicates()\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load 2024 CSN Report Categories from CSV, skip first 2 rows to align header properly, remove empty rows and duplicates.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_military_reports",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv', \n                      skiprows=2, header=None, encoding='utf-8')\n    df.columns = ['col0', 'col1', 'col2', 'col3', 'col4', 'col5']\n    df = df[['col0', 'col1']].dropna(how='all')\n    df.columns = ['Report Type', '# of Reports']\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load military reports data from CSV, skip first 2 rows, extract first two columns as Report Type and # of Reports",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_military_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv', encoding='cp1252', nrows=20)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 20 rows of military reports file with default settings to understand structure and headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "get_general_imposter_pct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_categories) -> pd.DataFrame:\n    imposter = load_categories[load_categories['Category'].str.strip() == 'Imposter Scams']\n    if len(imposter) > 0:\n        pct_str = imposter['Percentage'].iloc[0].strip()\n        pct = float(pct_str.rstrip('%'))\n        return pd.DataFrame({'population': ['general'], 'percentage': [pct]})\n    return pd.DataFrame({'population': ['general'], 'percentage': [None]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Imposter Scams percentage from general population (load_categories).",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "raw_military_check",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv', 'r', encoding='utf-8') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [line.rstrip('\\n') for line in lines[:30]]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load first 30 lines of military reports file as raw text to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "raw_file_content",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv', 'r') as f:\n        lines = f.readlines()\n    return pd.DataFrame({'line': [line.rstrip('\\n') for line in lines]})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load raw file content line by line to understand complete structure of military reports CSV",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_military_fraud_categories",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/legal/input/csn-data-book-2024-csv/CSVs/2024_CSN_Reports_by_Military_Consumers.csv', 'r') as f:\n        lines = f.readlines()\n    \n    # Find where fraud categories start (after \"# of Fraud Reports\" section)\n    # Looking at raw data, fraud categories appear to start around line 8-9\n    data = []\n    in_fraud_section = False\n    \n    for i, line in enumerate(lines):\n        line = line.strip()\n        if not line:\n            continue\n        \n        # Check if we're entering the fraud categories section\n        # This appears to be after \"# of Fraud Reports\" and before \"Identity Theft Types\"\n        if 'Rank' in line and 'Category' in line:\n            in_fraud_section = True\n            continue\n        \n        if 'Identity Theft Types' in line:\n            in_fraud_section = False\n            break\n        \n        if in_fraud_section and line and not line.startswith('Rank'):\n            parts = line.split(',')\n            if len(parts) >= 3 and parts[0].strip() and parts[0][0].isdigit():\n                rank = parts[0].strip()\n                category = parts[1].strip().strip('\"')\n                count = parts[2].strip().strip('\"').replace(',', '')\n                try:\n                    count_int = int(count)\n                    data.append({'Rank': rank, 'Category': category, 'Count': count_int})\n                except:\n                    pass\n    \n    result = pd.DataFrame(data)\n    return result\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse fraud categories section from military reports CSV to extract fraud type counts including Imposter Scams",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "get_total_fraud_reports",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_military_fraud_categories):\n    total = parse_military_fraud_categories['Count'].sum()\n    return pd.DataFrame({'total_fraud_reports': [total]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate total fraud category reports from parsed military fraud categories",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "get_military_imposter_count",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(parse_military_fraud_categories):\n    imposter_row = parse_military_fraud_categories[\n        parse_military_fraud_categories['Category'].str.contains('Imposter', case=False, na=False)\n    ]\n    if len(imposter_row) > 0:\n        count = int(imposter_row.iloc[0]['Count'])\n    else:\n        count = 0\n    return pd.DataFrame({'imposter_count': [count]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Imposter Scams count from parsed military fraud categories",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_comparison",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(get_general_imposter_pct, get_military_imposter_count, get_total_fraud_reports):\n    general_pct = get_general_imposter_pct['percentage'].iloc[0]\n    imposter_count = get_military_imposter_count['imposter_count'].iloc[0]\n    total_fraud = get_total_fraud_reports['total_fraud_reports'].iloc[0]\n    \n    military_pct = (imposter_count / total_fraud) * 100 if total_fraud > 0 else 0\n    \n    answer = 'Yes' if military_pct > general_pct else 'No'\n    \n    return pd.DataFrame({\n        'general_pct': [general_pct],\n        'military_pct': [military_pct],\n        'imposter_count_military': [imposter_count],\n        'total_fraud_military': [total_fraud],\n        'answer': [answer]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          },
+          {
+            "portID": "input-2",
+            "displayName": "Input 2",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Final comparison: calculate military Imposter Scams percentage using fraud category counts and compare to general population percentage",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_categories": {
+        "x": 100,
+        "y": 40
+      },
+      "load_military_reports": {
+        "x": 100,
+        "y": 550
+      },
+      "inspect_military_file": {
+        "x": 100,
+        "y": 730
+      },
+      "get_general_imposter_pct": {
+        "x": 380,
+        "y": 40
+      },
+      "raw_military_check": {
+        "x": 100,
+        "y": 910
+      },
+      "raw_file_content": {
+        "x": 100,
+        "y": 1090
+      },
+      "parse_military_fraud_categories": {
+        "x": 100,
+        "y": 1270
+      },
+      "get_total_fraud_reports": {
+        "x": 380,
+        "y": 985
+      },
+      "get_military_imposter_count": {
+        "x": 380,
+        "y": 1270
+      },
+      "final_comparison": {
+        "x": 660,
+        "y": 895
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_categories-->get_general_imposter_pct",
+        "source": {
+          "operatorID": "load_categories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "get_general_imposter_pct",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_military_fraud_categories-->get_total_fraud_reports",
+        "source": {
+          "operatorID": "parse_military_fraud_categories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "get_total_fraud_reports",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_military_fraud_categories-->get_military_imposter_count",
+        "source": {
+          "operatorID": "parse_military_fraud_categories",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "get_military_imposter_count",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "get_general_imposter_pct-->final_comparison",
+        "source": {
+          "operatorID": "get_general_imposter_pct",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_comparison",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "get_military_imposter_count-->final_comparison",
+        "source": {
+          "operatorID": "get_military_imposter_count",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_comparison",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "get_total_fraud_reports-->final_comparison",
+        "source": {
+          "operatorID": "get_total_fraud_reports",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_comparison",
+          "portID": "input-2"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

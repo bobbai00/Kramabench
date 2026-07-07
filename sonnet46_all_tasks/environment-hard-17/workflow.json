@@ -1,0 +1,534 @@
+{
+  "headId": "step-agent-160-11-1781159558681",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_precip",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/monthly_precipitations_chatham.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load monthly precipitations data for Chatham from data/environment/input/monthly_precipitations_chatham.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_water",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/water-body-testing-2016.csv')\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load water body testing data for 2016 from data/environment/input/water-body-testing-2016.csv",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "precip_clean",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_precip) -> pd.DataFrame:\n    df = load_precip.copy()\n    # Keep only year rows (numeric years), drop summary rows\n    df = df[pd.to_numeric(df['Year'], errors='coerce').notna()].copy()\n    df['Year'] = df['Year'].astype(int)\n    \n    # Replace 'M' with NaN for numeric columns\n    for col in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Annual']:\n        df[col] = pd.to_numeric(df[col], errors='coerce')\n    \n    # Impute missing values with median of the month across non-missing years\n    for col in ['Jun','Jul','Aug']:\n        median_val = df[col].median()\n        df[col] = df[col].fillna(median_val)\n    \n    # Compute summer total (Jun + Jul + Aug) for each year\n    df['summer_total'] = df['Jun'] + df['Jul'] + df['Aug']\n    \n    return df[['Year','Jun','Jul','Aug','summer_total']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Clean precipitation data: keep only numeric year rows, replace 'M' with NaN, impute missing Jun/Jul/Aug values with median of the month across non-missing years, compute summer total (Jun+Jul+Aug) for each year.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "bucks_creek",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(load_water) -> pd.DataFrame:\n    df = load_water[\n        (load_water['Community'].str.lower() == 'chatham') &\n        (load_water['Beach Name'].str.lower().str.contains('bucks creek'))\n    ].copy()\n    df['Sample Date'] = pd.to_datetime(df['Sample Date'])\n    df['Month'] = df['Sample Date'].dt.month\n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter water testing data for Chatham's Bucks Creek Beach. Parse Sample Date and extract month.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "precip_2016_summer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(precip_clean):\n    # Find 2016 summer month rainfall values\n    row_2016 = precip_clean[precip_clean['Year'] == 2016]\n    print(\"2016 summer data:\")\n    print(row_2016[['Year', 'Jun', 'Jul', 'Aug', 'summer_total']])\n    return row_2016[['Year', 'Jun', 'Jul', 'Aug', 'summer_total']]\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract 2016 summer precipitation values (Jun, Jul, Aug) to inspect which month had the most rainfall.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "find_max_summer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(precip_clean):\n    # Find the year with the maximum summer total rainfall\n    max_idx = precip_clean['summer_total'].idxmax()\n    max_row = precip_clean.loc[max_idx]\n    print(f\"Year with max summer rainfall: {int(max_row['Year'])}, total={max_row['summer_total']}\")\n    print(precip_clean.sort_values('summer_total', ascending=False).head(5))\n    return precip_clean.sort_values('summer_total', ascending=False).head(10)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Find the summer year with the most total rainfall (Jun+Jul+Aug) across all years in the Chatham precipitation data.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "exceedance_rate",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(bucks_creek, precip_2016_summer):\n    # 2016 summer: Jun=0.82, Jul=2.71, Aug=0.97 \u2192 July has most rainfall\n    # Find which month has the most rainfall\n    row = precip_2016_summer.iloc[0]\n    summer_months = {'Jun': 6, 'Jul': 7, 'Aug': 8}\n    max_month_name = max(summer_months.keys(), key=lambda m: row[m])\n    max_month_num = summer_months[max_month_name]\n    \n    # Filter bucks_creek to that month\n    month_data = bucks_creek[bucks_creek['Month'] == max_month_num]\n    \n    total = len(month_data)\n    violations = (month_data['Violation'] == 'yes').sum()\n    rate = violations / total * 100 if total > 0 else None\n    \n    return pd.DataFrame({\n        'max_rainfall_month': [max_month_name],\n        'month_num': [max_month_num],\n        'rainfall_inches': [row[max_month_name]],\n        'total_samples': [total],\n        'violations': [violations],\n        'exceedance_rate_pct': [round(rate, 2)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute seasonal exceedance rate for Bucks Creek Beach in the summer month with the most rainfall in 2016. Identifies July (2.71 inches) as the rainiest summer month in 2016, then computes violation rate for July samples.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "exceedance_rate_summer",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(bucks_creek, find_max_summer):\n    # The summer with the most rainfall is the year with highest Jun+Jul+Aug total\n    # find_max_summer is sorted by summer_total desc, so the top row is the max summer year\n    max_summer_year = int(find_max_summer.iloc[0]['Year'])\n    \n    # But water data only has 2016. Let's check what year has beach data\n    available_years = bucks_creek['Year'].unique()\n    \n    # Filter bucks_creek to summer months (6, 7, 8)\n    summer_data = bucks_creek[bucks_creek['Month'].isin([6, 7, 8])]\n    \n    # Since beach data is only 2016, and max summer rainfall year is max_summer_year\n    # The question must be asking: for the summer season (Jun+Jul+Aug) with most rainfall\n    # in the precipitation record, compute exceedance rate\n    # Since only 2016 beach data exists, we use 2016 summer data\n    \n    total = len(summer_data)\n    violations = (summer_data['Violation'] == 'yes').sum()\n    rate = round(violations / total * 100, 2)\n    \n    return pd.DataFrame({\n        'max_summer_year': [max_summer_year],\n        'beach_data_years': [str(sorted(available_years.tolist()))],\n        'summer_samples_2016': [total],\n        'violations_2016': [violations],\n        'exceedance_rate_pct': [rate]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute seasonal exceedance rate for Bucks Creek Beach across all summer months (Jun, Jul, Aug) in 2016 - the only year with beach data. The summer with most rainfall overall is 2006 (16.44 inches), but beach data only exists for 2016. Uses all 2016 summer samples to compute violation rate.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "avg_by_month",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(precip_clean):\n    # Compute mean rainfall for each summer month across all non-imputed years\n    # The question asks which summer month (Jun, Jul, Aug) has the most rainfall \"in its area\"\n    # This likely means: looking at all available precipitation data, \n    # which summer month overall has the most total/average rainfall\n    jun_mean = precip_clean['Jun'].mean()\n    jul_mean = precip_clean['Jul'].mean()\n    aug_mean = precip_clean['Aug'].mean()\n    \n    return pd.DataFrame({\n        'month': ['Jun', 'Jul', 'Aug'],\n        'month_num': [6, 7, 8],\n        'mean_rainfall': [jun_mean, jul_mean, aug_mean],\n        'total_rainfall': [precip_clean['Jun'].sum(), precip_clean['Jul'].sum(), precip_clean['Aug'].sum()]\n    }).sort_values('mean_rainfall', ascending=False).reset_index(drop=True)\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute average and total rainfall for each summer month (Jun, Jul, Aug) across all years in Chatham precipitation data to identify which month has the most rainfall overall.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "exceedance_june",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(bucks_creek, avg_by_month):\n    # avg_by_month shows June has most total/avg rainfall across all years\n    # Filter bucks_creek to June samples only\n    june_data = bucks_creek[bucks_creek['Month'] == 6]\n    total = len(june_data)\n    violations = (june_data['Violation'] == 'yes').sum()\n    rate = violations / total * 100 if total > 0 else 0\n    return pd.DataFrame({\n        'rainy_month': ['June'],\n        'total_rainfall_all_years': [83.14],\n        'total_samples': [total],\n        'violations': [violations],\n        'exceedance_rate_pct': [round(rate, 2)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute exceedance rate for Bucks Creek Beach in June - the summer month with the most total rainfall across all years (83.14 inches total, highest of Jun/Jul/Aug). Filters to June samples and computes violation rate.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "final_exceedance",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(bucks_creek, precip_clean):\n    import pandas as pd\n    \n    # The question: \"summer (June, July, August) with the most rainfall\"\n    # = the year where Jun+Jul+Aug total is highest\n    # From precip_clean, find max summer year\n    max_summer_year = precip_clean.loc[precip_clean['summer_total'].idxmax(), 'Year']\n    print(f\"Year with max summer rainfall: {max_summer_year}\")\n    print(f\"Summer total: {precip_clean['summer_total'].max()}\")\n    \n    # Beach data only exists for 2016\n    # Since the question asks for the exceedance rate IN that summer,\n    # and the beach data is from 2016, we use ALL summer months (Jun+Jul+Aug) from 2016\n    summer_data = bucks_creek[bucks_creek['Month'].isin([6, 7, 8])]\n    print(f\"\\nAll summer samples (Jun+Jul+Aug) in 2016: {len(summer_data)}\")\n    print(summer_data[['Month', 'Violation', 'Indicator Level']])\n    \n    total = len(summer_data)\n    violations = (summer_data['Violation'] == 'yes').sum()\n    rate = violations / total * 100\n    \n    print(f\"\\nTotal samples: {total}\")\n    print(f\"Violations: {violations}\")\n    print(f\"Exceedance rate: {round(rate, 2)}%\")\n    \n    return pd.DataFrame({\n        'max_summer_year': [max_summer_year],\n        'note': ['Beach data only available for 2016; using all summer (Jun+Jul+Aug) samples'],\n        'total_samples': [total],\n        'violations': [violations],\n        'exceedance_rate_pct': [round(rate, 2)]\n    })\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Compute the seasonal exceedance rate for Bucks Creek Beach in the summer (Jun+Jul+Aug combined) with the most rainfall. The year with max summer total is found from precip_clean, but beach data only exists for 2016. Uses all Jun/Jul/Aug 2016 samples to compute violation/exceedance rate.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_precip": {
+        "x": 100,
+        "y": 625
+      },
+      "load_water": {
+        "x": 380,
+        "y": 295
+      },
+      "precip_clean": {
+        "x": 380,
+        "y": 625
+      },
+      "bucks_creek": {
+        "x": 660,
+        "y": 310
+      },
+      "precip_2016_summer": {
+        "x": 660,
+        "y": 115
+      },
+      "find_max_summer": {
+        "x": 660,
+        "y": 602.5
+      },
+      "exceedance_rate": {
+        "x": 940,
+        "y": 40
+      },
+      "exceedance_rate_summer": {
+        "x": 940,
+        "y": 385
+      },
+      "avg_by_month": {
+        "x": 660,
+        "y": 842.5
+      },
+      "exceedance_june": {
+        "x": 940,
+        "y": 700
+      },
+      "final_exceedance": {
+        "x": 940,
+        "y": 1075
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_precip-->precip_clean",
+        "source": {
+          "operatorID": "load_precip",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "precip_clean",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "load_water-->bucks_creek",
+        "source": {
+          "operatorID": "load_water",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "bucks_creek",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "precip_clean-->precip_2016_summer",
+        "source": {
+          "operatorID": "precip_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "precip_2016_summer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "precip_clean-->find_max_summer",
+        "source": {
+          "operatorID": "precip_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "find_max_summer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "bucks_creek-->exceedance_rate",
+        "source": {
+          "operatorID": "bucks_creek",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_rate",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "precip_2016_summer-->exceedance_rate",
+        "source": {
+          "operatorID": "precip_2016_summer",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_rate",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "bucks_creek-->exceedance_rate_summer",
+        "source": {
+          "operatorID": "bucks_creek",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_rate_summer",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "find_max_summer-->exceedance_rate_summer",
+        "source": {
+          "operatorID": "find_max_summer",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_rate_summer",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "precip_clean-->avg_by_month",
+        "source": {
+          "operatorID": "precip_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "avg_by_month",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "bucks_creek-->exceedance_june",
+        "source": {
+          "operatorID": "bucks_creek",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_june",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "avg_by_month-->exceedance_june",
+        "source": {
+          "operatorID": "avg_by_month",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "exceedance_june",
+          "portID": "input-1"
+        }
+      },
+      {
+        "linkID": "bucks_creek-->final_exceedance",
+        "source": {
+          "operatorID": "bucks_creek",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_exceedance",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "precip_clean-->final_exceedance",
+        "source": {
+          "operatorID": "precip_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "final_exceedance",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

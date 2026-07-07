@@ -1,0 +1,178 @@
+{
+  "headId": "step-agent-31-8-1781072994637",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "boston_beaches_list",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load():\n    import pathlib\n    p = pathlib.Path('data/environment/input/boston-harbor-beaches.txt')\n    lines = p.read_text(encoding='utf-8').splitlines()\n    lines = [l.strip() for l in lines if l.strip()]\n    import pandas as pd\n    return pd.DataFrame({'beach': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load list of Boston Harbor beaches from data/environment/input/boston-harbor-beaches.txt (one beach name per line). Returns single-column DataFrame 'beach'.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "datasheets",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load():\n    import glob, os\n    import pandas as pd\n    files = sorted(glob.glob('data/environment/input/*_datasheet.csv'))\n    dfs = []\n    for f in files:\n        try:\n            df = pd.read_csv(f)\n        except Exception:\n            df = pd.read_csv(f, encoding='latin-1')\n        df['_source_file'] = os.path.basename(f)\n        dfs.append(df)\n    if dfs:\n        return pd.concat(dfs, ignore_index=True)\n    else:\n        return pd.DataFrame()\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load all *_datasheet.csv files from data/environment/input, concatenate into one DataFrame and add '_source_file' column with the file basename.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "file_previews",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load():\n    import glob\n    import pandas as pd\n    files = sorted(glob.glob('data/environment/input/*_datasheet.csv'))\n    rows = []\n    for f in files:\n        with open(f, 'r', encoding='utf-8', errors='replace') as fh:\n            lines = fh.readlines()\n        for i, line in enumerate(lines[:40]):\n            rows.append({'_source_file': f.split('/')[-1], 'line_num': i, 'text': line.rstrip('\\n')})\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Read first 40 lines of each *_datasheet.csv file into a table with columns: _source_file, line_num, text. Encoding set to replace errors.",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parsed_datasheets",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def load() -> pd.DataFrame:\n    import glob, os, re\n    import pandas as pd\n    files = sorted(glob.glob('data/environment/input/*_datasheet.csv'))\n    rows = []\n    for f in files:\n        df = pd.read_csv(f, header=None, dtype=str, encoding='utf-8', engine='python')\n        if df.shape[0] < 3:\n            continue\n        title = ''\n        if not pd.isna(df.iloc[0,0]):\n            title = str(df.iloc[0,0])\n        site_row = df.iloc[1].fillna(method='ffill')\n        key_row = df.iloc[2].fillna('')\n        data = df.iloc[3:].reset_index(drop=True)\n        cols = []\n        for j in range(df.shape[1]):\n            site = site_row[j] if not pd.isna(site_row[j]) else ''\n            key = key_row[j] if not pd.isna(key_row[j]) else ''\n            cols.append((str(site).strip(), str(key).strip()))\n        data.columns = pd.MultiIndex.from_tuples(cols)\n        # locate date column (first column whose key contains 'date')\n        date_col = None\n        for col in data.columns:\n            if 'date' in col[1].lower():\n                date_col = col\n                break\n        # iterate sites present in header\n        sites = [s for s in sorted({c[0] for c in data.columns if str(c[0]).strip()}) if s]\n        for i in range(data.shape[0]):\n            raw_date = None\n            if date_col is not None:\n                raw_date = data.at[i, date_col]\n            try:\n                date = pd.to_datetime(raw_date, errors='coerce')\n            except Exception:\n                date = pd.NaT\n            for site in sites:\n                # find enterococcus column(s) for this site\n                enter_cols = [c for c in data.columns if c[0]==site and 'enteroc' in c[1].lower()]\n                tag_cols = [c for c in data.columns if c[0]==site and 'tag' in c[1].lower()]\n                rain1_cols = [c for c in data.columns if c[0]==site and ('1-day' in c[1].lower() or ('1' in c[1] and 'day' in c[1] and 'rain' in c[1]) or ('1 day' in c[1].lower()))]\n                # if no site-specific 1-day rain, try any column with key contains '1-day rain'\n                if not rain1_cols:\n                    rain1_cols = [c for c in data.columns if '1-day' in c[1].lower() or ('1' in c[1] and 'day' in c[1] and 'rain' in c[1])]\n                enter_val = None\n                tag_val = ''\n                if enter_cols:\n                    enter_val = data.at[i, enter_cols[0]]\n                if tag_cols:\n                    tag_val = data.at[i, tag_cols[0]]\n                # build enterococcus_raw combining tag and enter value\n                raw = None\n                if (tag_val is not None and str(tag_val).strip() and str(tag_val).strip() != 'nan'):\n                    tv = str(tag_val).strip()\n                    ev = '' if enter_val is None else str(enter_val).strip()\n                    if tv == '<' and ev:\n                        raw = '<' + ev\n                    else:\n                        raw = tv + ev if tv and ev else (tv or ev)\n                else:\n                    raw = None if enter_val is None else str(enter_val).strip()\n                # normalize raw (empty strings -> None)\n                if raw is not None:\n                    raw = raw.strip()\n                    if raw == '' or raw.lower() == 'nan':\n                        raw = None\n                # numeric extraction\n                num = None\n                is_less = False\n                if raw is not None:\n                    if raw.startswith('<'):\n                        is_less = True\n                        m = re.search(r\"(\\d+\\.?\\d*)\", raw)\n                        if m:\n                            try:\n                                num = float(m.group(1))\n                            except Exception:\n                                num = None\n                    else:\n                        m = re.search(r\"(\\d+\\.?\\d*)\", raw)\n                        if m:\n                            try:\n                                num = float(m.group(1))\n                            except Exception:\n                                num = None\n                # rain_1day\n                rain1 = None\n                if rain1_cols:\n                    try:\n                        rraw = data.at[i, rain1_cols[0]]\n                        if rraw is not None and str(rraw).strip() and str(rraw).strip().lower()!='nan':\n                            rain1 = float(str(rraw).strip())\n                    except Exception:\n                        rain1 = None\n                beach = None\n                if title:\n                    # take text before ':' or first comma as beach name when possible\n                    t = title\n                    if ':' in t:\n                        t = t.split(':',1)[0]\n                    if ',' in t:\n                        t = t.split(',',1)[0]\n                    beach = t.strip()\n                if not beach:\n                    base = os.path.basename(f).replace('_datasheet.csv','').replace('.csv','')\n                    beach = base.replace('_',' ').title()\n                rows.append({\n                    'date': date,\n                    'beach_file': os.path.basename(f),\n                    'beach': beach,\n                    'site': site,\n                    'enterococcus_raw': raw,\n                    'enterococcus': num,\n                    'enterococcus_is_less': bool(is_less),\n                    'rain_1day': rain1,\n                })\n    return pd.DataFrame(rows)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load and parse all *_datasheet.csv files. Reads the per-file title row, the site row (row 2) and key row (row 3), builds a MultiIndex for columns, and then emits one row per site/date with columns: date (datetime), beach_file (basename), beach (title extracted from file header or derived from filename), site (site name from header), enterococcus_raw (combined Tag+Enterococcus if present), enterococcus (numeric extracted), enterococcus_is_less (bool for '<' censored values), rain_1day (float)",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "failed_rain_pct",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parsed_datasheets, boston_beaches_list):\n    beaches = set(boston_beaches_list['beach'].str.strip())\n    df = parsed_datasheets[parsed_datasheets['beach'].isin(beaches)]\n    df = df[df['enterococcus'].notna()]\n    failed = df[df['enterococcus'] > 104]\n    failed_total = len(failed)\n    if failed_total == 0:\n        pct = 0.0\n        failed_with_rain = 0\n    else:\n        failed_with_rain = int((failed['rain_1day'].fillna(0) > 0).sum())\n        pct = failed_with_rain / failed_total * 100\n    return pd.DataFrame({'pct': [round(pct, 2)], 'failed_total': [failed_total], 'failed_with_rain': [failed_with_rain]})"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "Input 0",
+            "disallowMultiInputs": true,
+            "isDynamicPort": false
+          },
+          {
+            "portID": "input-1",
+            "displayName": "Input 1",
+            "disallowMultiInputs": true,
+            "isDynamicPort": true
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter parsed datasheets to Boston Harbor beaches (use boston_beaches_list), count samples that failed (>104 enterococcus) and among them count those with rain_1day > 0. Return percentage (rounded to 2 decimals) and raw counts.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "boston_beaches_list": {
+        "x": 100,
+        "y": 580
+      },
+      "datasheets": {
+        "x": 100,
+        "y": 220
+      },
+      "file_previews": {
+        "x": 100,
+        "y": 400
+      },
+      "parsed_datasheets": {
+        "x": 100,
+        "y": 40
+      },
+      "failed_rain_pct": {
+        "x": 380,
+        "y": 310
+      }
+    },
+    "links": [
+      {
+        "linkID": "parsed_datasheets-->failed_rain_pct",
+        "source": {
+          "operatorID": "parsed_datasheets",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "failed_rain_pct",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "boston_beaches_list-->failed_rain_pct",
+        "source": {
+          "operatorID": "boston_beaches_list",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "failed_rain_pct",
+          "portID": "input-1"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}

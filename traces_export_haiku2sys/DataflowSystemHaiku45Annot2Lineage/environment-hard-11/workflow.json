@@ -1,0 +1,297 @@
+{
+  "headId": "step-agent-291-12-1781044104061",
+  "workflow": {
+    "operators": [
+      {
+        "operatorID": "load_beach_data",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    return pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', header=None)\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load beach water quality data from pleasure_bay_and_castle_island_beach_datasheet.csv with no header to inspect raw structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_beach_data_proper",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv')\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load beach water quality data from pleasure_bay_and_castle_island_beach_datasheet.csv with proper headers",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "inspect_raw_file",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    with open('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', 'r') as f:\n        lines = f.readlines()[:20]\n    return pd.DataFrame({'line': lines})\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Inspect first 20 lines of the raw CSV file to understand structure",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "load_beach_clean",
+        "operatorType": "DataLoading",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef load() -> pd.DataFrame:\n    df = pd.read_csv('data/environment/input/pleasure_bay_and_castle_island_beach_datasheet.csv', skiprows=2)\n    return df\n"
+        },
+        "inputPorts": [],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Load beach water quality data, skipping title and location rows to get proper headers at row 2",
+        "dynamicInputPorts": false,
+        "dynamicOutputPorts": false
+      },
+      {
+        "operatorID": "parse_and_identify_stations",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(load_beach_clean) -> pd.DataFrame:\n    df = load_beach_clean.copy()\n    \n    # Parse the date column\n    df['Date'] = pd.to_datetime(df['Date'], format='%B %d, %Y')\n    \n    # The columns appear to be organized by station:\n    # Pleasure Bay @ Broadway: Tag, Enterococcus\n    # Pleasure Bay @ Flagpole: Tag.1, Enterococcus.1\n    # Castle Island Playground: Tag.2, Enterococcus.2\n    \n    # Let's identify which columns belong to which station\n    # From the raw file inspection, we know:\n    # Columns: Date, 1-Day Rain, 2-Day Rain, 3-Day Rain, \n    #          Tag (Broadway), Enterococcus (Broadway),\n    #          Tag.1 (Flagpole), Enterococcus.1 (Flagpole),\n    #          Tag.2 (Island), Enterococcus.2 (Island)\n    \n    # We need samples from \"Pleasure Bay Beach\" - this includes both Broadway and Flagpole stations\n    # which are both part of Pleasure Bay Beach\n    \n    return df\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Parse dates and identify station columns. Pleasure Bay Beach has two sampling locations: Broadway and Flagpole. Tag columns contain '<' notation, Enterococcus columns contain counts.",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "identify_pleasure_bay_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(parse_and_identify_stations):\n    df = parse_and_identify_stations.copy()\n    \n    # Pleasure Bay Beach has two locations: Broadway and Flagpole\n    # Broadway: columns Enterococcus (index 5) and Tag (index 4)\n    # Flagpole: columns Enterococcus.1 (index 9) and Tag.1 (index 7)\n    \n    # Extract Pleasure Bay data for both locations\n    broadway_data = df[['Date', '1-Day Rain', 'Enterococcus']].copy()\n    broadway_data.columns = ['Date', '1-Day Rain', 'Enterococcus']\n    broadway_data['Location'] = 'Broadway'\n    \n    flagpole_data = df[['Date', '1-Day Rain', 'Enterococcus.1']].copy()\n    flagpole_data.columns = ['Date', '1-Day Rain', 'Enterococcus']\n    flagpole_data['Location'] = 'Flagpole'\n    \n    # Combine both locations\n    pleasure_bay = pd.concat([broadway_data, flagpole_data], ignore_index=True)\n    \n    # Remove rows with missing Enterococcus values\n    pleasure_bay = pleasure_bay.dropna(subset=['Enterococcus'])\n    \n    return pleasure_bay\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Extract Pleasure Bay Beach samples from both Broadway and Flagpole locations with Date, 1-Day Rain, and Enterococcus counts",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "filter_failed_samples",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "def process(identify_pleasure_bay_samples):\n    failed = identify_pleasure_bay_samples[identify_pleasure_bay_samples['Enterococcus'] > 104]\n    return failed"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Filter Pleasure Bay Beach samples that failed swimming standards (Enterococcus > 104 counts per 100ml)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      },
+      {
+        "operatorID": "calculate_average_rainfall",
+        "operatorType": "DataProcessing",
+        "operatorVersion": "N/A",
+        "operatorProperties": {
+          "code": "\ndef process(filter_failed_samples):\n    avg_rainfall = filter_failed_samples['1-Day Rain'].mean()\n    return pd.DataFrame({'average_rainfall': [avg_rainfall]})\n"
+        },
+        "inputPorts": [
+          {
+            "portID": "input-0",
+            "displayName": "input_0",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false,
+            "dependencies": []
+          }
+        ],
+        "outputPorts": [
+          {
+            "portID": "output-0",
+            "displayName": "",
+            "disallowMultiInputs": false,
+            "isDynamicPort": false
+          }
+        ],
+        "showAdvanced": false,
+        "isDisabled": false,
+        "customDisplayName": "Calculate average 1-Day Rain for failed samples (Enterococcus > 104)",
+        "dynamicInputPorts": true,
+        "dynamicOutputPorts": true
+      }
+    ],
+    "operatorPositions": {
+      "load_beach_data": {
+        "x": 100,
+        "y": 40
+      },
+      "load_beach_data_proper": {
+        "x": 100,
+        "y": 220
+      },
+      "inspect_raw_file": {
+        "x": 100,
+        "y": 400
+      },
+      "load_beach_clean": {
+        "x": 100,
+        "y": 580
+      },
+      "parse_and_identify_stations": {
+        "x": 380,
+        "y": 580
+      },
+      "identify_pleasure_bay_samples": {
+        "x": 660,
+        "y": 580
+      },
+      "filter_failed_samples": {
+        "x": 940,
+        "y": 580
+      },
+      "calculate_average_rainfall": {
+        "x": 1220,
+        "y": 580
+      }
+    },
+    "links": [
+      {
+        "linkID": "load_beach_clean-->parse_and_identify_stations",
+        "source": {
+          "operatorID": "load_beach_clean",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "parse_and_identify_stations",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "parse_and_identify_stations-->identify_pleasure_bay_samples",
+        "source": {
+          "operatorID": "parse_and_identify_stations",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "identify_pleasure_bay_samples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "identify_pleasure_bay_samples-->filter_failed_samples",
+        "source": {
+          "operatorID": "identify_pleasure_bay_samples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "filter_failed_samples",
+          "portID": "input-0"
+        }
+      },
+      {
+        "linkID": "filter_failed_samples-->calculate_average_rainfall",
+        "source": {
+          "operatorID": "filter_failed_samples",
+          "portID": "output-0"
+        },
+        "target": {
+          "operatorID": "calculate_average_rainfall",
+          "portID": "input-0"
+        }
+      }
+    ],
+    "commentBoxes": [],
+    "settings": {}
+  }
+}
