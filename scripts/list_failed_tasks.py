@@ -63,7 +63,10 @@ def find_latest_measures(results_dir: str, sut: str, workload: str) -> Optional[
         return datetime.datetime.strptime(s, "%Y%m%d_%H%M%S")
 
     files.sort(key=ts, reverse=True)
-    return files[0]
+    for path in files:
+        if os.path.getsize(path) > 0:
+            return path
+    return None
 
 
 def load_workload_answer_types(project_root: str, workload: str) -> Dict[str, str]:
@@ -114,8 +117,11 @@ def collect_failures(
     measures_path = find_latest_measures(os.path.join(project_root, "results"), sut, workload)
     measures = None
     if measures_path:
-        measures = pd.read_csv(measures_path)
-        measures["value_num"] = pd.to_numeric(measures["value"], errors="coerce")
+        try:
+            measures = pd.read_csv(measures_path)
+            measures["value_num"] = pd.to_numeric(measures["value"], errors="coerce")
+        except pd.errors.EmptyDataError:
+            measures = None
 
     failures: List[Dict] = []
     seen = set()

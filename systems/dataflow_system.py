@@ -2517,9 +2517,10 @@ class DataflowSystemGPT52DeltaStats5k(_GPT52StatsSweep):
 # Schema-only twins of the 5k stats arms: column stats OFF, only the Schema line
 # (output column names + types, data_level=1) kept. Isolates "just the schema" vs
 # "schema + full per-column stats" at the 5k operating point, for latest & delta.
-class _GPT52SchemaOnly5k(DataflowSystem):
+class _GPT52SchemaOnlySweep(DataflowSystem):
     _CONTEXT_MODE = "latest"
-    _NAME = "_GPT52SchemaOnly5k"
+    _RESULT_CHARS = 5000
+    _NAME = "_GPT52SchemaOnlySweep"
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(
@@ -2530,7 +2531,7 @@ class _GPT52SchemaOnly5k(DataflowSystem):
             data_level=1,          # Schema line only
             column_stats=False,    # stats block OFF
             attempt_reflection=True,
-            max_operator_result_char_limit=5000,
+            max_operator_result_char_limit=self._RESULT_CHARS,
             max_operator_result_cell_char_limit=3000,
             name=self._NAME,
             verbose=verbose,
@@ -2539,16 +2540,46 @@ class _GPT52SchemaOnly5k(DataflowSystem):
         )
 
 
-class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnly5k):
+class DataflowSystemGPT52Latest3kSchemaOnly(_GPT52SchemaOnlySweep):
+    """gpt-5.2, LATEST, 3k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52Latest3kSchemaOnly"
+
+
+class DataflowSystemGPT52Delta3kSchemaOnly(_GPT52SchemaOnlySweep):
+    """gpt-5.2, DELTA, 3k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52Delta3kSchemaOnly"
+
+
+class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnlySweep):
     """gpt-5.2, LATEST, 5k, schema line ON, column stats OFF."""
     _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
     _NAME = "DataflowSystemGPT52Latest5kSchemaOnly"
 
 
-class DataflowSystemGPT52Delta5kSchemaOnly(_GPT52SchemaOnly5k):
+class DataflowSystemGPT52Delta5kSchemaOnly(_GPT52SchemaOnlySweep):
     """gpt-5.2, DELTA, 5k, schema line ON, column stats OFF."""
     _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
     _NAME = "DataflowSystemGPT52Delta5kSchemaOnly"
+
+
+class DataflowSystemGPT52Latest7kSchemaOnly(_GPT52SchemaOnlySweep):
+    """gpt-5.2, LATEST, 7k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 7000
+    _NAME = "DataflowSystemGPT52Latest7kSchemaOnly"
+
+
+class DataflowSystemGPT52Delta7kSchemaOnly(_GPT52SchemaOnlySweep):
+    """gpt-5.2, DELTA, 7k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 7000
+    _NAME = "DataflowSystemGPT52Delta7kSchemaOnly"
 
 
 # ---------------------------------------------------------------------------
@@ -2584,6 +2615,20 @@ class _GPT52SweepD2(DataflowSystem):
         )
 
 
+class DataflowSystemGPT52LatestStats3kD2(_GPT52SweepD2):
+    """gpt-5.2, LATEST, 3k, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2"
+
+
+class DataflowSystemGPT52DeltaStats3kD2(_GPT52SweepD2):
+    """gpt-5.2, DELTA, 3k, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2"
+
+
 class DataflowSystemGPT52LatestStats5kD2(_GPT52SweepD2):
     """gpt-5.2, LATEST, 5k, column stats ON + data_level=2 (Output Table profile)."""
     _CONTEXT_MODE = "latest"
@@ -2596,6 +2641,20 @@ class DataflowSystemGPT52DeltaStats5kD2(_GPT52SweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 5000
     _NAME = "DataflowSystemGPT52DeltaStats5kD2"
+
+
+class DataflowSystemGPT52LatestStats7kD2(_GPT52SweepD2):
+    """gpt-5.2, LATEST, 7k, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 7000
+    _NAME = "DataflowSystemGPT52LatestStats7kD2"
+
+
+class DataflowSystemGPT52DeltaStats7kD2(_GPT52SweepD2):
+    """gpt-5.2, DELTA, 7k, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 7000
+    _NAME = "DataflowSystemGPT52DeltaStats7kD2"
 
 
 class DataflowSystemGPT52LatestStats10kD2(_GPT52SweepD2):
@@ -2622,4 +2681,18 @@ class DataflowSystemGPT52DeltaStats5kCompact(_GPT52StatsSweep):
     _NAME = "DataflowSystemGPT52DeltaStats5kCompact"
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, static_compaction=True, *args, **kwargs)
+
+
+class DataflowSystemGPT52DeltaStats5kCompactEC(_GPT52StatsSweep):
+    """gpt-5.2, DELTA, 5k, column stats ON, data_level=1 + static compaction ON,
+    EDIT-CONVERGENCE rule (fold at the frontier operator's active-edit-run boundary;
+    monotone/cache-friendly). Identical to DeltaStats5k except the flag; vs the
+    token-rule DeltaStats5kCompact it isolates the rule change."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52DeltaStats5kCompactEC"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        # compaction_rule defaults to editConvergence agent-service side.
         super().__init__(verbose=verbose, static_compaction=True, *args, **kwargs)

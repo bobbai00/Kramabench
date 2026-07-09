@@ -289,6 +289,16 @@ class CodeAgentSystemGpt52Chars2kGuided(CodeAgentSystem):
         )
 
 
+class CodeAgentSystemGpt52Chars3kGuided(CodeAgentSystem):
+    """Chars3k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars3kGuided",
+            max_print_outputs_length=3000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
+        )
+
+
 class CodeAgentSystemGpt52Chars5kGuided(CodeAgentSystem):
     """Chars5k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
 
@@ -296,6 +306,16 @@ class CodeAgentSystemGpt52Chars5kGuided(CodeAgentSystem):
         super().__init__(
             model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars5kGuided",
             max_print_outputs_length=5000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
+        )
+
+
+class CodeAgentSystemGpt52Chars7kGuided(CodeAgentSystem):
+    """Chars7k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars7kGuided",
+            max_print_outputs_length=7000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
         )
 
 

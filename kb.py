@@ -45,7 +45,7 @@ Examples:
   ./kb.py traces --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
   ./kb.py compare --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge
 """
-import argparse, csv, json, os, re, signal, statistics, subprocess, sys, time
+import argparse, csv, json, math, os, re, signal, statistics, subprocess, sys, time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -396,11 +396,28 @@ def cmd_cost(a):
         ti = sum(r["input_tokens"] for r in recs); to = sum(r["output_tokens"] for r in recs)
         ts = sum(r["num_steps"] for r in recs)
         print(f"{s:<44}{n:>6}{('$%.2f' % tc):>11}{('$%.4f' % (tc / n)):>9}{ti:>13,}{to:>13,}{ts:>8,}")
+    if a.trim_top:
+        print("\ntrimmed $/task (drops the highest-cost PCT of tasks within each SUT):")
+        header = f"{'SUT':<44}{'trim':>7}{'kept':>9}{'dropped':>9}{'trim $':>11}{'$/task':>9}"
+        print(header)
+        print("-" * len(header))
+        for s, recs in data.items():
+            ordered = sorted(recs, key=lambda r: r["cost"], reverse=True)
+            for pct in a.trim_top:
+                if pct < 0 or pct >= 100:
+                    sys.exit("--trim-top values must be in [0, 100)")
+                drop = math.floor(len(ordered) * pct / 100)
+                kept = ordered[drop:] if drop else ordered
+                tc = sum(r["cost"] for r in kept)
+                print(f"{s:<44}{(str(pct) + '%'):>7}{len(kept):>9}{drop:>9}"
+                      f"{('$%.2f' % tc):>11}{('$%.4f' % (tc / len(kept))):>9}")
     print("\n(cost = sum of stats.json cost_usd — litellm pricing, includes cache-read discounts)")
 
     for s, recs in data.items():
         miss = sum(1 for r in recs if not r["cost"])
         tag = f"  [{miss} task(s) missing cost_usd]" if miss else ""
+        if a.by == "task" and a.top <= 0:
+            continue
         print(f"\n=== {s}  (model={_first_model(s)}){tag} ===")
         if a.by == "task":
             top = sorted(recs, key=lambda r: -r["cost"])[:a.top]
@@ -859,13 +876,16 @@ def main():
           "examples:\n"
           "  kb.py cost --sut DataflowSystemGPT54DeltaSchemaConverge\n"
           "  kb.py cost --sut <S> --by difficulty\n"
+          "  kb.py cost --sut <S1> <S2> --trim-top 5 10 # drop top-cost outliers\n"
           "  kb.py cost --sut <S1> <S2>                 # compare totals\n"
           "  kb.py cost --sut <S> --by task --top 10")
     p.add_argument("--sut", required=True, nargs="+", metavar="SUT", help="one or more SUT class names")
     p.add_argument("--by", choices=["workload", "difficulty", "task"], default="workload",
                    help="breakdown dimension (default: workload)")
     p.add_argument("--top", type=int, default=20, metavar="N",
-                   help="for --by task: show top N tasks by cost (default 20)")
+                   help="for --by task: show top N tasks by cost; 0 suppresses task details (default 20)")
+    p.add_argument("--trim-top", type=float, nargs="*", default=[], metavar="PCT",
+                   help="also print $/task after dropping the highest-cost PCT of tasks per SUT")
     p.set_defaults(fn=cmd_cost)
 
     p = P("compare",
