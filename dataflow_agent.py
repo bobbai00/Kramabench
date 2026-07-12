@@ -115,6 +115,20 @@ class AgentSettings:
     # Static compaction rule (DELTA-only): auto-fold settled older events into the
     # compact deck once the trajectory is long enough, keeping the last K raw.
     static_compaction: bool = False
+    # Optional base-preserving result-decay experiment. None keeps the baseline
+    # context byte-identical apart from permanent renderer rules.
+    frontier_decay_config: Optional[dict[str, Any]] = None
+    # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
+    # one-line resolution facts. None keeps the baseline byte-identical.
+    fold_resolved_revisions_config: Optional[dict[str, Any]] = None
+    # Rank-4 static rule (LATEST): retire superseded isolated probes to a
+    # compact extracted fact once their discovery is encoded downstream.
+    probe_retirement_config: Optional[dict[str, Any]] = None
+    # Expose the read-only inspectResult pull tool (demand-paging experiments).
+    enable_inspect_tool: bool = False
+    # Write-time render prefs: agent-declared outputSummary/showOutputStatistics
+    # on createOrModifyOperator (view-only; backend always computes full data).
+    enable_render_prefs: bool = False
     # How DELTA compacts over budget: "sliding" (drop oldest events) or "compress"
     # (fold the prefix into a stats deck, resume raw delta). Default "compress".
     compaction_strategy: str = "compress"
@@ -174,6 +188,16 @@ class AgentSettings:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
         if self.include_operator_properties is not None:
             payload["includeOperatorProperties"] = self.include_operator_properties
+        if self.frontier_decay_config is not None:
+            payload["frontierDecayConfig"] = self.frontier_decay_config
+        if self.fold_resolved_revisions_config is not None:
+            payload["foldResolvedRevisionsConfig"] = self.fold_resolved_revisions_config
+        if self.probe_retirement_config is not None:
+            payload["probeRetirementConfig"] = self.probe_retirement_config
+        if self.enable_inspect_tool:
+            payload["enableInspectTool"] = True
+        if self.enable_render_prefs:
+            payload["enableRenderPrefs"] = True
         return payload
 
 
@@ -793,6 +817,11 @@ class DataflowAgent:
             agent_turns: bool = False,
             context_window_tokens: int = 0,
             static_compaction: bool = False,
+            frontier_decay_config: Optional[dict[str, Any]] = None,
+            fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
+            probe_retirement_config: Optional[dict[str, Any]] = None,
+            enable_inspect_tool: bool = False,
+            enable_render_prefs: bool = False,
             compaction_strategy: str = "compress",
             deck_sample_ratio: float = 0.10,
             error_reflection: bool = False,
@@ -868,6 +897,11 @@ class DataflowAgent:
             agent_turns=agent_turns,
             context_window_tokens=context_window_tokens,
             static_compaction=static_compaction,
+            frontier_decay_config=frontier_decay_config,
+            fold_resolved_revisions_config=fold_resolved_revisions_config,
+            probe_retirement_config=probe_retirement_config,
+            enable_inspect_tool=enable_inspect_tool,
+            enable_render_prefs=enable_render_prefs,
             compaction_strategy=compaction_strategy,
             deck_sample_ratio=deck_sample_ratio,
             error_reflection=error_reflection,

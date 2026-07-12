@@ -152,8 +152,10 @@ def _spawn(sut, workload, task_ids, oracle, logpath):
         cmd += ["--task_id", *task_ids]
     if oracle:
         cmd.append("--use_truth_subset")
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
     p = subprocess.Popen(cmd, cwd=KB_ROOT, stdout=open(logpath, "w"),
-                         stderr=subprocess.STDOUT)
+                         stderr=subprocess.STDOUT, env=env)
     _PROCS.append(p)
     return p
 
@@ -193,7 +195,8 @@ def run_groups(sut, groups, oracle=True, parallel=False, watchdog_min=8,
                isolate=False, label="run"):
     """groups: {workload: [task_ids]}  ([] = whole workload).  Returns logdir."""
     ts = time.strftime("%Y%m%d_%H%M%S")
-    logdir = KB_ROOT / "logs" / f"kb-{label}-{ts}"
+    safe_sut = re.sub(r"[^A-Za-z0-9_.-]+", "_", sut)
+    logdir = KB_ROOT / "logs" / f"kb-{label}-{safe_sut}-{ts}-{os.getpid()}"
     logdir.mkdir(parents=True, exist_ok=True)
     print(f"[kb] {sut} | oracle={oracle} parallel={parallel} isolate={isolate} "
           f"watchdog={watchdog_min}min")
@@ -216,8 +219,17 @@ def run_groups(sut, groups, oracle=True, parallel=False, watchdog_min=8,
                 "log": str(lp), "start": time.time()}
 
     if parallel:
-        jobs = [launch(*u) for u in units]
-        _watch_and_wait(jobs, watchdog_min)
+        max_parallel = int(os.environ.get("KB_MAX_PARALLEL", "6") or "0")
+        if max_parallel > 0 and len(units) > max_parallel:
+            print(f"[kb] parallel limit: {max_parallel} concurrent unit(s)")
+            jobs = []
+            for i in range(0, len(units), max_parallel):
+                batch = [launch(*u) for u in units[i:i + max_parallel]]
+                _watch_and_wait(batch, watchdog_min)
+                jobs.extend(batch)
+        else:
+            jobs = [launch(*u) for u in units]
+            _watch_and_wait(jobs, watchdog_min)
     else:
         jobs = []
         for u in units:

@@ -299,6 +299,19 @@ class CodeAgentSystemGpt52Chars3kGuided(CodeAgentSystem):
         )
 
 
+class CodeAgentSystemGpt52Chars3kGuidedExplore(CodeAgentSystem):
+    """Exploration-mode twin of Chars3kGuided: identical settings; run with
+    kb.py --no-oracle so the prompt carries the domain-lake glob instead of
+    gold files. Separate name keeps scratch disjoint from oracle runs."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.2",
+            name="CodeAgentSystemGpt52Chars3kGuidedExplore",
+            max_print_outputs_length=3000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
+        )
+
+
 class CodeAgentSystemGpt52Chars5kGuided(CodeAgentSystem):
     """Chars5k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
 
@@ -393,6 +406,21 @@ class CodeAgentSystemGpt5MiniProxy(CodeAgentSystem):
             model_type="gpt-5-mini",
             api_base=PROXY_API_BASE,
             name="CodeAgentSystemGpt5MiniProxy",
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+
+class CodeAgentSystemGpt5MiniProxyChars3kGuided(CodeAgentSystem):
+    """gpt-5-mini proxy code agent, 3k stdout-preview cap, custom data guidance."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars3kGuided",
+            max_print_outputs_length=3000,
+            use_custom_prompt=True,
             verbose=verbose,
             *args, **kwargs
         )

@@ -57,6 +57,11 @@ class DataflowSystem(System):
         agent_turns: bool = False,
         context_window_tokens: int = 0,
         static_compaction: bool = False,
+        frontier_decay_config: Optional[Dict[str, object]] = None,
+        fold_resolved_revisions_config: Optional[Dict[str, object]] = None,
+        probe_retirement_config: Optional[Dict[str, object]] = None,
+        enable_inspect_tool: bool = False,
+        enable_render_prefs: bool = False,
         compaction_strategy: str = "compress",
         deck_sample_ratio: float = 0.10,
         error_reflection: bool = False,
@@ -157,6 +162,11 @@ class DataflowSystem(System):
         self.agent_turns = agent_turns
         self.context_window_tokens = context_window_tokens
         self.static_compaction = static_compaction
+        self.frontier_decay_config = frontier_decay_config
+        self.fold_resolved_revisions_config = fold_resolved_revisions_config
+        self.probe_retirement_config = probe_retirement_config
+        self.enable_inspect_tool = enable_inspect_tool
+        self.enable_render_prefs = enable_render_prefs
         self.compaction_strategy = compaction_strategy
         self.deck_sample_ratio = deck_sample_ratio
         self.error_reflection = error_reflection
@@ -298,6 +308,11 @@ class DataflowSystem(System):
             agent_turns=self.agent_turns,
             context_window_tokens=self.context_window_tokens,
             static_compaction=self.static_compaction,
+            frontier_decay_config=self.frontier_decay_config,
+            fold_resolved_revisions_config=self.fold_resolved_revisions_config,
+            probe_retirement_config=self.probe_retirement_config,
+            enable_inspect_tool=self.enable_inspect_tool,
+            enable_render_prefs=self.enable_render_prefs,
             compaction_strategy=self.compaction_strategy,
             deck_sample_ratio=self.deck_sample_ratio,
             error_reflection=self.error_reflection,
@@ -327,11 +342,18 @@ class DataflowSystem(System):
         Returns:
             Formatted prompt string
         """
+        subset_note = (
+            "\nNote: This is the FULL inventory of the domain's data lake — only a small "
+            "subset of these files is relevant to the question. Identify and use only the "
+            "relevant file(s); do not try to load everything.\n"
+            if getattr(self, "list_all_files", False)
+            else ""
+        )
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
 
 Data files available (use these paths to read the data):
 {json.dumps(file_paths, indent=2)}
-
+{subset_note}
 Note: All paths are relative. Some paths may contain wildcards (e.g., "folder/*" or "file-*.csv"). Use glob patterns to match and read those files.
 
 Question: {query}
@@ -382,6 +404,12 @@ Your last line MUST BE: **Final Answer: <value>**"""
         # Expand wildcards and build file paths
         if subset_files:
             file_paths = self._expand_data_sources(subset_files)
+        elif getattr(self, "list_all_files", False):
+            # Exploration-list mode: enumerate EVERY file in the domain lake in
+            # the prompt (same placement as oracle gold files). Removes the
+            # enumeration burden while keeping the selection problem open.
+            rel = os.path.relpath(self.dataset_directory)
+            file_paths = sorted(os.path.join(rel, k) for k in self.dataset.keys())
         else:
             # Use a recursive wildcard instead of listing every file
             file_paths = [os.path.relpath(self.dataset_directory) + "/**/*"]
@@ -429,6 +457,11 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "agent_turns": self.agent_turns,
                 "context_window_tokens": self.context_window_tokens,
                 "static_compaction": self.static_compaction,
+                "frontier_decay_config": self.frontier_decay_config,
+                "fold_resolved_revisions_config": self.fold_resolved_revisions_config,
+                "probe_retirement_config": self.probe_retirement_config,
+                "enable_inspect_tool": self.enable_inspect_tool,
+                "enable_render_prefs": self.enable_render_prefs,
                 "compaction_strategy": self.compaction_strategy,
                 "deck_sample_ratio": self.deck_sample_ratio,
                 "error_reflection": self.error_reflection,
@@ -2622,11 +2655,195 @@ class DataflowSystemGPT52LatestStats3kD2(_GPT52SweepD2):
     _NAME = "DataflowSystemGPT52LatestStats3kD2"
 
 
+class DataflowSystemGPT52LatestStats3kD2SmallTableControl(_GPT52SweepD2):
+    """Current-code control: Latest 3k D2 with frontier decay disabled."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2SmallTableControl"
+
+
+class DataflowSystemGPT52LatestStats3kD2FrontierDecay(_GPT52SweepD2):
+    """Latest 3k D2 with only the conservative settled-result overlay enabled."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2FrontierDecay"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            frontier_decay_config={
+                "sampleRows": 3,
+                "minStepsSinceEdit": 1,
+                "minConsumerStepsSinceEdit": 1,
+                "minConsumerStepsSinceHealthy": 1,
+            },
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
 class DataflowSystemGPT52DeltaStats3kD2(_GPT52SweepD2):
     """gpt-5.2, DELTA, 3k, column stats ON + data_level=2."""
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 3000
     _NAME = "DataflowSystemGPT52DeltaStats3kD2"
+
+
+class DataflowSystemGPT52DeltaStats3kD2FoldControl(_GPT52SweepD2):
+    """Current-code DELTA control: Delta 3k D2 with every experimental overlay off.
+
+    Fresh control for the rank-3 fold-resolved-revisions A/B — the historical
+    DataflowSystemGPT52DeltaStats3kD2 run predates the permanent renderer rules
+    (small-table stats suppression), so it is not code-matched."""
+
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2FoldControl"
+
+
+class DataflowSystemGPT52DeltaStats3kD2FoldResolved(_GPT52SweepD2):
+    """Delta 3k D2 + rank-3 fold-resolved-revisions rule (audit Rank 3).
+
+    Once a later revision of an operator has executed successfully and been
+    consumed healthily (+1 grace event), prior revisions' code/result payloads
+    render as one-line resolution facts."""
+
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2FoldResolved"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            fold_resolved_revisions_config={"graceEvents": 1},
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52LatestStats3kD2Explore(_GPT52SweepD2):
+    """Exploration-mode twin of the Latest 3k control: identical settings; the
+    exploration comes from running WITHOUT --use_truth_subset (kb.py
+    --no-oracle), so the prompt carries the domain lake's recursive glob
+    instead of the task's gold files. Separate name keeps scratch dirs
+    disjoint from the oracle runs."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2Explore"
+
+
+class DataflowSystemGPT52DeltaStats3kD2Explore(_GPT52SweepD2):
+    """Exploration-mode twin of the Delta 3k control (see Latest twin)."""
+
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2Explore"
+
+
+class DataflowSystemGPT52LatestStats3kD2ExploreList(_GPT52SweepD2):
+    """Exploration-LIST mode: run with --no-oracle, but the prompt enumerates
+    every file in the domain lake (list_all_files) instead of a glob.
+    Decomposes the discovery tax: (oracle -> list) = selection cost,
+    (list -> glob) = enumeration cost."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2ExploreList"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, *args, **kwargs)
+        self.list_all_files = True
+
+
+class DataflowSystemGPT52DeltaStats3kD2ExploreList(_GPT52SweepD2):
+    """Delta twin of the exploration-LIST mode."""
+
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2ExploreList"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, *args, **kwargs)
+        self.list_all_files = True
+
+
+class DataflowSystemGPT52LatestStats3kD2Lean3(_GPT52SweepD2):
+    """E1 lean-push arm: Latest 3k D2 with the row sample capped at 3.
+
+    Isolates the damage of a lean default render WITHOUT the pull tool.
+    Matched to DataflowSystemGPT52LatestStats3kD2SmallTableControl except
+    max_result_rows."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2Lean3"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(max_result_rows=3, verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT52LatestStats3kD2Lean3Pull(_GPT52SweepD2):
+    """E1 demand-paging arm: lean push (3-row samples) + the read-only
+    inspectResult pull tool. Pulls persist across steps via the tail
+    `# Inspections` section (append-mostly — cache-friendly by construction)."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2Lean3Pull"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(max_result_rows=3, enable_inspect_tool=True, verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT52LatestStats3kD2ProbeRetire(_GPT52SweepD2):
+    """Latest 3k D2 + rank-4 probe-retirement rule (audit Rank 4).
+
+    A settled orphan probe whose discovery is provably encoded downstream
+    (probe output value inside a quoted literal of a later healthy connected
+    operator's code) renders as a compact extracted fact instead of its table.
+    Control arm: DataflowSystemGPT52LatestStats3kD2SmallTableControl (same
+    code, overlay off)."""
+
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52LatestStats3kD2ProbeRetire"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            probe_retirement_config={"minStepsSinceEdit": 2, "minValueLength": 4},
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT52DeltaStats5kD2FreshControl(_GPT52SweepD2):
+    """Current-code control for the render-prefs A/B: Delta 5k D2, all flags
+    off. The historical DataflowSystemGPT52DeltaStats5kD2 predates the
+    permanent small-table renderer rule, so it is not code-matched."""
+
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52DeltaStats5kD2FreshControl"
+
+
+class DataflowSystemGPT52DeltaStats5kD2RenderPrefs(_GPT52SweepD2):
+    """DELTA 5k D2 + write-time render prefs: the agent declares per-version
+    outputSummary (minimal|standard) and showOutputStatistics on
+    createOrModifyOperator; a landed version's prefs govern the observations
+    rendered while it was active (append-only — old events never change).
+    Comparators: DataflowSystemGPT52DeltaStats5kD2 (stats base) and the
+    Delta 5k schema-only arm."""
+
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52DeltaStats5kD2RenderPrefs"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(enable_render_prefs=True, verbose=verbose, *args, **kwargs)
 
 
 class DataflowSystemGPT52LatestStats5kD2(_GPT52SweepD2):
@@ -2669,6 +2886,84 @@ class DataflowSystemGPT52DeltaStats10kD2(_GPT52SweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 10000
     _NAME = "DataflowSystemGPT52DeltaStats10kD2"
+
+
+# ---------------------------------------------------------------------------
+# gpt-5-mini 3k replica of the gpt-5.2 data-context sweep. These hold the
+# DataflowAgent knobs constant with the gpt-5.2 arms and only change model_type.
+# ---------------------------------------------------------------------------
+class _GPT5MiniSchemaOnlySweep(DataflowSystem):
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "_GPT5MiniSchemaOnlySweep"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            column_stats=False,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatest3kSchemaOnly(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, LATEST, 3k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT5MiniLatest3kSchemaOnly"
+
+
+class DataflowSystemGPT5MiniDelta3kSchemaOnly(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, DELTA, 3k, schema line ON, column stats OFF."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT5MiniDelta3kSchemaOnly"
+
+
+class _GPT5MiniSweepD2(DataflowSystem):
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "_GPT5MiniSweepD2"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemGPT5MiniLatestStats3kD2(_GPT5MiniSweepD2):
+    """gpt-5-mini, LATEST, 3k, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT5MiniLatestStats3kD2"
+
+
+class DataflowSystemGPT5MiniDeltaStats3kD2(_GPT5MiniSweepD2):
+    """gpt-5-mini, DELTA, 3k, column stats ON + data_level=2."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT5MiniDeltaStats3kD2"
 
 
 # Static-compaction demonstrator: byte-identical to DataflowSystemGPT52DeltaStats5k

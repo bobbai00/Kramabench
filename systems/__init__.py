@@ -38,13 +38,30 @@ from .dataflow_system import (
     DataflowSystemGPT52Latest7kSchemaOnly,
     DataflowSystemGPT52Delta7kSchemaOnly,
     DataflowSystemGPT52LatestStats3kD2,
+    DataflowSystemGPT52LatestStats3kD2SmallTableControl,
+    DataflowSystemGPT52LatestStats3kD2FrontierDecay,
     DataflowSystemGPT52DeltaStats3kD2,
+    DataflowSystemGPT52DeltaStats3kD2FoldControl,
+    DataflowSystemGPT52DeltaStats3kD2FoldResolved,
+    DataflowSystemGPT52LatestStats3kD2ProbeRetire,
+    DataflowSystemGPT52LatestStats3kD2Explore,
+    DataflowSystemGPT52DeltaStats3kD2Explore,
+    DataflowSystemGPT52LatestStats3kD2ExploreList,
+    DataflowSystemGPT52DeltaStats3kD2ExploreList,
+    DataflowSystemGPT52DeltaStats5kD2FreshControl,
+    DataflowSystemGPT52DeltaStats5kD2RenderPrefs,
+    DataflowSystemGPT52LatestStats3kD2Lean3,
+    DataflowSystemGPT52LatestStats3kD2Lean3Pull,
     DataflowSystemGPT52LatestStats5kD2,
     DataflowSystemGPT52DeltaStats5kD2,
     DataflowSystemGPT52LatestStats7kD2,
     DataflowSystemGPT52DeltaStats7kD2,
     DataflowSystemGPT52LatestStats10kD2,
     DataflowSystemGPT52DeltaStats10kD2,
+    DataflowSystemGPT5MiniLatest3kSchemaOnly,
+    DataflowSystemGPT5MiniDelta3kSchemaOnly,
+    DataflowSystemGPT5MiniLatestStats3kD2,
+    DataflowSystemGPT5MiniDeltaStats3kD2,
     DataflowSystemGPT52DeltaStats5kCompact,
     DataflowSystemGPT52DeltaStats5kCompactEC,
     # parallel-tool-calls ablation (parallel OFF, window OFF, else identical)
@@ -136,6 +153,6 @@ from .dataflow_system import (
     DataflowSystemLocalLlmReactText4,
     DataflowSystemLocalLlmReactText5,
 )
-from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52Chars2kGuided, CodeAgentSystemGpt52Chars3kGuided, CodeAgentSystemGpt52Chars5kGuided, CodeAgentSystemGpt52Chars7kGuided, CodeAgentSystemGpt52Chars10kGuided, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt54Proxy
+from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52Chars2kGuided, CodeAgentSystemGpt52Chars3kGuided, CodeAgentSystemGpt52Chars3kGuidedExplore, CodeAgentSystemGpt52Chars5kGuided, CodeAgentSystemGpt52Chars7kGuided, CodeAgentSystemGpt52Chars10kGuided, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt5MiniProxyChars3kGuided, CodeAgentSystemGpt54Proxy
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem
 from .dataflow_agent_session import DataflowAgentSessionRunner, DataflowAgentSessionSystem
