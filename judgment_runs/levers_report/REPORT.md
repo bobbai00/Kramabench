@@ -92,9 +92,44 @@ communities. The key choice was made at operator-creation time, before any
 history existed in either context; no mechanism connects it to the history
 lever. Modeling variance.
 
-**C3 verdict on accuracy**: 0 attributable flips post-recovery — consistent
-with the pre-recovery audit's 0/26. Exposing versions does not buy oracle-
-mode accuracy.
+**C3 verdict on accuracy**: 0 attributable flips post-recovery among the
+DIRECTLY compared star arms — consistent with the pre-recovery audit's 0/26.
+
+### C3 mechanism exhibit — the thrash blind spot, directly observed (`astronomy-hard-9`)
+
+The blind-spot prediction: LATEST folds superseded attempts away, so the
+agent loses the OUTPUTS of its own past probes and repeats them. Task:
+parse the fixed-width OMNI2 space-weather file's Ap column and find the
+lag maximizing correlation with TLE-derived drag (gold: 24).
+
+- **Delta (schema-only)**: 5 parsing submissions across 4 steps
+  (spec ×2, raw ×1, ap ×2) — each attempt's OUTPUT stays inline in the
+  trajectory; the agent never repeats a probe. 9 steps, answer 24, PASS.
+- **Latest (schema-only)**: ground `omni2_spec` for SIX consecutive steps,
+  then later submitted `omni2_ap_colscan` with numerically IDENTICAL
+  column-slice code at steps 15, 16, 17, and a one-constant variant at
+  18, 19, 20 — re-running a scan whose results it had already produced,
+  because the superseded scans' outputs were no longer in view (the
+  folded snapshot shows only the current version + latest result;
+  attempt-reflection supplies edit counts, not past outputs). It exhausted
+  all 25 steps and returned NO answer.
+
+Caveat and override: astronomy-hard-9 is in the chronic set, so its
+pass/fail alone proves nothing — but the twin gate permits trace override,
+and identical-probe repetition is the mechanism itself, directly visible.
+The arm-wide signature points the same way: Latest takes +13–18% more
+steps than Delta in both C3 pairs, and the step-asymmetry tail is
+one-directional (archeology-hard-5 7→19 with the parse-op ensemble
+recreated at steps 9/10/11/12; astronomy-hard-8 7→15;
+astronomy-hard-10 9→16; wildfire-hard-19 8→25).
+
+**The counter-mechanism exists too** (from the pre-recovery audit):
+`environment-hard-13` — Delta rewrote its tidy operator four times and then
+answered from a STALE value carried in its own visible history ("returns
+stale 12"). History prevents re-derivation but enables answering from
+superseded state; the folded view prevents staleness but forces
+re-derivation. Neither dominates on accuracy (0 net attributable); the
+trade shows up as C3's cost structure (steps vs bytes, §6).
 
 ## 6. Cost: the both-pass same-answer cohorts (recovered)
 
