@@ -190,6 +190,48 @@ Latest-stats). Treat as hypotheses; the star is the controlled result.
    context effect — and it reduced this entire star to one clean,
    mechanically-explained accuracy case and three clean cost mechanisms.
 
+## 9. Operator footprints — WHERE each lever binds (programmatic)
+
+For every operator in the recovered arms, structural features (role, BFS
+depth, fan-in/out, code lines, files read) were joined with per-file
+properties (extension, size, engine-computed dirtiness parsed from full-data
+Output Table profiles) and each lever's render footprint:
+cap-bound (C1: observation hits the 3k cap), informative-stats (C2: the
+stats block carries duplicates / material nulls / dirty-profile facts),
+multi-edit (C3: >=2 landed versions, i.e. history renders at all).
+Script: scripts/analyze_lever_footprints.py; data: footprints.json.
+
+| Property | C1 cap-bound (n=334/591) | C2 informative (n=281/527) | C3 multi-edit (n=106/591) |
+| --- | --- | --- | --- |
+| role | **64% source**, 5% sink | **68% source**, 3% sink | 52% source, 41% interior, 9% sink |
+| DAG depth (med) | 0 | 0 | 0 |
+| code lines (med) | 4 | 3 | 7 |
+| file size (med) | **81 KB** (vs 1) | **72 KB** (vs 18) | **5 KB** (vs 125) |
+| file dirtiness | unnamed-headers 16% vs 2%; empty-rows 7% vs 2% | informative BY duplicates/nulls (definition) | empty-rows 12% vs 3%; formats .text/.cdf/.npz overrepresented |
+
+Three regularities:
+
+1. **Every lever binds at the DAG's data edge.** Cap-bound, informative-stats
+   and multi-edit populations are all depth-0-centered and source-dominated;
+   sinks are touched by nothing (5%/3%/9%) — derived answer tables are small
+   and clean, and the small-table rule already handles them. Context levers
+   are about the RAW DATA BOUNDARY, not the analytical interior.
+2. **Sampling and profiling are VOLUME levers; history is a DIFFICULTY
+   lever.** The two data levers bind on big files (med 81/72 KB vs 1/18) with
+   short loader code; history binds on SMALL files (med 5 KB vs 125!) with
+   longer code and weird formats — compact fixed-width/binary-ish files
+   (.text OMNI2, .cdf, .npz) whose parsing takes iteration. Big clean CSVs
+   load in one shot and never generate history.
+3. **Dirtiness routes between levers**: header/structure dirt (unnamed
+   headers, empty rows) marks cap-bound and multi-edit loads (the parse-
+   iteration population), while value-level dirt (duplicates, nulls) is
+   precisely what makes stats informative (legal-hard-15's 47%).
+
+Policy implication: a render policy can PREDICT where budget helps from
+observable features — (file size × role) targets sampling/profiling;
+(format weirdness × structure dirt) predicts revision history and error
+context; sinks and small derived tables need neither.
+
 Artifacts: flips_recovered.json, chronic_flippers.json (this dir);
 star-recovery logs logs/star-recovery-20260712_101634; case traces in
 system_scratch/<arm>/legal-hard-15 and .../environment-easy-3.
