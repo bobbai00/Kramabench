@@ -852,7 +852,8 @@ def task_op_features(sut, task):
         f0 = files[0] if files else None
         feats.append(dict(op=op,
                           role="source" if fin[op] == 0 else ("sink" if fout[op] == 0 else "interior"),
-                          depth=dep(op), loc=code.count("\n") + 1, edits=edits.get(op, 1),
+                          depth=dep(op), fanin=fin[op], fanout=fout[op], parents=parents[op],
+                          loc=code.count("\n") + 1, edits=edits.get(op, 1),
                           file=f0, ext=os.path.splitext(f0)[1] if f0 else None,
                           fsize_kb=(os.path.getsize(KB_ROOT / f0) // 1024
                                     if f0 and (KB_ROOT / f0).exists() else None)))
@@ -922,6 +923,383 @@ def cmd_venn(a):
     topB = sorted(cheapB, key=lambda t: -(ca[t]["cost"] - cb[t]["cost"]))[:a.top]
     _cat_profile(A, topA, f"both-pass, A much cheaper (top {len(topA)})")
     _cat_profile(B, topB, f"both-pass, B much cheaper (top {len(topB)})")
+
+
+# ----------------------------- case-metrics (per-Venn-case op/cardinality/file/data-issue metrics) -----------------------------
+STATS_ARM = "DataflowSystemGPT52DeltaStats3kD2"  # data-issue source: engine-computed full-data Output Table profiles
+_TBL = re.compile(r"Output Table: (\d+) rows?, (\d+) cols")
+_ELISION = re.compile(r"\n\s*\.\.\.(\t\.\.\.)+")
+_TRUNC = ("…(truncated", "...[truncated]...")
+_DELTA_OP = re.compile(r"^- operator (\S+) (?:added|updated)\s*$", re.M)
+_LATEST_OP = re.compile(r"^#{2,4} (?:Operator )?`(\S+)` \(\w+\)\s*$", re.M)
+_SECTION = re.compile(r"^#{1,6} ", re.M)
+
+
+def _final_context(sut, task):
+    doc = _load(KB_ROOT / "system_scratch" / sut / task / "react_steps.json")
+    steps = [s for s in (doc.get("steps", []) if isinstance(doc, dict) else [])
+             if s.get("role") == "agent" and s.get("inputMessages")]
+    return "\n".join(str(m.get("content", "")) for m in steps[-1]["inputMessages"]) if steps else ""
+
+
+def _op_blocks(ctx):
+    """opId -> LAST rendered block for that op. Handles both grammars (DELTA
+    '- operator X added/updated' event lines; LATEST '### Operator `x` (Type)'
+    sections). Block ends at the next op header or markdown section header,
+    ignoring header-lookalikes inside ``` fences (col-0 python comments)."""
+    fences, pos = [], 0
+    while True:
+        i = ctx.find("```", pos)
+        if i < 0:
+            break
+        j = ctx.find("```", i + 3)
+        fences.append((i, len(ctx) if j < 0 else j + 3))
+        pos = len(ctx) if j < 0 else j + 3
+    outside = lambda i: all(not (a <= i < b) for a, b in fences)
+    heads = sorted([(m.start(), m.group(1)) for p in (_DELTA_OP, _LATEST_OP)
+                    for m in p.finditer(ctx) if outside(m.start())])
+    stops = sorted([m.start() for m in _SECTION.finditer(ctx) if outside(m.start())]
+                   + [h[0] for h in heads])
+    out = {}
+    for start, op in heads:
+        nl = ctx.find("\n", start)
+        begin = len(ctx) if nl < 0 else nl + 1
+        end = min((s for s in stops if s > start), default=len(ctx))
+        out[op] = ctx[begin:min(end, begin + 12000)]
+    return out
+
+
+_FROWS = {}
+
+
+def _file_line_rows(path):
+    """Raw row count for line-oriented formats (data-row count for headered csv/tsv)."""
+    if path in _FROWS:
+        return _FROWS[path]
+    p, r = KB_ROOT / path, None
+    if p.exists() and p.suffix.lower() in (".csv", ".tsv", ".txt", ".jsonl", ".tle", ".text"):
+        try:
+            with open(p, "rb") as f:
+                r = sum(ch.count(b"\n") for ch in iter(lambda: f.read(1 << 20), b""))
+            if p.suffix.lower() in (".csv", ".tsv"):
+                r = max(0, r - 1)
+        except OSError:
+            r = None
+    _FROWS[path] = r
+    return r
+
+
+def _block_issues(b):
+    """Data-issue facts from one rendered stats block (engine full-data profile)."""
+    iss, rows = {}, None
+    m = _TBL.search(b)
+    if m:
+        rows = int(m.group(1))
+    m = re.search(r"duplicate rows: (\d+) of (\d+)", b)
+    if m:
+        iss["dup_pct"] = 100 * int(m.group(1)) / max(1, int(m.group(2)))
+    m = re.search(r"empty rows: (\d+) of (\d+)", b)
+    if m:
+        iss["empty_rows_pct"] = 100 * int(m.group(1)) / max(1, int(m.group(2)))
+    m = re.search(r"empty columns: \[([^\]]*)\]", b)
+    if m:
+        iss["empty_cols"] = m.group(1).count('"') // 2
+    m = re.search(r"headers: (\d+) of (\d+) columns are unnamed", b)
+    if m:
+        iss["unnamed_cols"] = int(m.group(1))
+    nulls = [int(x) for x in re.findall(r"null=(\d+)", b)]
+    if rows and nulls:
+        iss["maxnull_pct"] = 100 * max(nulls) / rows
+    cols = re.findall(r'^\s*- "[^"]+" \((\w+)\)', b, re.M)
+    if cols:
+        iss["str_share"] = 100 * sum(1 for c in cols if c == "str") / len(cols)
+    return iss, rows
+
+
+_LAKE = None
+
+
+def lake_data_issues():
+    """file -> engine-measured facts (rows_loaded + dirtiness), parsed from the
+    stats arm's rendered profiles of the source op(s) that load it. Dirtiness is
+    the MAX over sightings (rawest load); rows_loaded likewise."""
+    global _LAKE
+    if _LAKE is not None:
+        return _LAKE
+    _LAKE = {}
+    base = KB_ROOT / "system_scratch" / STATS_ARM
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if not d.is_dir():
+            continue
+        blocks = _op_blocks(_final_context(STATS_ARM, d.name))
+        for f in task_op_features(STATS_ARM, d.name):
+            if f["role"] != "source" or not f["file"] or f["op"] not in blocks:
+                continue
+            iss, rows = _block_issues(blocks[f["op"]])
+            rec = _LAKE.setdefault(f["file"], {"rows_loaded": None, "sightings": 0})
+            rec["sightings"] += 1
+            if rows is not None:
+                rec["rows_loaded"] = max(rec["rows_loaded"] or 0, rows)
+            for k, v in iss.items():
+                rec[k] = max(rec.get(k) or 0, v)
+    return _LAKE
+
+
+def _cap_of(sut):
+    m = re.search(r"(\d+)k", sut)
+    return int(m.group(1)) * 1000 if m else 3000
+
+
+def task_op_metrics(sut, task):
+    """task_op_features + render-derived cardinality per op: out_rows/out_cols
+    (the always-rendered 'Output Table: N rows, M cols'), in_rows (sources: the
+    engine-loaded file rows from the stats arm, else raw line count; interiors:
+    sum of parents' out_rows), shown_rows (table body lines actually rendered),
+    capped (render hit the char cap: elision/truncation marks or near-cap block)."""
+    feats = task_op_features(sut, task)
+    blocks = _op_blocks(_final_context(sut, task))
+    lake, cap = lake_data_issues(), _cap_of(sut)
+    by = {f["op"]: f for f in feats}
+    for f in feats:
+        b = blocks.get(f["op"], "")
+        m = None
+        for m in _TBL.finditer(b):
+            pass
+        f["out_rows"] = int(m.group(1)) if m else None
+        f["out_cols"] = int(m.group(2)) if m else None
+        f["cells"] = f["out_rows"] * f["out_cols"] if m else None
+        f["shown_rows"] = sum(1 for ln in b.splitlines() if ln.count("\t") >= 2)
+        f["capped"] = bool(_ELISION.search(b)) or any(t in b for t in _TRUNC) or len(b) >= 0.88 * cap
+    for f in feats:
+        if f["role"] == "source":
+            fi = lake.get(f["file"] or "", {})
+            f["in_rows"] = fi.get("rows_loaded") if fi.get("rows_loaded") is not None \
+                else (_file_line_rows(f["file"]) if f["file"] else None)
+            for k in ("dup_pct", "empty_rows_pct", "empty_cols", "unnamed_cols", "maxnull_pct", "str_share"):
+                f[k] = fi.get(k)
+        else:
+            pr = [by[p]["out_rows"] for p in f["parents"] if p in by and by[p]["out_rows"] is not None]
+            f["in_rows"] = sum(pr) if pr else None
+    return feats
+
+
+def _med(xs):
+    xs = sorted(x for x in xs if x is not None)
+    return xs[len(xs) // 2] if xs else None
+
+
+def _p90(xs):
+    xs = sorted(x for x in xs if x is not None)
+    return xs[min(len(xs) - 1, int(0.9 * len(xs)))] if xs else None
+
+
+def _fmtn(v):
+    if v is None:
+        return "-"
+    if isinstance(v, float):
+        return f"{v:.1f}" if v < 100 else f"{v:,.0f}"
+    return f"{v:,}"
+
+
+def _arm_agg(ops, tasks):
+    """Aggregate op metrics for one arm over one category's tasks."""
+    if not ops:
+        return {}
+    src = [o for o in ops if o["role"] == "source"]
+    inter = [o for o in ops if o["role"] == "interior"]
+    sink = [o for o in ops if o["role"] == "sink"]
+    reduce_n = [o for o in inter if o["in_rows"] and o["out_rows"] is not None]
+    return dict(
+        n_ops=len(ops), ops_per_task=round(len(ops) / max(1, len(tasks)), 1),
+        depth_mean=round(sum(o["depth"] for o in ops) / len(ops), 2),
+        depth_med=_med([o["depth"] for o in ops]),
+        depth_max=max(o["depth"] for o in ops),
+        roles={"source": len(src), "interior": len(inter), "sink": len(sink)},
+        multi_edit_pct=round(100 * sum(1 for o in ops if o["edits"] >= 2) / len(ops)),
+        loc_med=_med([o["loc"] for o in ops]),
+        capped_pct=round(100 * sum(1 for o in ops if o["capped"]) / len(ops)),
+        src_out_rows_med=_med([o["out_rows"] for o in src]),
+        src_out_rows_p90=_p90([o["out_rows"] for o in src]),
+        src_in_rows_med=_med([o["in_rows"] for o in src]),
+        inter_out_rows_med=_med([o["out_rows"] for o in inter]),
+        inter_out_rows_p90=_p90([o["out_rows"] for o in inter]),
+        sink_out_rows_med=_med([o["out_rows"] for o in sink]),
+        cells_med=_med([o["cells"] for o in ops]),
+        cells_p90=_p90([o["cells"] for o in ops]),
+        rows_by_depth={d: _med([o["out_rows"] for o in ops
+                                if (o["depth"] if o["depth"] < 2 else 2) == d])
+                       for d in (0, 1, 2)},
+        reduce_share_pct=(round(100 * sum(1 for o in reduce_n if o["out_rows"] < 0.95 * o["in_rows"])
+                                / len(reduce_n)) if reduce_n else None),
+        shown_vs_out_med=_med([100 * o["shown_rows"] / o["out_rows"]
+                               for o in ops if o["out_rows"] and o["shown_rows"]]),
+    )
+
+
+def _files_agg(ops):
+    """Distinct source files across a category's ops (one record per file)."""
+    files = {}
+    for o in ops:
+        if o["role"] == "source" and o["file"]:
+            files[o["file"]] = o
+    recs = list(files.values())
+    if not recs:
+        return {}
+    dirty = [r for r in recs if (r.get("dup_pct") or 0) >= 5 or (r.get("empty_rows_pct") or 0) > 0
+             or (r.get("unnamed_cols") or 0) > 0 or (r.get("maxnull_pct") or 0) >= 20]
+    return dict(
+        n_files=len(recs),
+        formats=dict(Counter(r["ext"] for r in recs if r["ext"]).most_common()),
+        size_kb_med=_med([r["fsize_kb"] for r in recs]),
+        size_kb_p90=_p90([r["fsize_kb"] for r in recs]),
+        size_kb_max=max((r["fsize_kb"] or 0) for r in recs),
+        rows_med=_med([r["in_rows"] for r in recs]),
+        rows_max=max((r["in_rows"] or 0) for r in recs),
+        dirty_files=len(dirty), dirty_pct=round(100 * len(dirty) / len(recs)),
+        dup5_files=sum(1 for r in recs if (r.get("dup_pct") or 0) >= 5),
+        emptyrow_files=sum(1 for r in recs if (r.get("empty_rows_pct") or 0) > 0),
+        unnamed_files=sum(1 for r in recs if (r.get("unnamed_cols") or 0) > 0),
+        highnull_files=sum(1 for r in recs if (r.get("maxnull_pct") or 0) >= 20),
+        str_share_med=_med([r.get("str_share") for r in recs]),
+        files={r["file"]: dict(ext=r["ext"], kb=r["fsize_kb"], rows=r["in_rows"],
+                               dup_pct=round(r.get("dup_pct") or 0, 1),
+                               empty_rows_pct=round(r.get("empty_rows_pct") or 0, 1),
+                               unnamed=r.get("unnamed_cols") or 0,
+                               maxnull_pct=round(r.get("maxnull_pct") or 0, 1),
+                               str_share=round(r.get("str_share") or 0)) for r in recs},
+    )
+
+
+def cmd_case_metrics(a):
+    """Per-Venn-case metrics for an A-vs-B pair: operator depth + cardinality
+    (in/out rows, incl. source input tables), source file size/format/rows,
+    engine-measured data issues, render pressure. Prints per-category detail +
+    a cross-category matrix; dumps everything to JSON."""
+    A, B = a.sut
+    sa, sb = answer_scores(A), answer_scores(B)
+    ca = {r["task_id"]: r for r in load_cost_stats(A)}
+    cb = {r["task_id"]: r for r in load_cost_stats(B)}
+    th, common = a.th, sorted(set(sa) & set(sb))
+    both = [t for t in common if sa[t] >= th and sb[t] >= th]
+    onlyA = [t for t in common if sa[t] >= th and sb[t] < th]
+    onlyB = [t for t in common if sb[t] >= th and sa[t] < th]
+    gap = lambda t: (cb[t]["cost"] - ca[t]["cost"]) / max(ca[t]["cost"], cb[t]["cost"], 1e-9)
+    costed = [t for t in both if t in ca and t in cb]
+    cheapA = [t for t in costed if gap(t) >= a.gap]
+    cheapB = [t for t in costed if -gap(t) >= a.gap]
+    chron = set()
+    cf = Path(a.chronic) if a.chronic else (KB_ROOT / "judgment_runs/levers_report/chronic_flippers.json")
+    if cf.exists():
+        chron = set(json.load(open(cf)))
+    short = lambda s: s.replace("DataflowSystemGPT52", "")
+    tag = lambda t: t + ("*" if t in chron else "")
+
+    print(f"A = {A}\nB = {B}")
+    print(f"pass th = {th}; cost-gap floor = {a.gap:.0%} of the dearer arm (twin noise); * = chronic flipper")
+    print(f"venn: A-only {len(onlyA)} | both {len(both)} | B-only {len(onlyB)} | "
+          f"neither {len(common) - len(onlyA) - len(onlyB) - len(both)}")
+    print(f"both-pass cost: A cheaper on {sum(1 for t in costed if gap(t) > 0)} "
+          f"(material ≥{a.gap:.0%}: {len(cheapA)}) | B cheaper on {sum(1 for t in costed if gap(t) < 0)} "
+          f"(material: {len(cheapB)})")
+
+    cats = [(f"{short(A)} wins, {short(B)} fails", onlyA, "A"),
+            (f"{short(B)} wins, {short(A)} fails", onlyB, "B"),
+            (f"both pass, {short(A)} materially cheaper", cheapA, "A"),
+            (f"both pass, {short(B)} materially cheaper", cheapB, "B")]
+    dump = {"A": A, "B": B, "th": th, "gap": a.gap, "categories": {}}
+    matrix = []
+
+    for label, tasks, side in cats:
+        print(f"\n{'=' * 100}\nCASE: {label}  ({len(tasks)} tasks)")
+        if not tasks:
+            matrix.append((label, {}, {}, {}))
+            continue
+        opsA = {t: task_op_metrics(A, t) for t in tasks}
+        opsB = {t: task_op_metrics(B, t) for t in tasks}
+        print(f"{'task':28s} {'cost A/B $':>13s} {'steps A/B':>10s} {'ops A/B':>8s} "
+              f"{'maxD A/B':>9s} {'srcRows':>9s} issues")
+        per_task = {}
+        for t in tasks:
+            fa, fb = opsA[t], opsB[t]
+            srcrows = sum(o["in_rows"] or 0 for o in fa if o["role"] == "source") or \
+                      sum(o["in_rows"] or 0 for o in fb if o["role"] == "source")
+            src_ops = [o for o in fa + fb if o["role"] == "source"]
+            iss = sorted({nm for o in src_ops for nm, key, floor in
+                          (("dup", "dup_pct", 5), ("empty", "empty_rows_pct", 0),
+                           ("unnamed", "unnamed_cols", 0), ("null", "maxnull_pct", 20))
+                          if (o.get(key) or 0) > floor})
+            row = dict(cost_a=ca.get(t, {}).get("cost"), cost_b=cb.get(t, {}).get("cost"),
+                       steps_a=ca.get(t, {}).get("num_steps"), steps_b=cb.get(t, {}).get("num_steps"),
+                       ops_a=len(fa), ops_b=len(fb),
+                       maxd_a=max([o["depth"] for o in fa], default=0),
+                       maxd_b=max([o["depth"] for o in fb], default=0),
+                       src_rows=srcrows, issues=iss)
+            per_task[t] = row
+            print(f"{tag(t):28s} {(row['cost_a'] or 0):>6.2f}/{(row['cost_b'] or 0):<6.2f} "
+                  f"{(row['steps_a'] or 0):>4d}/{(row['steps_b'] or 0):<5d} {row['ops_a']:>3d}/{row['ops_b']:<4d} "
+                  f"{row['maxd_a']:>4d}/{row['maxd_b']:<4d} {srcrows:>9,d} {','.join(iss) or '-'}")
+        aggA = _arm_agg([o for t in tasks for o in opsA[t]], tasks)
+        aggB = _arm_agg([o for t in tasks for o in opsB[t]], tasks)
+        fils = _files_agg([o for t in tasks for o in (opsA[t] + opsB[t])])
+        for nm, g in ((short(A), aggA), (short(B), aggB)):
+            if not g:
+                continue
+            print(f"  [{nm}] ops={g['n_ops']} ({g['ops_per_task']}/task) roles={g['roles']} "
+                  f"multi-edit={g['multi_edit_pct']}% capped={g['capped_pct']}% LOCmed={g['loc_med']}")
+            print(f"         depth mean/med/max={g['depth_mean']}/{g['depth_med']}/{g['depth_max']}  "
+                  f"rows@depth0/1/2+={_fmtn(g['rows_by_depth'][0])}/{_fmtn(g['rows_by_depth'][1])}/{_fmtn(g['rows_by_depth'][2])}")
+            print(f"         cardinality: src in/out med={_fmtn(g['src_in_rows_med'])}/{_fmtn(g['src_out_rows_med'])} "
+                  f"(p90 {_fmtn(g['src_out_rows_p90'])})  interior out med={_fmtn(g['inter_out_rows_med'])} "
+                  f"(p90 {_fmtn(g['inter_out_rows_p90'])})  sink={_fmtn(g['sink_out_rows_med'])}  "
+                  f"cells med/p90={_fmtn(g['cells_med'])}/{_fmtn(g['cells_p90'])}")
+            print(f"         reduce-share={g['reduce_share_pct']}%  rendered/actual rows med="
+                  f"{_fmtn(g['shown_vs_out_med'])}%")
+        if fils:
+            print(f"  [files] n={fils['n_files']} formats={fils['formats']} "
+                  f"sizeKB med/p90/max={_fmtn(fils['size_kb_med'])}/{_fmtn(fils['size_kb_p90'])}/{_fmtn(fils['size_kb_max'])} "
+                  f"rows med/max={_fmtn(fils['rows_med'])}/{_fmtn(fils['rows_max'])}")
+            print(f"          issues: dirty {fils['dirty_files']}/{fils['n_files']} ({fils['dirty_pct']}%) | "
+                  f"dup≥5% {fils['dup5_files']} | empty-rows {fils['emptyrow_files']} | "
+                  f"unnamed {fils['unnamed_files']} | null≥20% {fils['highnull_files']} | "
+                  f"str-share med {_fmtn(fils['str_share_med'])}%")
+            for f, r in sorted(fils["files"].items(), key=lambda kv: -(kv[1]["kb"] or 0))[:a.top]:
+                print(f"          {f}  {r['ext']} {_fmtn(r['kb'])}KB rows={_fmtn(r['rows'])} "
+                      f"dup={r['dup_pct']}% empty={r['empty_rows_pct']}% unnamed={r['unnamed']} "
+                      f"maxnull={r['maxnull_pct']}% str={r['str_share']}%")
+        dump["categories"][label] = dict(tasks=[tag(t) for t in tasks], per_task=per_task,
+                                         agg_A=aggA, agg_B=aggB, files=fils,
+                                         ops_A={t: opsA[t] for t in tasks},
+                                         ops_B={t: opsB[t] for t in tasks})
+        matrix.append((label, aggA, aggB, fils))
+
+    print(f"\n{'=' * 100}\nCROSS-CASE MATRIX")
+    print(f"{'metric':34s} | " + " | ".join(f"{lbl[:30]:>30s}" for lbl, *_ in matrix))
+    rows_spec = [
+        ("tasks", lambda gA, gB, f, ts: str(ts)),
+        ("ops/task (A|B)", lambda gA, gB, f, ts: f"{gA.get('ops_per_task','-')}|{gB.get('ops_per_task','-')}"),
+        ("depth med (A|B)", lambda gA, gB, f, ts: f"{gA.get('depth_med','-')}|{gB.get('depth_med','-')}"),
+        ("src in-rows med", lambda gA, gB, f, ts: _fmtn(gA.get('src_in_rows_med'))),
+        ("interior out-rows med (A|B)", lambda gA, gB, f, ts: f"{_fmtn(gA.get('inter_out_rows_med'))}|{_fmtn(gB.get('inter_out_rows_med'))}"),
+        ("rows@depth2+ med (A)", lambda gA, gB, f, ts: _fmtn((gA.get('rows_by_depth') or {}).get(2))),
+        ("capped% (A|B)", lambda gA, gB, f, ts: f"{gA.get('capped_pct','-')}|{gB.get('capped_pct','-')}"),
+        ("multi-edit% (A|B)", lambda gA, gB, f, ts: f"{gA.get('multi_edit_pct','-')}|{gB.get('multi_edit_pct','-')}"),
+        ("file KB med", lambda gA, gB, f, ts: _fmtn(f.get('size_kb_med'))),
+        ("file rows med", lambda gA, gB, f, ts: _fmtn(f.get('rows_med'))),
+        ("dirty-file %", lambda gA, gB, f, ts: f"{f.get('dirty_pct','-')}"),
+        ("formats", lambda gA, gB, f, ts: ",".join(f"{k}:{v}" for k, v in list((f.get('formats') or {}).items())[:3])),
+    ]
+    for name, fn in rows_spec:
+        cells = []
+        for lbl, gA, gB, f in matrix:
+            ts = len(dump["categories"].get(lbl, {}).get("tasks", []))
+            cells.append(fn(gA or {}, gB or {}, f or {}, ts) if (gA or gB or f) else "-")
+        print(f"{name:34s} | " + " | ".join(f"{c:>30s}" for c in cells))
+
+    out = Path(a.json) if a.json else (KB_ROOT / "judgment_runs/levers_report/case_metrics" /
+                                       f"{short(A)}_vs_{short(B)}.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    json.dump(dump, open(out, "w"), indent=1, default=str)
+    print(f"\n[json] {out.relative_to(KB_ROOT)}")
 
 
 # ----------------------------- argparse -----------------------------
@@ -1084,6 +1462,25 @@ def main():
     p.add_argument("--top", type=int, default=8, metavar="N", help="top-N cost-gap tasks per side to profile (default 8)")
     p.add_argument("--chronic", metavar="JSON", help="chronic-flipper task list (default: judgment_runs/levers_report/chronic_flippers.json)")
     p.set_defaults(fn=cmd_venn)
+
+    p = P("case-metrics",
+          "per-Venn-case operator/cardinality/file/data-issue metrics for an A-vs-B pair.\n"
+          "Cases: A-only wins, B-only wins, both-pass with a material cost gap each way.\n"
+          "Per case and per arm: operator depth, input/output cardinality (sources use the\n"
+          "engine-loaded input-table rows from the stats arm's full-data profiles), render\n"
+          "pressure (capped share, rendered-vs-actual rows), source file size/format/rows,\n"
+          "and engine-measured data issues (duplicate/empty rows, unnamed headers, nulls).\n"
+          "Prints per-task detail + per-case aggregates + a cross-case matrix; dumps JSON to\n"
+          "judgment_runs/levers_report/case_metrics/.\n\n"
+          "example:\n  kb.py case-metrics --sut DataflowSystemGPT52Delta3kSchemaOnly DataflowSystemGPT52Delta5kSchemaOnly")
+    p.add_argument("--sut", required=True, nargs=2, metavar="SUT", help="exactly two SUT class names (A B)")
+    p.add_argument("--th", type=float, default=0.9, help="pass threshold on the answer-type metric (default 0.9)")
+    p.add_argument("--gap", type=float, default=0.10,
+                   help="material cost-gap floor as a fraction of the dearer arm (default 0.10 = the twin-noise band)")
+    p.add_argument("--top", type=int, default=10, metavar="N", help="max per-case file rows to print (default 10)")
+    p.add_argument("--chronic", metavar="JSON", help="chronic-flipper task list (default: judgment_runs/levers_report/chronic_flippers.json)")
+    p.add_argument("--json", metavar="OUT", help="JSON output path (default: judgment_runs/levers_report/case_metrics/<A>_vs_<B>.json)")
+    p.set_defaults(fn=cmd_case_metrics)
 
     a = ap.parse_args()
     a.fn(a)

@@ -57,6 +57,21 @@ categories where the richer arm wins run 24–36% multi-edit ops (parse
 iteration on big/weird files: .xlsx/.gpkg/.cdf/.tle/.text); categories where
 the leaner arm wins run 3–9% (clean single-shot pipelines).
 
+For the deep per-case drill (operator depth + input/output cardinality,
+source input-table rows, file size/format, engine-measured data issues,
+render pressure):
+
+```bash
+./kb.py case-metrics --sut <ARM_A> <ARM_B>   # --gap 0.10 = material-cost floor
+```
+
+Numbers + readings for C1/C2/C3: `levers_report/CASE_METRICS.md`. Headline
+regularities: cardinality collapses by depth 1–2 (all render pressure is at
+the data edge); cap raises pay only across the full-visibility threshold
+(~≤100-row dirty tables), not on big files; stats' wins concentrate on
+unnamed-header/100%-str files and weird formats; Latest-churn has a DAG
+signature (sink-share 56% vs 25% baseline).
+
 ## 4. Accuracy: flip attribution (both directions)
 
 For every non-chronic flip — and any chronic one you want to claim — the
