@@ -788,6 +788,142 @@ def _show_one_trace(d):
     print(f"  files        : {', '.join(sorted(p.name for p in d.iterdir()))}")
 
 
+# ----------------------------- venn (A vs B category analysis) -----------------------------
+ANSWER_TYPE_METRIC = {"numeric_exact": "success", "string_exact": "success",
+                      "list_exact": "f1", "numeric_approximate": "rae_score",
+                      "list_approximate": "f1_approximate", "string_approximate": "llm_paraphrase"}
+
+
+def answer_scores(sut):
+    """{task_id: answer-type-aware score} from system_scratch evaluation.json +
+    ground_truth.json (the levers-report convention; robust to metric mixes)."""
+    base = KB_ROOT / "system_scratch" / sut
+    out = {}
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if not d.is_dir():
+            continue
+        ev, gt = _load(d / "evaluation.json"), _load(d / "ground_truth.json")
+        if not ev:
+            continue
+        k = ANSWER_TYPE_METRIC.get(gt.get("answer_type") or "")
+        v = ev.get(k) if k and isinstance(ev.get(k), (int, float)) else None
+        if v is None:
+            vals = [float(ev[x]) for x in SCORE_METRICS if isinstance(ev.get(x), (int, float))]
+            v = max(vals) if vals else 0.0
+        out[d.name] = float(v)
+    return out
+
+
+def task_op_features(sut, task):
+    """Per-operator structural features for one task: role, depth, LOC, edits,
+    source files (+ext/size). Pure function of workflow.json + react_steps.json."""
+    d = KB_ROOT / "system_scratch" / sut / task
+    wf = (_load(d / "workflow.json") or {}).get("workflow") or {}
+    doc = _load(d / "react_steps.json")
+    edits, code_by = Counter(), {}
+    for st in (doc.get("steps", []) if isinstance(doc, dict) else []):
+        if st.get("role") != "agent":
+            continue
+        for tc in st.get("toolCalls") or []:
+            inp = tc.get("input") or {}
+            if inp.get("operatorId") and inp.get("code"):
+                edits[inp["operatorId"]] += 1
+                code_by[inp["operatorId"]] = inp["code"]
+    fin, fout, parents = Counter(), Counter(), defaultdict(list)
+    for l in wf.get("links", []):
+        s_, t_ = l["source"]["operatorID"], l["target"]["operatorID"]
+        fout[s_] += 1; fin[t_] += 1; parents[t_].append(s_)
+    depth = {}
+
+    def dep(o, seen=()):
+        if o in depth:
+            return depth[o]
+        if o in seen or not parents[o]:
+            depth[o] = 0
+            return 0
+        depth[o] = 1 + max(dep(p, seen + (o,)) for p in parents[o])
+        return depth[o]
+
+    feats = []
+    for o in wf.get("operators", []):
+        op = o["operatorID"]
+        code = code_by.get(op, str(o.get("operatorProperties", {}).get("code", "")))
+        files = sorted(set(re.findall(r"data/[\w\-./]+\.\w+", code)))
+        f0 = files[0] if files else None
+        feats.append(dict(op=op,
+                          role="source" if fin[op] == 0 else ("sink" if fout[op] == 0 else "interior"),
+                          depth=dep(op), loc=code.count("\n") + 1, edits=edits.get(op, 1),
+                          file=f0, ext=os.path.splitext(f0)[1] if f0 else None,
+                          fsize_kb=(os.path.getsize(KB_ROOT / f0) // 1024
+                                    if f0 and (KB_ROOT / f0).exists() else None)))
+    return feats
+
+
+def _cat_profile(sut, tasks, label):
+    """Aggregate operator/file characteristics over a category's tasks."""
+    ops = [f for t in tasks for f in task_op_features(sut, t)]
+    if not ops:
+        print(f"  {label}: (no ops)")
+        return
+    med = lambda xs: sorted(xs)[len(xs) // 2] if xs else 0
+    roles = Counter(o["role"] for o in ops)
+    exts = Counter(o["ext"] for o in ops if o["ext"])
+    sizes = [o["fsize_kb"] for o in ops if o["fsize_kb"] is not None]
+    locs = [o["loc"] for o in ops]
+    multi = sum(1 for o in ops if o["edits"] >= 2)
+    print(f"  {label}: {len(tasks)} task(s), {len(ops)} ops | roles {dict(roles)} | "
+          f"multi-edit {multi} ({100*multi/len(ops):.0f}%) | medLOC {med(locs)} | "
+          f"medFile {med(sizes)}KB | exts {dict(exts.most_common(5))}")
+
+
+def cmd_venn(a):
+    """A-vs-B Venn + both-pass cost split + per-category operator/file stats."""
+    A, B = a.sut
+    sa, sb = answer_scores(A), answer_scores(B)
+    ca = {r["task_id"]: r for r in load_cost_stats(A)}
+    cb = {r["task_id"]: r for r in load_cost_stats(B)}
+    th = a.th
+    common = sorted(set(sa) & set(sb))
+    both = [t for t in common if sa[t] >= th and sb[t] >= th]
+    onlyA = [t for t in common if sa[t] >= th and sb[t] < th]
+    onlyB = [t for t in common if sb[t] >= th and sa[t] < th]
+    neither = [t for t in common if sa[t] < th and sb[t] < th]
+    chron = set()
+    cf = Path(a.chronic) if a.chronic else (KB_ROOT / "judgment_runs/levers_report/chronic_flippers.json")
+    if cf.exists():
+        chron = set(json.load(open(cf)))
+    tagged = lambda ts: [t + ("*" if t in chron else "") for t in ts]
+
+    aw = len(onlyA); bw = len(onlyB); bp = len(both)
+    cheapA = [t for t in both if t in ca and t in cb and ca[t]["cost"] < cb[t]["cost"]]
+    cheapB = [t for t in both if t in ca and t in cb and cb[t]["cost"] < ca[t]["cost"]]
+    gA = sum(cb[t]["cost"] - ca[t]["cost"] for t in cheapA)
+    gB = sum(ca[t]["cost"] - cb[t]["cost"] for t in cheapB)
+    short = lambda s: s.replace("DataflowSystem", "").replace("CodeAgentSystem", "CA:")
+
+    print(f"A = {A}\nB = {B}\npass threshold = {th} (answer-type metric); * = chronic flipper\n")
+    print(f"          .───────────────.      .───────────────.")
+    print(f"        /   A-only         \\   /        B-only    \\")
+    print(f"       |                    \\ /                     |")
+    print(f"       |     {aw:>3}         |{bp:^7}|          {bw:>3}      |")
+    print(f"       |                    / \\    both pass        |")
+    print(f"        \\                 /   \\                    /")
+    print(f"          '───────────────'      '───────────────'")
+    print(f"                     both fail: {len(neither)}   (shared tasks: {len(common)})")
+    print(f"\nboth-pass cost split ({bp} tasks): "
+          f"A cheaper on {len(cheapA)} (saves ${gA:.3f}) | B cheaper on {len(cheapB)} (saves ${gB:.3f})")
+    print(f"\nA-only: {tagged(onlyA)}")
+    print(f"B-only: {tagged(onlyB)}")
+
+    print(f"\n=== operator/file characteristics per category ===")
+    _cat_profile(A, onlyA, f"A-only wins ({short(A)} ops)")
+    _cat_profile(B, onlyB, f"B-only wins ({short(B)} ops)")
+    topA = sorted(cheapA, key=lambda t: -(cb[t]["cost"] - ca[t]["cost"]))[:a.top]
+    topB = sorted(cheapB, key=lambda t: -(ca[t]["cost"] - cb[t]["cost"]))[:a.top]
+    _cat_profile(A, topA, f"both-pass, A much cheaper (top {len(topA)})")
+    _cat_profile(B, topB, f"both-pass, B much cheaper (top {len(topB)})")
+
+
 # ----------------------------- argparse -----------------------------
 def main():
     try:
@@ -936,6 +1072,18 @@ def main():
     p.add_argument("--task", help="show one task id in full detail")
     p.add_argument("--workload", help="filter the listing to one workload")
     p.set_defaults(fn=cmd_traces)
+
+    p = P("venn",
+          "A-vs-B Venn analysis: exclusive wins per side, both-pass intersection, the\n"
+          "cost-efficiency split inside the intersection, and operator/file characteristics\n"
+          "of the tasks in each category (roles, edits, LOC, file ext/size). Uses the\n"
+          "answer-type-aware score (levers-report convention); marks chronic flippers.\n\n"
+          "example:\n  kb.py venn --sut DataflowSystemGPT52Delta3kSchemaOnly DataflowSystemGPT52Delta5kSchemaOnly")
+    p.add_argument("--sut", required=True, nargs=2, metavar="SUT", help="exactly two SUT class names (A B)")
+    p.add_argument("--th", type=float, default=0.9, help="pass threshold on the answer-type metric (default 0.9)")
+    p.add_argument("--top", type=int, default=8, metavar="N", help="top-N cost-gap tasks per side to profile (default 8)")
+    p.add_argument("--chronic", metavar="JSON", help="chronic-flipper task list (default: judgment_runs/levers_report/chronic_flippers.json)")
+    p.set_defaults(fn=cmd_venn)
 
     a = ap.parse_args()
     a.fn(a)
