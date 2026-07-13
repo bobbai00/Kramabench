@@ -3,8 +3,9 @@
 Programmatic per-case metrics for the three lever comparisons, over the four
 Venn cases of each pair: **A-only wins, B-only wins, both-pass-A-cheaper,
 both-pass-B-cheaper** (cheaper = material, ≥10% of the dearer arm — the twin
-noise band). Companion to `REPORT.md` (flip attribution) and
-`COMPARISON_PIPELINE.md` (method).
+noise band). Companion to `REPORT.md` (flip attribution),
+`COMPARISON_PIPELINE.md` (method), and **`FINDINGS.md`** (the six detailed
+findings distilled from these tables, with full-population evidence).
 
 Reproduce (also dumps full per-op JSON next to this file):
 

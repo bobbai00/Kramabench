@@ -65,12 +65,15 @@ render pressure):
 ./kb.py case-metrics --sut <ARM_A> <ARM_B>   # --gap 0.10 = material-cost floor
 ```
 
-Numbers + readings for C1/C2/C3: `levers_report/CASE_METRICS.md`. Headline
+Numbers + readings for C1/C2/C3: `levers_report/CASE_METRICS.md`; the six
+distilled findings with full-population evidence:
+`levers_report/FINDINGS.md` (+ `scripts/analyze_case_findings.py`). Headline
 regularities: cardinality collapses by depth 1–2 (all render pressure is at
 the data edge); cap raises pay only across the full-visibility threshold
-(~≤100-row dirty tables), not on big files; stats' wins concentrate on
-unnamed-header/100%-str files and weird formats; Latest-churn has a DAG
-signature (sink-share 56% vs 25% baseline).
+(41–100-row band: fully-visible 20.5%→44.9%), not on big files; stats' wins
+concentrate on unnamed-header/100%-str files and weird formats; Latest churn
+has a DAG *tail* signature (sink-share ≥50% ∧ ops ≥8 → 7/103 flagged, 29% vs
+80% pass rate — medians do NOT separate).
 
 ## 4. Accuracy: flip attribution (both directions)
 
