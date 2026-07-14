@@ -2587,6 +2587,14 @@ class DataflowSystemGPT52Delta3kSchemaOnly(_GPT52SchemaOnlySweep):
     _NAME = "DataflowSystemGPT52Delta3kSchemaOnly"
 
 
+class DataflowSystemGPT52Delta1kSchemaOnly(_GPT52SchemaOnlySweep):
+    """gpt-5.2, DELTA, 1k, schema line ON, column stats OFF — the starvation
+    end of the sampling axis (pairs with DataflowSystemGPT52DeltaStats1kD2)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52Delta1kSchemaOnly"
+
+
 class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnlySweep):
     """gpt-5.2, LATEST, 5k, schema line ON, column stats OFF."""
     _CONTEXT_MODE = "latest"
@@ -2689,6 +2697,15 @@ class DataflowSystemGPT52DeltaStats3kD2(_GPT52SweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 3000
     _NAME = "DataflowSystemGPT52DeltaStats3kD2"
+
+
+class DataflowSystemGPT52DeltaStats1kD2(_GPT52SweepD2):
+    """gpt-5.2, DELTA, 1k, column stats ON + data_level=2 — does the profile
+    substitute for sample rows when the render budget is starved? (pairs with
+    DataflowSystemGPT52Delta1kSchemaOnly)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52DeltaStats1kD2"
 
 
 class DataflowSystemGPT52DeltaStats3kD2FoldControl(_GPT52SweepD2):
