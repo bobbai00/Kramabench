@@ -2595,6 +2595,45 @@ class DataflowSystemGPT52Delta1kSchemaOnly(_GPT52SchemaOnlySweep):
     _NAME = "DataflowSystemGPT52Delta1kSchemaOnly"
 
 
+# ---------------------------------------------------------------------------
+# Raw-probe protocol (prompt-only knob; see judgment_runs/levers_report/
+# TODO_RAW_PROBE_PROMPT.md and DYNAMIC_KNOBS.md §3). Injected into the
+# per-task USER prompt, so agent-service code is untouched — each RawProbe
+# class is a one-knob pair against its base SUT. Motivated by the
+# format-blinded failures: blind step-0 loader choices (astronomy-hard-9
+# read_fwf silent DOY truncation), silent plausible mis-parses
+# (environment-hard-9), and the row-0 NaN join-key trap (wildfire-hard-17).
+# ---------------------------------------------------------------------------
+RAW_PROBE_PROTOCOL = """Before writing any loader, follow this probe protocol:
+1. For each data file you intend to load — INCLUDING standard .csv files (standard formats are often dirty: metadata rows, shifted headers, wrong delimiters) — first create ONE raw preview operator that opens the file as plain text and returns the first ~5 lines AND ~5 lines from the middle of the file (early lines can be unrepresentative, e.g. narrow values that widen later). If the question names a format-specification file, read it first and derive explicit parse parameters from it.
+2. Only then write the loader, with explicit parameters (sep/header/skiprows/widths/sheet) justified by what the raw preview showed. Never rely on width/format inference for non-delimited files.
+3. After loading, sanity-check the parse before building on it: row count vs expectation, and the value RANGE of any column your analysis depends on (e.g. a day-of-year column must span roughly 1-366; if it maxes at 9, the parse is corrupt). If a table has several ID-like columns and you plan to join on one, first check each candidate's null share and its overlap with the other table's keys, then pick the key with real overlap.
+4. Once a load is verified, DELETE the raw preview operators for it so the dataflow stays clean.
+"""
+
+
+class _RawProbeMixin:
+    """Prepends the raw-probe protocol to the task prompt (the only knob)."""
+
+    def _build_prompt(self, query, file_paths, format_hint=""):
+        base = super()._build_prompt(query, file_paths, format_hint=format_hint)
+        return base.replace("Question:", RAW_PROBE_PROTOCOL + "\nQuestion:", 1)
+
+
+class DataflowSystemGPT52Delta5kSchemaOnlyRawProbe(_RawProbeMixin, _GPT52SchemaOnlySweep):
+    """Delta5kSchemaOnly + raw-probe protocol in the task prompt."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52Delta5kSchemaOnlyRawProbe"
+
+
+class DataflowSystemGPT52Latest3kSchemaOnlyRawProbe(_RawProbeMixin, _GPT52SchemaOnlySweep):
+    """Latest3kSchemaOnly + raw-probe protocol in the task prompt."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52Latest3kSchemaOnlyRawProbe"
+
+
 class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnlySweep):
     """gpt-5.2, LATEST, 5k, schema line ON, column stats OFF."""
     _CONTEXT_MODE = "latest"
@@ -2706,6 +2745,13 @@ class DataflowSystemGPT52DeltaStats1kD2(_GPT52SweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 1000
     _NAME = "DataflowSystemGPT52DeltaStats1kD2"
+
+
+class DataflowSystemGPT52DeltaStats3kD2RawProbe(_RawProbeMixin, _GPT52SweepD2):
+    """DeltaStats3kD2 (best arm) + raw-probe protocol in the task prompt."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2RawProbe"
 
 
 class DataflowSystemGPT52DeltaStats3kD2FoldControl(_GPT52SweepD2):
