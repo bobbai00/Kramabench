@@ -2595,6 +2595,29 @@ class DataflowSystemGPT52Delta1kSchemaOnly(_GPT52SchemaOnlySweep):
     _NAME = "DataflowSystemGPT52Delta1kSchemaOnly"
 
 
+# ---------------------------------------------------------------------------
+# Probe-prompt fresh controls. Config-identical to the C1/C2/C3 base arms;
+# NEW names so runs land in fresh scratch dirs (the base arms' folders keep
+# their pre-probe vintage). The knob is the agent-service prompt itself: the
+# raw-probe principles + worked-example beats are PERMANENT in the service
+# since dataflow-agent acf87127f (+ 5c10913e6, 57bd2fd0a), so any run of
+# these classes carries them. Rerun set: the probing-issue tasks from the
+# deep dives (format-blinded loads, dirty headers, key traps) + controls.
+# ---------------------------------------------------------------------------
+class DataflowSystemGPT52Delta5kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
+    """Delta5kSchemaOnly config under the raw-probe prompt vintage."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52Delta5kSchemaOnlyProbePrompt"
+
+
+class DataflowSystemGPT52Latest3kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
+    """Latest3kSchemaOnly config under the raw-probe prompt vintage."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52Latest3kSchemaOnlyProbePrompt"
+
+
 class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnlySweep):
     """gpt-5.2, LATEST, 5k, schema line ON, column stats OFF."""
     _CONTEXT_MODE = "latest"
@@ -2697,6 +2720,14 @@ class DataflowSystemGPT52DeltaStats3kD2(_GPT52SweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 3000
     _NAME = "DataflowSystemGPT52DeltaStats3kD2"
+
+
+class DataflowSystemGPT52DeltaStats3kD2ProbePrompt(_GPT52SweepD2):
+    """DeltaStats3kD2 (best arm) config under the raw-probe prompt vintage
+    (see the ProbePrompt banner in the schema-only sweep section)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 3000
+    _NAME = "DataflowSystemGPT52DeltaStats3kD2ProbePrompt"
 
 
 class DataflowSystemGPT52DeltaStats1kD2(_GPT52SweepD2):
