@@ -61,3 +61,15 @@ load/key decisions demonstrably changed in 4) is the durable result.
   to confirm the converted failure lands.
 - Full-benchmark RawProbe arm (with recovery + twin pair) before any
   aggregate claim.
+
+## Addendum (2026-07-17)
+
+The harness-side `_RawProbeMixin` and the three `*RawProbe` SUT classes were
+REMOVED per Bob's direction: the guidance belongs in the agent, not the
+benchmark prompt. It has been promoted into agent-service — the probe
+protocol as principles in `prompts/code-mode.md` and the demonstrated beat
+(raw preview → explicit-parameter loader → verify → delete probes) in the
+worked e2e examples. This is a PERMANENT prompt change: every subsequent run
+of ANY SUT carries it, so comparisons against pre-change scratch dirs are
+cross-vintage (use fresh controls). The pilot scratch dirs
+(`system_scratch/*RawProbe/`) remain as provenance for the results above.
