@@ -33,7 +33,14 @@ ARMS = {
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--th", type=float, default=0.9)
+    ap.add_argument("--arms", nargs="+", metavar="SUT",
+                    help="full SUT class names (default: the original 3k star)")
+    ap.add_argument("--out", metavar="JSON",
+                    help="output path (default: judgment_runs/levers_report/common_failures.json)")
     a = ap.parse_args()
+    global ARMS
+    if a.arms:
+        ARMS = {s.replace("DataflowSystemGPT52", ""): s for s in a.arms}
 
     chron = set(json.load(open(KB / "judgment_runs/levers_report/chronic_flippers.json")))
     tag = lambda t: t + ("*" if t in chron else "")
@@ -72,7 +79,8 @@ def main():
         "common_chronic": sorted(t for t in common if t in chron),
         "unique_failures": uniq,
     }
-    path = KB / "judgment_runs/levers_report/common_failures.json"
+    path = Path(a.out) if a.out else KB / "judgment_runs/levers_report/common_failures.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
     json.dump(out, open(path, "w"), indent=1)
     print(f"\n[json] {path.relative_to(KB)}")
 
