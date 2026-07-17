@@ -2611,6 +2611,23 @@ class DataflowSystemGPT52Delta5kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
     _NAME = "DataflowSystemGPT52Delta5kSchemaOnlyProbePrompt"
 
 
+class DataflowSystemGPT52Delta1kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
+    """Delta1kSchemaOnly config under the raw-probe prompt vintage — the
+    shared anchor of the probe-star (C1' sampling ray → 5k; C2' profiling
+    ray → DeltaStats1kD2ProbePrompt)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52Delta1kSchemaOnlyProbePrompt"
+
+
+class DataflowSystemGPT52Latest5kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
+    """Latest5kSchemaOnly config under the raw-probe prompt vintage (C3'
+    history pair partner of Delta5kSchemaOnlyProbePrompt)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT52Latest5kSchemaOnlyProbePrompt"
+
+
 class DataflowSystemGPT52Latest3kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
     """Latest3kSchemaOnly config under the raw-probe prompt vintage."""
     _CONTEXT_MODE = "latest"
@@ -2728,6 +2745,14 @@ class DataflowSystemGPT52DeltaStats3kD2ProbePrompt(_GPT52SweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 3000
     _NAME = "DataflowSystemGPT52DeltaStats3kD2ProbePrompt"
+
+
+class DataflowSystemGPT52DeltaStats1kD2ProbePrompt(_GPT52SweepD2):
+    """DeltaStats1kD2 config under the raw-probe prompt vintage (C2'
+    profiling ray of the probe-star, vs Delta1kSchemaOnlyProbePrompt)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52DeltaStats1kD2ProbePrompt"
 
 
 class DataflowSystemGPT52DeltaStats1kD2(_GPT52SweepD2):
