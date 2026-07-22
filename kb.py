@@ -814,6 +814,21 @@ def answer_scores(sut):
     return out
 
 
+def judge_scores(sut, metric="m3"):
+    """{task_id: score} from the cached chunked-LLM-judge metrics
+    (scripts/judge_metrics.py -> system_scratch/<sut>/<task>/judge_m3m4.json).
+    metric: m3 (evidence-in-context) | m4_process | m4_deliverable."""
+    base = KB_ROOT / "system_scratch" / sut
+    out = {}
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if not d.is_dir():
+            continue
+        j = _load(d / "judge_m3m4.json")
+        if j and isinstance(j.get(metric), (int, float)):
+            out[d.name] = float(j[metric])
+    return out
+
+
 def task_op_features(sut, task):
     """Per-operator structural features for one task: role, depth, LOC, edits,
     source files (+ext/size). Pure function of workflow.json + react_steps.json."""
@@ -1302,6 +1317,27 @@ def cmd_case_metrics(a):
     print(f"\n[json] {out.relative_to(KB_ROOT)}")
 
 
+def cmd_judge(a):
+    """Run the chunked-LLM-judge metrics (M3 evidence-in-context / M4 step-performed)
+    over one or more SUTs. Thin wrapper around scripts/judge_metrics.py; results are
+    cached per task in system_scratch/<sut>/<task>/judge_m3m4.json and readable via
+    judge_scores()."""
+    load_env()
+    cmd = [PY, str(KB_ROOT / "scripts/judge_metrics.py"), "--arms", *a.sut,
+           "--lens", a.lens, "--judge-model", a.judge_model, "--workers", str(a.workers)]
+    if a.tasks_file:
+        cmd += ["--tasks-file", a.tasks_file]
+    if a.ids:
+        cmd += ["--tasks", *a.ids.split()]
+    if a.force:
+        cmd.append("--force")
+    if a.verbose:
+        cmd.append("--verbose")
+    p = subprocess.Popen(cmd, cwd=KB_ROOT)
+    _PROCS.append(p)
+    p.wait()
+
+
 # ----------------------------- argparse -----------------------------
 def main():
     try:
@@ -1481,6 +1517,26 @@ def main():
     p.add_argument("--chronic", metavar="JSON", help="chronic-flipper task list (default: judgment_runs/levers_report/chronic_flippers.json)")
     p.add_argument("--json", metavar="OUT", help="JSON output path (default: judgment_runs/levers_report/case_metrics/<A>_vs_<B>.json)")
     p.set_defaults(fn=cmd_case_metrics)
+
+    p = P("judge",
+          "chunked LLM-judge metrics over the agent's own rendered context:\n"
+          "  M3 = evidence-in-context (per gold subtask: did the agent SEE the value?)\n"
+          "  M4 = step-performed (per gold subtask: did the agent DO the step?)\n"
+          "Source = last react step's inputMessages; chunk by event (delta) or by\n"
+          "operator+code (latest); one judge call per chunk, binary verdicts keyed by\n"
+          "subtask id; task score = %% of subtasks covered. Cached per task in\n"
+          "system_scratch/<sut>/<task>/judge_m3m4.json (re-run with --force).\n\n"
+          "example:\n  kb.py judge --sut DataflowSystemGPT5MiniDelta1kSchemaOnly "
+          "DataflowSystemGPT5MiniDelta5kSchemaOnly --tasks-file tasks.txt")
+    p.add_argument("--sut", required=True, nargs="+", metavar="SUT", help="one or more SUT class names")
+    p.add_argument("--tasks-file", metavar="FILE", help="file with whitespace-separated task ids")
+    p.add_argument("--ids", metavar="'T1 T2'", help="explicit task ids (quoted, space-separated)")
+    p.add_argument("--lens", choices=["m3", "m4", "both"], default="both")
+    p.add_argument("--judge-model", default="gpt-4o-mini")
+    p.add_argument("--workers", type=int, default=6)
+    p.add_argument("--force", action="store_true", help="re-judge even if cached")
+    p.add_argument("--verbose", action="store_true", help="print per-chunk verdicts")
+    p.set_defaults(fn=cmd_judge)
 
     a = ap.parse_args()
     a.fn(a)
