@@ -62,6 +62,7 @@ class DataflowSystem(System):
         probe_retirement_config: Optional[Dict[str, object]] = None,
         enable_inspect_tool: bool = False,
         enable_render_prefs: bool = False,
+        enable_code_in_snapshot: bool = False,
         compaction_strategy: str = "compress",
         deck_sample_ratio: float = 0.10,
         error_reflection: bool = False,
@@ -77,6 +78,7 @@ class DataflowSystem(System):
         value_format: bool = False,
         data_hints: bool = False,
         tool_dialect: str = None,
+        summarize_params: Optional[Dict[str, object]] = None,
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
@@ -167,6 +169,7 @@ class DataflowSystem(System):
         self.probe_retirement_config = probe_retirement_config
         self.enable_inspect_tool = enable_inspect_tool
         self.enable_render_prefs = enable_render_prefs
+        self.enable_code_in_snapshot = enable_code_in_snapshot
         self.compaction_strategy = compaction_strategy
         self.deck_sample_ratio = deck_sample_ratio
         self.error_reflection = error_reflection
@@ -183,6 +186,9 @@ class DataflowSystem(System):
         # react-text variants opt in to the previous ReAct text format. Ignored
         # by the vercel-tool-use driver.
         self.tool_dialect = tool_dialect or "qwen-xml"
+        # Deep-partial summarize() params patch (e.g. force detail="shape" =
+        # counts+schema+stats, no data rows). None = preset unchanged.
+        self.summarize_params = summarize_params
 
         self.agent: Optional[DataflowAgent] = None
         self.output_dir = kwargs.get("output_dir", f"./system_scratch/{name}")
@@ -261,8 +267,26 @@ class DataflowSystem(System):
             if self.verbose:
                 print(f"[DataflowSystem] Could not load workload for ground truth: {e}")
 
+    # Generic answer-format sentence per answer_type — used for SUBTASKS, which
+    # have no curated format_hint in format_hint/<domain>.json (those cover only
+    # main tasks). Without this a subtask prompt gets an empty "Answer format:"
+    # line and the agent free-forms prose/variable-names/wrong-id, which the
+    # F1/exact scorers zero out. Keep these answer-agnostic (no value leakage).
+    _SUBTASK_FORMAT_HINTS = {
+        "list_exact": "Return ONLY a flat list of the matching values, as a comma-separated list "
+                      "(e.g. value1, value2, value3). No prose, no column names, no explanation — just the values.",
+        "list_approximate": "Return ONLY a flat list of the matching values, as a comma-separated list "
+                            "(e.g. value1, value2, value3). No prose or explanation — just the values.",
+        "numeric_exact": "The result should be a single numeric value only (no units, no prose).",
+        "numeric_approximate": "The result should be a single numeric value only (no units, no prose).",
+        "string_exact": "The result should be a single value only (no prose or explanation).",
+        "string_approximate": "The result should be a single short value/label only (no prose or explanation).",
+    }
+
     def _load_format_hints(self, dataset_directory: str) -> None:
-        """Load format hints for the domain."""
+        """Load format hints for the domain (main tasks) and synthesize format
+        hints for every subtask from its answer_type (so subtask runs get a
+        proper 'Answer format:' line instead of an empty one)."""
         try:
             parts = dataset_directory.rstrip('/').split('/')
             if 'data' in parts:
@@ -277,6 +301,19 @@ class DataflowSystem(System):
                             self.format_hints[hint['id']] = hint.get('format_hint', '')
                     if self.verbose:
                         print(f"[DataflowSystem] Loaded {len(hints)} format hints from {hint_path}")
+                # synthesize subtask format hints from answer_type
+                wl_path = os.path.join(project_root, 'workload', f'{domain}.json')
+                if os.path.exists(wl_path):
+                    n = 0
+                    with open(wl_path, 'r') as f:
+                        for task in json.load(f):
+                            for st in (task.get('subtasks', []) if isinstance(task, dict) else []):
+                                sid, at = st.get('id'), st.get('answer_type')
+                                if sid and sid not in self.format_hints and at in self._SUBTASK_FORMAT_HINTS:
+                                    self.format_hints[sid] = self._SUBTASK_FORMAT_HINTS[at]
+                                    n += 1
+                    if self.verbose and n:
+                        print(f"[DataflowSystem] Synthesized {n} subtask format hints from answer_type")
         except Exception as e:
             if self.verbose:
                 print(f"[DataflowSystem] Could not load format hints: {e}")
@@ -313,6 +350,7 @@ class DataflowSystem(System):
             probe_retirement_config=self.probe_retirement_config,
             enable_inspect_tool=self.enable_inspect_tool,
             enable_render_prefs=self.enable_render_prefs,
+            enable_code_in_snapshot=self.enable_code_in_snapshot,
             compaction_strategy=self.compaction_strategy,
             deck_sample_ratio=self.deck_sample_ratio,
             error_reflection=self.error_reflection,
@@ -326,6 +364,7 @@ class DataflowSystem(System):
             value_format=self.value_format,
             data_hints=self.data_hints,
             tool_dialect=self.tool_dialect,
+            summarize_params=self.summarize_params,
             verbosity_level=2 if self.verbose else 1,
         )
         self.agent.setup()
@@ -462,6 +501,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "probe_retirement_config": self.probe_retirement_config,
                 "enable_inspect_tool": self.enable_inspect_tool,
                 "enable_render_prefs": self.enable_render_prefs,
+                "enable_code_in_snapshot": self.enable_code_in_snapshot,
                 "compaction_strategy": self.compaction_strategy,
                 "deck_sample_ratio": self.deck_sample_ratio,
                 "error_reflection": self.error_reflection,
@@ -475,6 +515,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "value_format": self.value_format,
                 "data_hints": self.data_hints,
                 "tool_dialect": self.tool_dialect,
+                "summarize_params": self.summarize_params,
             }
         }
         config_path = os.path.join(query_output_dir, "config.json")
@@ -2764,6 +2805,32 @@ class DataflowSystemGPT52DeltaStats1kD2(_GPT52SweepD2):
     _NAME = "DataflowSystemGPT52DeltaStats1kD2"
 
 
+class DataflowSystemGPT52DeltaStatsNoRows1kD2ProbePrompt(_GPT52SweepD2):
+    """No-sample-rows stats arm (Bob's hypothesis: the per-column stats block —
+    not the sample rows — is the real evidence carrier, and rows can even
+    mislead when a wide table renders only one unrepresentative row).
+
+    Same config as DeltaStats1kD2ProbePrompt (delta, 1k, data_level=2,
+    column_stats) but the LATEST render detail is forced to "shape" via a
+    summarize-params patch: Inputs/Output shape line + Schema + Column Stats +
+    structural hints, ZERO data rows. (Delta history already renders as shape,
+    so the DAG carries no raw rows anywhere.) One-knob (rows on -> off) vs
+    DataflowSystemGPT52DeltaStats1kD2ProbePrompt. Probe-prompt vintage."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52DeltaStatsNoRows1kD2ProbePrompt"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            summarize_params={
+                "operators": {"defaults": {"result": {"latest": {"detail": "shape"}}}}
+            },
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
 class DataflowSystemGPT52DeltaStats3kD2FoldControl(_GPT52SweepD2):
     """Current-code DELTA control: Delta 3k D2 with every experimental overlay off.
 
@@ -3037,6 +3104,50 @@ class DataflowSystemGPT5MiniDeltaStats3kD2(_GPT5MiniSweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 3000
     _NAME = "DataflowSystemGPT5MiniDeltaStats3kD2"
+
+
+# --- gpt-5-mini C1/C2 knob arms (subtask-eval study) ---
+# C1 char cap: Delta1k vs Delta5k (schema-only). C2 profile: Delta1k schema vs
+# DeltaStats1kD2 (both 1k). Matched one-knob pairs on the mini substrate.
+class DataflowSystemGPT5MiniDelta1kSchemaOnly(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, DELTA, 1k, schema-only (C1 anchor / C2 anchor)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnly"
+
+
+class DataflowSystemGPT5MiniDelta5kSchemaOnly(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, DELTA, 5k, schema-only (C1 ray — the rows knob)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnly"
+
+
+class DataflowSystemGPT5MiniDeltaStats1kD2(_GPT5MiniSweepD2):
+    """gpt-5-mini, DELTA, 1k, column stats ON + data_level=2 (C2 ray — the stats knob)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2"
+
+
+# --- code-in-snapshot experiment (LATEST, 1k, gpt-5-mini) ---
+# Does showing the agent its OWN code in the snapshot (with short summaries) help?
+# Baseline = plain LATEST-1k schema-only; ray = same + enableCodeInSnapshot.
+class DataflowSystemGPT5MiniLatest1kSchemaOnly(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, LATEST, 1k, schema-only (code-in-snapshot BASELINE, flag off)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT5MiniLatest1kSchemaOnly"
+
+
+class DataflowSystemGPT5MiniLatest1kCodeInSnap(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, LATEST, 1k, schema-only + code shown in snapshot (short summaries)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnap"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
 # Static-compaction demonstrator: byte-identical to DataflowSystemGPT52DeltaStats5k

@@ -129,6 +129,9 @@ class AgentSettings:
     # Write-time render prefs: agent-declared outputSummary/showOutputStatistics
     # on createOrModifyOperator (view-only; backend always computes full data).
     enable_render_prefs: bool = False
+    # Code-in-snapshot (LATEST-only): render each operator's current code in the
+    # snapshot + tell the agent (tool-def/prompt/example) to write short summaries.
+    enable_code_in_snapshot: bool = False
     # How DELTA compacts over budget: "sliding" (drop oldest events) or "compress"
     # (fold the prefix into a stats deck, resume raw delta). Default "compress".
     compaction_strategy: str = "compress"
@@ -150,6 +153,10 @@ class AgentSettings:
     # Tool-call dialect for the local-react driver ("qwen-xml" | "react-text").
     # Ignored by vercel-tool-use. Default is qwen-xml (the new format).
     tool_dialect: str = AGENT_TOOL_DIALECT
+    # Deep-partial summarize() params patch applied on top of the preset selected
+    # by context_mode (server validates + merges). Lets a SUT override per-op
+    # render detail (e.g. defaults.result.latest.detail="shape" = no data rows).
+    summarize_params: Optional[dict[str, Any]] = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
@@ -198,6 +205,10 @@ class AgentSettings:
             payload["enableInspectTool"] = True
         if self.enable_render_prefs:
             payload["enableRenderPrefs"] = True
+        if self.enable_code_in_snapshot:
+            payload["enableCodeInSnapshot"] = True
+        if self.summarize_params is not None:
+            payload["summarizeParams"] = self.summarize_params
         return payload
 
 
@@ -822,6 +833,7 @@ class DataflowAgent:
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
             enable_render_prefs: bool = False,
+            enable_code_in_snapshot: bool = False,
             compaction_strategy: str = "compress",
             deck_sample_ratio: float = 0.10,
             error_reflection: bool = False,
@@ -835,6 +847,7 @@ class DataflowAgent:
             value_format: bool = False,
             data_hints: bool = False,
             tool_dialect: str = AGENT_TOOL_DIALECT,
+            summarize_params: Optional[dict[str, Any]] = None,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
             computing_unit_endpoint: str = TEXERA_COMPUTING_UNIT_ENDPOINT,
             agent_service_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
@@ -902,6 +915,7 @@ class DataflowAgent:
             probe_retirement_config=probe_retirement_config,
             enable_inspect_tool=enable_inspect_tool,
             enable_render_prefs=enable_render_prefs,
+            enable_code_in_snapshot=enable_code_in_snapshot,
             compaction_strategy=compaction_strategy,
             deck_sample_ratio=deck_sample_ratio,
             error_reflection=error_reflection,
@@ -915,7 +929,7 @@ class DataflowAgent:
             value_format=value_format,
             data_hints=data_hints,
             tool_dialect=tool_dialect,
-
+            summarize_params=summarize_params,
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
