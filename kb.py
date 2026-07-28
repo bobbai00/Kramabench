@@ -806,11 +806,22 @@ def answer_scores(sut):
         if not ev:
             continue
         k = ANSWER_TYPE_METRIC.get(gt.get("answer_type") or "")
+        if k and k in ev and ev[k] is None:
+            # Judge call failed (API error/quota) — the task is UNSCORED, not a
+            # zero. Dropping it keeps a scoring outage from reading as a model
+            # regression; see judgment_runs/mini_star/HEADROOM_STUDY.md §2a.
+            continue
         v = ev.get(k) if k and isinstance(ev.get(k), (int, float)) else None
         if v is None:
             vals = [float(ev[x]) for x in SCORE_METRICS if isinstance(ev.get(x), (int, float))]
             v = max(vals) if vals else 0.0
-        out[d.name] = float(v)
+        v = float(v)
+        if v != v:
+            # The SUT answered NaN, so the metric is NaN. That is a wrong answer,
+            # not an unscored task — score it 0 (and keep it comparable, since
+            # NaN != NaN would otherwise read as a flip on every comparison).
+            v = 0.0
+        out[d.name] = v
     return out
 
 
@@ -1317,6 +1328,81 @@ def cmd_case_metrics(a):
     print(f"\n[json] {out.relative_to(KB_ROOT)}")
 
 
+# ----------------------------- replicate stability -----------------------------
+
+def replicate_arms(base):
+    """Arms used for stability analysis of `base`. Rule: all existing
+    <base>ReplicateN dirs; the base arm itself is included only when fewer than
+    3 replicates exist (code-agent convention: base+Rep1+Rep2; dataflow
+    convention: Rep0/1/2 exist, base excluded as a different-vintage run)."""
+    reps = [f"{base}Replicate{i}" for i in range(10)
+            if (KB_ROOT / "system_scratch" / f"{base}Replicate{i}").is_dir()]
+    if len(reps) < 3 and (KB_ROOT / "system_scratch" / base).is_dir():
+        reps = [base] + reps
+    return reps
+
+
+def stability(base, arms=None):
+    """Per-task replicate stability for one config (Bob's convention,
+    rev 2026-07-27). Uses the CONTINUOUS answer-type-aware score per rep
+    (answer_scores), no pass threshold:
+
+      floor       = mean over tasks of min(score across reps)   [partial credit kept]
+      mean        = mean over tasks of mean(score across reps)
+      std         = population std across the per-rep aggregate means
+                    (the run-to-run randomness floor, VARIANCE_REPORT convention)
+      stable_fail = fraction of tasks with ALL reps == 0
+      flipped     = fraction of tasks with ANY score difference across reps
+                    ([0.5, 0.5, 1.0] counts; the old zero-rule 'flippy' did not)
+
+    Replicate arms still mid-run are excluded: an arm with fewer scored tasks
+    than 80% of the best-covered arm is dropped (reported in `skipped`).
+    Tasks lacking a score in any surviving rep are excluded (n reported).
+    Returns dict with per-task detail + aggregates."""
+    arms = arms or replicate_arms(base)
+    per_arm = {a: answer_scores(a) for a in arms}
+    cov = max((len(s) for s in per_arm.values()), default=0)
+    skipped = [a for a, s in per_arm.items() if len(s) < 0.8 * cov]
+    per_arm = {a: s for a, s in per_arm.items() if a not in skipped}
+    arms = list(per_arm)
+    tasks = set.intersection(*[set(s) for s in per_arm.values()]) if per_arm else set()
+    detail = {t: [per_arm[a][t] for a in arms] for t in sorted(tasks)}
+    n = len(detail)
+    if not n:
+        return dict(arms=arms, skipped=skipped, n=0)
+    floor = sum(min(v) for v in detail.values()) / n
+    mean = sum(sum(v) / len(v) for v in detail.values()) / n
+    rep_means = [sum(per_arm[a][t] for t in detail) / n for a in arms]
+    std = (sum((m - mean) ** 2 for m in rep_means) / len(rep_means)) ** 0.5
+    sf = sum(1 for v in detail.values() if all(x == 0 for x in v))
+    fl = sum(1 for v in detail.values() if len(set(v)) > 1)
+    return dict(arms=arms, skipped=skipped, n=n, floor=floor, mean=mean, std=std,
+                rep_means=rep_means, stable_fail=sf / n, flipped=fl / n, detail=detail)
+
+
+def cmd_stability(a):
+    """Replicate-stability table: floor score (mean of per-task MIN across reps,
+    continuous — partial credit kept), mean score, std across per-rep means,
+    stable-fail% (all reps 0), flipped% (ANY score difference across reps).
+    Replicate arms auto-detected per replicate_arms(); mid-run arms (<80%
+    coverage of the best-covered rep) are skipped."""
+    print(f"{'config':44s} {'reps':>4s} {'n':>4s} {'floor':>7s} {'mean':>7s} {'std':>7s} {'st-fail':>8s} {'flipped':>8s}")
+    print("-" * 96)
+    for base in a.sut:
+        r = stability(base)
+        if not r.get("n"):
+            print(f"{base:44s}  (no replicate scores)")
+            continue
+        print(f"{base:44s} {len(r['arms']):4d} {r['n']:4d} {r['floor']:7.3f} {r['mean']:7.3f} "
+              f"{r['std']:7.3f} {r['stable_fail']:8.1%} {r['flipped']:8.1%}")
+        if r["skipped"]:
+            print(f"    skipped (incomplete): {', '.join(r['skipped'])}")
+        if a.verbose:
+            for t, v in r["detail"].items():
+                if len(set(v)) > 1:
+                    print(f"    flipped {t}: {[round(x,3) for x in v]}")
+
+
 def cmd_judge(a):
     """Run the chunked-LLM-judge metrics (M3 evidence-in-context / M4 step-performed)
     over one or more SUTs. Thin wrapper around scripts/judge_metrics.py; results are
@@ -1537,6 +1623,12 @@ def main():
     p.add_argument("--force", action="store_true", help="re-judge even if cached")
     p.add_argument("--verbose", action="store_true", help="print per-chunk verdicts")
     p.set_defaults(fn=cmd_judge)
+
+    p = P("stability", cmd_stability.__doc__)
+    p.add_argument("--sut", nargs="+", required=True,
+                   help="BASE config names (replicate arms auto-detected)")
+    p.add_argument("--verbose", action="store_true", help="list flipped tasks with per-rep scores")
+    p.set_defaults(fn=cmd_stability)
 
     a = ap.parse_args()
     a.fn(a)

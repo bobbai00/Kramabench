@@ -3,9 +3,11 @@ For LLM paraphrase evaluator, we implement this paper: https://aclanthology.org/
 For code evaluator, we implement and make data science specific improvements to this paper: https://aclanthology.org/2024.emnlp-main.1118.pdf
     and referred to this paper https://arxiv.org/pdf/2502.12466v1. Things like this https://arxiv.org/abs/2009.10297 doesn't work very well.
 """
+import hashlib
 import json
 import logging
 import os
+import re
 from typing import Dict, List, Tuple, Optional
 
 from openai import OpenAI
@@ -17,6 +19,89 @@ from .prompts import PARAPHRASE_INSTRUCTION_PROMPT, CODE_UNDERSTANDING_PROMPT, P
 
 logging.basicConfig(level=logging.WARNING)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# --- paraphrase verdict cache -------------------------------------------------
+# The paraphrase judge is the headline metric for `string_approximate` tasks, so
+# its verdict must be a pure function of (model, answer, reference): the same
+# pair must never score 1 in one run and 0 in another. Sampling is pinned at the
+# call site (temperature/seed); this on-disk cache pins it across runs and makes
+# a re-score free. Set KRAMABENCH_PARAPHRASE_CACHE=off to bypass.
+_PARAPHRASE_CACHE_PATH = os.environ.get(
+    "KRAMABENCH_PARAPHRASE_CACHE",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                 "benchmark", "fixtures", "paraphrase_cache.json"),
+)
+_paraphrase_cache: Optional[Dict[str, bool]] = None
+
+
+def _normalize_for_cache(s: str) -> str:
+    return re.sub(r"\s+", " ", str(s).strip().lower())
+
+
+def _paraphrase_cache_key(model: str, system_answer: str, reference: str) -> str:
+    payload = f"{model}\x00{_normalize_for_cache(system_answer)}\x00{_normalize_for_cache(reference)}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _load_paraphrase_cache() -> Dict[str, bool]:
+    global _paraphrase_cache
+    if _paraphrase_cache is None:
+        if _PARAPHRASE_CACHE_PATH == "off":
+            _paraphrase_cache = {}
+        else:
+            try:
+                with open(_PARAPHRASE_CACHE_PATH) as f:
+                    _paraphrase_cache = json.load(f)
+            except Exception:
+                _paraphrase_cache = {}
+    return _paraphrase_cache
+
+
+def _paraphrase_cache_get(key: str) -> Optional[bool]:
+    if _PARAPHRASE_CACHE_PATH == "off":
+        return None
+    return _load_paraphrase_cache().get(key)
+
+
+def _paraphrase_cache_put(key: str, verdict: bool) -> None:
+    if _PARAPHRASE_CACHE_PATH == "off":
+        return
+    cache = _load_paraphrase_cache()
+    if cache.get(key) == verdict:
+        return
+    cache[key] = verdict
+    os.makedirs(os.path.dirname(_PARAPHRASE_CACHE_PATH), exist_ok=True)
+    tmp = f"{_PARAPHRASE_CACHE_PATH}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(cache, f)
+        os.replace(tmp, _PARAPHRASE_CACHE_PATH)
+    except Exception as e:
+        logging.warning(f"paraphrase cache write failed: {e}")
+
+
+def _same_but_for_whitespace(a: str, b: str) -> bool:
+    """True when two answers differ only by spacing or letter case.
+
+    Deliberately conservative: punctuation and digits are left alone, so
+    "1234.5" never collides with "12345". Only whitespace is dropped.
+    """
+    strip = lambda s: re.sub(r"\s+", "", str(s)).lower()
+    sa, sb = strip(a), strip(b)
+    return bool(sa) and sa == sb
+
+
+def _extract_yes_no(answer: str) -> Optional[bool]:
+    """Read the judge's verdict from its reply. Word-boundary matched and
+    first-token preferred: a bare substring test scores any reply containing
+    'not'/'none'/'cannot' as a NO."""
+    tokens = re.findall(r"[a-z]+", (answer or "").lower())
+    for tok in tokens:
+        if tok == "yes":
+            return True
+        if tok == "no":
+            return False
+    return None
 
 class GPTInterface(LLMInterface):
     def __init__(self, *args, **kwargs):
@@ -101,6 +186,15 @@ class GPTInterface(LLMInterface):
 
     
     def evaluate_paraphrase(self, system_answer: str, reference: str) -> Tuple[Optional[bool], int, int, int]:
+        if _same_but_for_whitespace(system_answer, reference):
+            # Identical text up to spacing/case is the same answer. Asking the
+            # judge is both wasteful and unreliable: gpt-4o-mini rules
+            # "Northwest,2020" != "Northwest, 2020".
+            return (True, 0, 0, 0)
+        cache_key = _paraphrase_cache_key(self.model, system_answer, reference)
+        cached = _paraphrase_cache_get(cache_key)
+        if cached is not None:
+            return (cached, 0, 0, 0)
         messages = self._format_paraphrase_evaluation_messages(system_answer, reference)
         answer = ""
         token_usage = 0
@@ -109,7 +203,9 @@ class GPTInterface(LLMInterface):
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages
+                messages=messages,
+                temperature=0,
+                seed=0,
             )
             token_usage = response.usage.total_tokens
             token_usage_input = response.usage.prompt_tokens
@@ -125,12 +221,12 @@ class GPTInterface(LLMInterface):
         except Exception as e:
             logging.error(f"GPTInterface.evaluate_paraphrase: ERROR {e}")
             return (None, token_usage, token_usage_input, token_usage_output)
-        if "yes" in answer or "Yes" in answer or "YES" in answer:
-            return (True, token_usage, token_usage_input, token_usage_output)
-        elif "no" in answer or "No" in answer or "NO" in answer:
-            return (False, token_usage, token_usage_input, token_usage_output)
-        logging.warning(f"GPTInterface.evaluate_paraphrase: Failed to extract T/F value from answer {answer}.")
-        return (None, token_usage, token_usage_input, token_usage_output)
+        verdict = _extract_yes_no(answer)
+        if verdict is None:
+            logging.warning(f"GPTInterface.evaluate_paraphrase: Failed to extract T/F value from answer {answer}.")
+            return (None, token_usage, token_usage_input, token_usage_output)
+        _paraphrase_cache_put(cache_key, verdict)
+        return (verdict, token_usage, token_usage_input, token_usage_output)
     
     @typechecked
     def get_code_key_functionalities(self, file_path: str | os.PathLike, task: Dict) -> Optional[List[str]]:

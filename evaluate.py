@@ -53,11 +53,21 @@ def aggregate_results(system_name, results_df):
     workload_results_df = pd.DataFrame(workload_results)
     total_support = 0
     total_score = 0
+    unscored = 0
     for _, row in workload_results_df.iterrows():
         if row["metric"] in ["success", "llm_paraphrase", "rae_score", "f1", "f1_approximate"]:
-            total_support += row["total_value_support"]
+            # Scored tasks only. A metric that returned None means the JUDGE
+            # failed (API error / quota), not that the SUT was wrong — counting
+            # it in the denominator silently converts an outage into a score of
+            # zero. A wrong-but-parseable answer returns 0.0 and still counts.
+            total_support += row["value_support"]
             total_score += row["value_support"] * row["value_mean"]
-    print(f"Total score is: {total_score/total_support*100}")
+            unscored += row["total_value_support"] - row["value_support"]
+    if unscored:
+        print(f"WARNING: {unscored} task(s) had no metric value (judge call failed) and are "
+              f"EXCLUDED from the headline score. Re-score them before comparing runs.")
+    print(f"Total score is: {total_score/total_support*100 if total_support else float('nan')}"
+          f"   (scored {total_support} task-metrics)")
     return workload_results_df
 
 
