@@ -13,7 +13,7 @@ from smolagents import CodeAgent
 from smolagents.models import ChatMessage, MessageRole, OpenAIServerModel
 from smolagents.memory import ActionStep
 
-from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTIONS
+from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTIONS, DATA_PITFALLS_INSTRUCTIONS
 
 # Default settings (CODE_AGENT_MAX_STEPS env var overrides default)
 DEFAULT_MODEL_TYPE = "claude-haiku-4.5"
@@ -26,6 +26,8 @@ CUSTOMIZED_PROMPT_ENABLED = os.environ.get("CUSTOMIZED_PROMPT_ENABLED", "false")
 
 # Fine-grained prompt setting (set to "true" to use one-line-per-action prompt)
 FINE_GRAINED_PROMPT_ENABLED = os.environ.get("FINE_GRAINED_PROMPT_ENABLED", "false").lower() == "true"
+# Data-pitfalls guidance WITHOUT the one-op-per-step granularity mandate.
+PITFALLS_PROMPT_ENABLED = os.environ.get("PITFALLS_PROMPT_ENABLED", "false").lower() == "true"
 
 # Max print outputs length (set to limit characters shown to agent per code execution, empty/0 = no limit)
 _max_print_env = os.environ.get("CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH", "")
@@ -275,6 +277,7 @@ class CodeAgentWrapper:
         verbosity_level: int = 1,
         use_fine_grained_prompt: bool = None,
         use_custom_prompt: bool = None,
+        use_pitfalls_prompt: bool = None,
         max_print_outputs_length: int = None,
         no_action_detail: bool = False,
     ):
@@ -288,6 +291,8 @@ class CodeAgentWrapper:
         self.use_fine_grained_prompt = use_fine_grained_prompt if use_fine_grained_prompt is not None else FINE_GRAINED_PROMPT_ENABLED
         # If not explicitly set, fall back to environment variable
         self.use_custom_prompt = use_custom_prompt if use_custom_prompt is not None else CUSTOMIZED_PROMPT_ENABLED
+        # Data-pitfalls-only guidance (no granularity mandate)
+        self.use_pitfalls_prompt = use_pitfalls_prompt if use_pitfalls_prompt is not None else PITFALLS_PROMPT_ENABLED
         # If not explicitly set, fall back to environment variable (None = no limit)
         self.max_print_outputs_length = max_print_outputs_length if max_print_outputs_length is not None else DEFAULT_MAX_PRINT_OUTPUTS_LENGTH
         self.no_action_detail = no_action_detail
@@ -330,6 +335,8 @@ class CodeAgentWrapper:
             agent_kwargs["instructions"] = FINE_GRAINED_INSTRUCTIONS
         elif self.use_custom_prompt:
             agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
+        elif self.use_pitfalls_prompt:
+            agent_kwargs["instructions"] = DATA_PITFALLS_INSTRUCTIONS
 
         agent_cls = NoActionDetailCodeAgent if self.no_action_detail else CodeAgent
         self._agent = agent_cls(**agent_kwargs)
@@ -368,8 +375,13 @@ class CodeAgentWrapper:
             # Count steps
             num_steps = len(result.steps) if result.steps else 0
 
-        except Exception as e:
-            error = str(e)
+        except (Exception, SystemExit) as e:
+            # Agent-generated code sometimes calls `raise SystemExit(...)` or
+            # sys.exit() as its own error handling. SystemExit is a
+            # BaseException, so smolagents' `except Exception` lets it escape and
+            # kill the whole workload process. Catch it here so one bad task
+            # fails cleanly (scored 0) instead of aborting every remaining task.
+            error = f"SystemExit: {e}" if isinstance(e, SystemExit) else str(e)
 
         # Get reasoning trace from agent memory (more detailed than result.steps)
         trace = extract_reasoning_trace(self._agent)
@@ -442,6 +454,8 @@ class CodeAgentWrapper:
                 agent_kwargs["instructions"] = FINE_GRAINED_INSTRUCTIONS
             elif self.use_custom_prompt:
                 agent_kwargs["instructions"] = CUSTOM_INSTRUCTIONS
+            elif self.use_pitfalls_prompt:
+                agent_kwargs["instructions"] = DATA_PITFALLS_INSTRUCTIONS
 
             agent_cls = NoActionDetailCodeAgent if self.no_action_detail else CodeAgent
             self._agent = agent_cls(**agent_kwargs)

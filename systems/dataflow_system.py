@@ -2636,6 +2636,18 @@ class DataflowSystemGPT52Delta1kSchemaOnly(_GPT52SchemaOnlySweep):
     _NAME = "DataflowSystemGPT52Delta1kSchemaOnly"
 
 
+class DataflowSystemGPT52Latest1kCodeInSnap(_GPT52SchemaOnlySweep):
+    """gpt-5.2, LATEST, 1k, schema-only + code shown in snapshot (short summaries).
+    C3 (versions) ray of the gpt-5.2 mini-mirror star — delta->latest + code ON,
+    vs anchor DataflowSystemGPT52Delta1kSchemaOnly."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52Latest1kCodeInSnap"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Probe-prompt fresh controls. Config-identical to the C1/C2/C3 base arms;
 # NEW names so runs land in fresh scratch dirs (the base arms' folders keep
@@ -2742,6 +2754,21 @@ class DataflowSystemGPT52LatestStats3kD2(_GPT52SweepD2):
     _CONTEXT_MODE = "latest"
     _RESULT_CHARS = 3000
     _NAME = "DataflowSystemGPT52LatestStats3kD2"
+
+
+class DataflowSystemGPT52DeltaStats2kD2(_GPT52SweepD2):
+    """gpt-5.2, DELTA, 2k, column stats ON + data_level=2 (C5 — sampling 2k + stats)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 2000
+    _NAME = "DataflowSystemGPT52DeltaStats2kD2"
+
+
+class DataflowSystemGPT52LatestStats1kD2(_GPT52SweepD2):
+    """gpt-5.2, LATEST, 1k, column stats ON + data_level=2 (C6 — latest + stats,
+    latest-twin of C2 DeltaStats1kD2)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT52LatestStats1kD2"
 
 
 class DataflowSystemGPT52LatestStats3kD2SmallTableControl(_GPT52SweepD2):
@@ -3106,6 +3133,28 @@ class DataflowSystemGPT5MiniDeltaStats3kD2(_GPT5MiniSweepD2):
     _NAME = "DataflowSystemGPT5MiniDeltaStats3kD2"
 
 
+class DataflowSystemGPT5MiniDeltaStats5kD2(_GPT5MiniSweepD2):
+    """gpt-5-mini, DELTA, 5k, column stats ON + data_level=2 (C4 — sampling 5k + stats)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2"
+
+
+class DataflowSystemGPT5MiniDeltaStats2kD2(_GPT5MiniSweepD2):
+    """gpt-5-mini, DELTA, 2k, column stats ON + data_level=2 (C5 — sampling 2k + stats)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 2000
+    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2"
+
+
+class DataflowSystemGPT5MiniLatestStats1kD2(_GPT5MiniSweepD2):
+    """gpt-5-mini, LATEST, 1k, column stats ON + data_level=2 (C6 — latest + stats,
+    latest-twin of C2 DeltaStats1kD2)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 1000
+    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2"
+
+
 # --- gpt-5-mini C1/C2 knob arms (subtask-eval study) ---
 # C1 char cap: Delta1k vs Delta5k (schema-only). C2 profile: Delta1k schema vs
 # DeltaStats1kD2 (both 1k). Matched one-knob pairs on the mini substrate.
@@ -3121,6 +3170,14 @@ class DataflowSystemGPT5MiniDelta5kSchemaOnly(_GPT5MiniSchemaOnlySweep):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 5000
     _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnly"
+
+
+class DataflowSystemGPT5MiniDelta2kSchemaOnly(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, DELTA, 2k, schema-only (C7 — mid sampling point of the rows
+    knob, schema-only twin of C5 DeltaStats2kD2)."""
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 2000
+    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnly"
 
 
 class DataflowSystemGPT5MiniDeltaStats1kD2(_GPT5MiniSweepD2):
@@ -3148,6 +3205,139 @@ class DataflowSystemGPT5MiniLatest1kCodeInSnap(_GPT5MiniSchemaOnlySweep):
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
+
+
+# --- Variance replicates (gpt-5-mini): config-identical to anchor + C1..C6,
+# NEW names so each lands in its own scratch dir = independent single-shot run.
+# Two per base arm -> with the original, 3 independent samples per knob to
+# estimate the run-to-run randomness floor. Placed AFTER all base arms so the
+# subclass references resolve. (No recovery rounds when run — raw single-shot.)
+class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate1(DataflowSystemGPT5MiniDelta1kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate1"
+class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate2(DataflowSystemGPT5MiniDelta1kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate2"
+
+class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate1(DataflowSystemGPT5MiniDelta5kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate1"
+class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate2(DataflowSystemGPT5MiniDelta5kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate2"
+
+class DataflowSystemGPT5MiniDeltaStats1kD2Replicate1(DataflowSystemGPT5MiniDeltaStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate1"
+class DataflowSystemGPT5MiniDeltaStats1kD2Replicate2(DataflowSystemGPT5MiniDeltaStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate2"
+
+class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate1(DataflowSystemGPT5MiniLatest1kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate1"
+class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate2(DataflowSystemGPT5MiniLatest1kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate2"
+
+class DataflowSystemGPT5MiniDeltaStats5kD2Replicate1(DataflowSystemGPT5MiniDeltaStats5kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate1"
+class DataflowSystemGPT5MiniDeltaStats5kD2Replicate2(DataflowSystemGPT5MiniDeltaStats5kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate2"
+
+class DataflowSystemGPT5MiniDeltaStats2kD2Replicate1(DataflowSystemGPT5MiniDeltaStats2kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate1"
+class DataflowSystemGPT5MiniDeltaStats2kD2Replicate2(DataflowSystemGPT5MiniDeltaStats2kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate2"
+
+class DataflowSystemGPT5MiniLatestStats1kD2Replicate1(DataflowSystemGPT5MiniLatestStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate1"
+class DataflowSystemGPT5MiniLatestStats1kD2Replicate2(DataflowSystemGPT5MiniLatestStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate2"
+
+
+# --- Replicate0: clean single-shot re-run of the 7 base arms (anchor+C1-C6),
+# because the base arms' round0 traces were overwritten in-place by their 2
+# recovery rounds. Config-identical, new names, NO retries when run -> a 3rd
+# clean single-shot trace set per knob (variance triple = Rep0/Rep1/Rep2).
+class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate0(DataflowSystemGPT5MiniDelta1kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate0"
+class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate0(DataflowSystemGPT5MiniDelta5kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate0"
+class DataflowSystemGPT5MiniDeltaStats1kD2Replicate0(DataflowSystemGPT5MiniDeltaStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate0"
+class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate0(DataflowSystemGPT5MiniLatest1kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate0"
+class DataflowSystemGPT5MiniDeltaStats5kD2Replicate0(DataflowSystemGPT5MiniDeltaStats5kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate0"
+class DataflowSystemGPT5MiniDeltaStats2kD2Replicate0(DataflowSystemGPT5MiniDeltaStats2kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate0"
+class DataflowSystemGPT5MiniLatestStats1kD2Replicate0(DataflowSystemGPT5MiniLatestStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate0"
+
+
+# --- Replicate3/Replicate4: extend every knob to 5 clean single-shot reps.
+# --- C7 (Delta2kSchemaOnly) Replicate0-4: new knob, 5 reps from scratch.
+class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate3(DataflowSystemGPT5MiniDelta1kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate3"
+class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate4(DataflowSystemGPT5MiniDelta1kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate4"
+
+class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate3(DataflowSystemGPT5MiniDelta5kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate3"
+class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate4(DataflowSystemGPT5MiniDelta5kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate4"
+
+class DataflowSystemGPT5MiniDeltaStats1kD2Replicate3(DataflowSystemGPT5MiniDeltaStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate3"
+class DataflowSystemGPT5MiniDeltaStats1kD2Replicate4(DataflowSystemGPT5MiniDeltaStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate4"
+
+class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate3(DataflowSystemGPT5MiniLatest1kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate3"
+class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate4(DataflowSystemGPT5MiniLatest1kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate4"
+
+class DataflowSystemGPT5MiniDeltaStats5kD2Replicate3(DataflowSystemGPT5MiniDeltaStats5kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate3"
+class DataflowSystemGPT5MiniDeltaStats5kD2Replicate4(DataflowSystemGPT5MiniDeltaStats5kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate4"
+
+class DataflowSystemGPT5MiniDeltaStats2kD2Replicate3(DataflowSystemGPT5MiniDeltaStats2kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate3"
+class DataflowSystemGPT5MiniDeltaStats2kD2Replicate4(DataflowSystemGPT5MiniDeltaStats2kD2):
+    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate4"
+
+class DataflowSystemGPT5MiniLatestStats1kD2Replicate3(DataflowSystemGPT5MiniLatestStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate3"
+class DataflowSystemGPT5MiniLatestStats1kD2Replicate4(DataflowSystemGPT5MiniLatestStats1kD2):
+    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate4"
+
+class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate0(DataflowSystemGPT5MiniDelta2kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate0"
+class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate1(DataflowSystemGPT5MiniDelta2kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate1"
+class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate2(DataflowSystemGPT5MiniDelta2kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate2"
+class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate3(DataflowSystemGPT5MiniDelta2kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate3"
+class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate4(DataflowSystemGPT5MiniDelta2kSchemaOnly):
+    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate4"
+
+
+# --- C8: LATEST 5k + code-in-snapshot (wide-sampling twin of C3), 5 reps.
+class DataflowSystemGPT5MiniLatest5kCodeInSnap(_GPT5MiniSchemaOnlySweep):
+    """gpt-5-mini, LATEST, 5k, schema-only + code shown in snapshot (C8 —
+    5k twin of C3 Latest1kCodeInSnap)."""
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
+    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnap"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
+
+class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate0(DataflowSystemGPT5MiniLatest5kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate0"
+class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate1(DataflowSystemGPT5MiniLatest5kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate1"
+class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate2(DataflowSystemGPT5MiniLatest5kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate2"
+class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate3(DataflowSystemGPT5MiniLatest5kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate3"
+class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate4(DataflowSystemGPT5MiniLatest5kCodeInSnap):
+    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate4"
 
 
 # Static-compaction demonstrator: byte-identical to DataflowSystemGPT52DeltaStats5k

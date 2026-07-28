@@ -30,6 +30,7 @@ class CodeAgentSystem(System):
         name: str = "CodeAgentSystem",
         use_fine_grained_prompt: bool = None,
         use_custom_prompt: bool = None,
+        use_pitfalls_prompt: bool = None,
         no_action_detail: bool = False,
         max_print_outputs_length: int = None,
         *args, **kwargs
@@ -41,6 +42,7 @@ class CodeAgentSystem(System):
         self.api_key = api_key
         self.use_fine_grained_prompt = use_fine_grained_prompt
         self.use_custom_prompt = use_custom_prompt
+        self.use_pitfalls_prompt = use_pitfalls_prompt
         self.no_action_detail = no_action_detail
         # Per-instance stdout-preview cap (the code agent's analog of the dataflow
         # agent's max_operator_result_char_limit). None ⇒ fall back to the
@@ -75,6 +77,7 @@ class CodeAgentSystem(System):
             verbosity_level=2 if self.verbose else 1,
             use_fine_grained_prompt=self.use_fine_grained_prompt,
             use_custom_prompt=self.use_custom_prompt,
+            use_pitfalls_prompt=self.use_pitfalls_prompt,
             no_action_detail=self.no_action_detail,
             max_print_outputs_length=self.max_print_outputs_length,
         )
@@ -426,6 +429,132 @@ class CodeAgentSystemGpt5MiniProxyChars3kGuided(CodeAgentSystem):
         )
 
 
+class CodeAgentSystemGpt5MiniProxyChars1kPitfalls(CodeAgentSystem):
+    """gpt-5-mini proxy code agent, 1k stdout-preview cap, data-pitfalls guidance
+    (no one-op-per-step mandate). C1-anchor analog for the code-agent side —
+    twin of DataflowSystemGPT5MiniDelta1kSchemaOnly at the stdout-cap knob."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kPitfalls",
+            max_print_outputs_length=1000,
+            use_pitfalls_prompt=True,
+            use_custom_prompt=False,
+            use_fine_grained_prompt=False,
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kPitfalls(CodeAgentSystem):
+    """gpt-5-mini proxy code agent, 5k stdout-preview cap, data-pitfalls guidance
+    (no one-op-per-step mandate). C1-ray analog for the code-agent side."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kPitfalls",
+            max_print_outputs_length=5000,
+            use_pitfalls_prompt=True,
+            use_custom_prompt=False,
+            use_fine_grained_prompt=False,
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate1(CodeAgentSystemGpt5MiniProxyChars1kPitfalls):
+    """Replicate 2/3 of the 1k pitfalls arm (variance estimate)."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, *args, **kwargs)
+        self.name = "CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate1"
+        self.output_dir = f"./system_scratch/{self.name}"
+        os.makedirs(self.output_dir, exist_ok=True)
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate2(CodeAgentSystemGpt5MiniProxyChars1kPitfalls):
+    """Replicate 3/3 of the 1k pitfalls arm (variance estimate)."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, *args, **kwargs)
+        self.name = "CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate2"
+        self.output_dir = f"./system_scratch/{self.name}"
+        os.makedirs(self.output_dir, exist_ok=True)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate1(CodeAgentSystemGpt5MiniProxyChars5kPitfalls):
+    """Replicate 2/3 of the 5k pitfalls arm (variance estimate)."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, *args, **kwargs)
+        self.name = "CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate1"
+        self.output_dir = f"./system_scratch/{self.name}"
+        os.makedirs(self.output_dir, exist_ok=True)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate2(CodeAgentSystemGpt5MiniProxyChars5kPitfalls):
+    """Replicate 3/3 of the 5k pitfalls arm (variance estimate)."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(verbose=verbose, *args, **kwargs)
+        self.name = "CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate2"
+        self.output_dir = f"./system_scratch/{self.name}"
+        os.makedirs(self.output_dir, exist_ok=True)
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kGuided(CodeAgentSystem):
+    """gpt-5-mini, 1k stdout cap, ORIGINAL CUSTOM_INSTRUCTIONS (one step = one
+    operation per code block + data-pitfalls checklist)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kGuided",
+            max_print_outputs_length=1000,
+            use_custom_prompt=True,
+            use_fine_grained_prompt=False,
+            use_pitfalls_prompt=False,
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kGuided(CodeAgentSystem):
+    """gpt-5-mini, 5k stdout cap, ORIGINAL CUSTOM_INSTRUCTIONS."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini",
+            api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kGuided",
+            max_print_outputs_length=5000,
+            use_custom_prompt=True,
+            use_fine_grained_prompt=False,
+            use_pitfalls_prompt=False,
+            verbose=verbose,
+            *args, **kwargs
+        )
+
+
+def _mk_replicate(base_cls, n):
+    class _Rep(base_cls):
+        def __init__(self, verbose: bool = False, *args, **kwargs):
+            super().__init__(verbose=verbose, *args, **kwargs)
+            self.name = f"{base_cls.__name__}Replicate{n}"
+            self.output_dir = f"./system_scratch/{self.name}"
+            os.makedirs(self.output_dir, exist_ok=True)
+    _Rep.__name__ = f"{base_cls.__name__}Replicate{n}"
+    _Rep.__qualname__ = _Rep.__name__
+    return _Rep
+
+
+CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars1kGuided, 1)
+CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars1kGuided, 2)
+CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars5kGuided, 1)
+CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars5kGuided, 2)
+
+
 class CodeAgentSystemGpt54Proxy(CodeAgentSystem):
     """Code agent on gpt-5.4 via the routing proxy (-> OpenAI). Peer of the
     DataflowSystem gpt-5.4 latest+replay config."""
@@ -438,3 +567,99 @@ class CodeAgentSystemGpt54Proxy(CodeAgentSystem):
             verbose=verbose,
             *args, **kwargs
         )
+
+
+# --- CA-guided replicate study (gpt-5-mini via litellm :4000): guided code agent
+# at 1k and 5k stdout-preview caps, 5 single-shot samples each (base = rep0,
+# + Replicate1-4). Code-agent runs never touch the Texera engine, so these pools
+# can run concurrently with dataflow pools.
+class CodeAgentSystemGpt5MiniProxyChars1kGuided(CodeAgentSystem):
+    """gpt-5-mini proxy code agent, 1k stdout cap, custom data guidance."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kGuided",
+            max_print_outputs_length=1000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kGuided(CodeAgentSystem):
+    """gpt-5-mini proxy code agent, 5k stdout cap, custom data guidance."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kGuided",
+            max_print_outputs_length=5000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1",
+            max_print_outputs_length=1000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2",
+            max_print_outputs_length=1000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate3(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate3",
+            max_print_outputs_length=1000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate4(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate4",
+            max_print_outputs_length=1000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1",
+            max_print_outputs_length=5000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2",
+            max_print_outputs_length=5000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate3(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate3",
+            max_print_outputs_length=5000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
+
+
+class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate4(CodeAgentSystem):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5-mini", api_base="http://localhost:4000",
+            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate4",
+            max_print_outputs_length=5000, use_custom_prompt=True,
+            verbose=verbose, *args, **kwargs)
