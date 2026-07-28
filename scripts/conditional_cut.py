@@ -101,15 +101,15 @@ def gap_by_bucket(anchor_suf, ray_suf, fname, field, cat_key, W, cats):
 KNOBS = [
     # label, anchor_suf, ray_suf, category, metric(fname, field), higher_is_better
     ("rows 1k->5k  [M5]",   "Delta1kSchemaOnly", "Delta5kSchemaOnly", "big_table",
-     "judge_m5m6.json", "m5", True),
+     "judge_m5.json", "m5", True),
     ("rows 1k->5k  [waste]", "Delta1kSchemaOnly", "Delta5kSchemaOnly", "big_table",
      "judge_m9react.json", "waste_frac", False),
     ("history D->L [waste]", "DeltaStats1kD2", "LatestStats1kD2", "long_pipeline",
      "judge_m9react.json", "waste_frac", False),
     ("history D->L [M5]",    "DeltaStats1kD2", "LatestStats1kD2", "long_pipeline",
-     "judge_m5m6.json", "m5", True),
+     "judge_m5.json", "m5", True),
     ("stats off->on [M5]",  "Delta1kSchemaOnly", "DeltaStats1kD2", "needs_distrib",
-     "judge_m5m6.json", "m5", True),
+     "judge_m5.json", "m5", True),
     ("stats off->on [ground]", "Delta1kSchemaOnly", "DeltaStats1kD2", "needs_distrib",
      "judge_m9react.json", "grounding", True),
 ]

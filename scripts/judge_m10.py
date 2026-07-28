@@ -32,7 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 KB = Path(__file__).resolve().parent.parent
-_s = importlib.util.spec_from_file_location("jm", KB / "scripts/judge_m5m6.py")
+_s = importlib.util.spec_from_file_location("jm", KB / "scripts/judge_m5.py")
 jm = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(jm)
 

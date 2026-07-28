@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pipeline-efficiency report over judge_m5m6.json + stats.json.
+Pipeline-efficiency report over judge_m5.json + stats.json.
 
 (A) Productive fraction  — reuse M5/M6 per-subtask operator citations.
     productive units = distinct units cited by ANY subtask verdict.
@@ -39,7 +39,7 @@ def unit_count(arm, task):
 
 
 def per_task(arm, task):
-    j = jload(KB / "system_scratch" / arm / task / "judge_m5m6.json")
+    j = jload(KB / "system_scratch" / arm / task / "judge_m5.json")
     if not j:
         return None
     n_units, kind = unit_count(arm, task)
