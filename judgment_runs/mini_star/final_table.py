@@ -40,6 +40,21 @@ ARMS = [
     ("N3",     "N3SrcRich5k2k",          range(1, 4), "5K-2K",  "w stats",  "latest", 2),
     ("N4",     "N4Latest2kStats",        range(1, 4), "2K",     "w stats",  "latest", 2),
     ("N5",     "N5SrcRich2k1k",          range(1, 4), "2K-1K",  "w stats",  "latest", 2),
+    ("N6",     "N6Latest3kStats",        range(1, 4), "3K",     "w stats",  "latest", 2),
+    # D8F reps 4-5 ran AFTER the `Files read:` layout move (now grouped with
+    # `Inputs:` above `Code:`); reps 1-3 ran before it. Deliberately a separate
+    # row — pooling across a render change would hide the layout effect, and
+    # this split doubles as a free A/B on it.
+    ("D8F'",   "D8FileIO",               range(4, 6), "5K",     "wo stats", "latest", 3),
+    # LAYOUT A/B (2026-07-30): same engine, both arms interleaved task-major.
+    # Settles the D8F reps-4-5 scare: -5.6 pt there was engine senescence, not the
+    # `Files read:` reposition. Paired, the layout is +1.2 pt at 0.43x SE and -11% cost.
+    ("LOld",   "LayoutOld",              range(1, 4), "5K",     "wo stats", "latest", 4),
+    ("LNew",   "LayoutNew",              range(1, 4), "5K",     "wo stats", "latest", 4),
+    # P-SERIES code budget (chained, same engine as the layout pool).
+    ("P0",     "P0CodeControl",          range(1, 4), "5K",     "wo stats", "latest", 4),
+    ("P1",     "P1Code800",              range(1, 4), "5K/c800","wo stats", "latest", 4),
+    ("P2",     "P2Code400",              range(1, 4), "5K/c400","wo stats", "latest", 4),
 ]
 
 
@@ -86,7 +101,7 @@ for lab, base, reps, samp, stats, mode, era in ARMS:
     if not rs:
         continue
     g = lambda k: [x[k] for x in rs]
-    cfg = f"{samp}, {stats}, {mode}" + ("" if era == 1 else " [e2]")
+    cfg = f"{samp}, {stats}, {mode}" + {1: "", 2: " [e2]", 3: " [e2, post-layout]", 4: " [e3 paired]"}[era]
     print(f"{lab:<7}{cfg:<36}{len(rs):>2}  "
           f"{st.mean(g('a')):>5.1f}±{sd(g('a')):<4.1f}  {st.mean(g('e')):>5.1f}±{sd(g('e')):<4.1f}  {st.mean(g('h')):>5.1f}±{sd(g('h')):<4.1f}  "
           f"{st.mean(g('ca')):.4f}±{sd(g('ca')):.4f}  {st.mean(g('ce')):.4f}±{sd(g('ce')):.4f}  {st.mean(g('ch')):.4f}±{sd(g('ch')):.4f}")

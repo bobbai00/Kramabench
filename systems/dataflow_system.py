@@ -3947,6 +3947,57 @@ class DataflowSystemGPT5MiniD8FileIOReplicate5(_D8FileIO):
 
 
 # ===========================================================================
+#  LAYOUT A/B — 2026-07-30, fresh engine, both arms interleaved in ONE pool.
+#
+#  Why: D8F reps 4-5 (post-layout) scored 65.6 vs reps 1-3 (pre-layout) 71.2,
+#  = -5.6 pt at 2.90x SE. But reps 1-3 ran on a 1-3 h old engine and reps 4-5
+#  on a 10 h old engine that died minutes later, and engine age alone is worth
+#  ~2.3 pt (C8 era1 69.0 vs D8 era2 71.3). That comparison cannot separate
+#  layout from senescence, so it is re-run here properly:
+#
+#    LOld  `Files read:` INSIDE `Result:`         agent-service 311ddd646, :3003
+#    LNew  `Files read:` above `Code:` w/`Inputs:` agent-service c516d800f, :3002
+#
+#  Both endpoints serve the SAME engine at the SAME time and the pool
+#  interleaves the arms, so engine age is held constant by construction
+#  instead of being corrected for afterwards.
+#
+#  Config is D8F's exactly: LATEST 5k + code + files-read, no stats — the arm
+#  the discrepancy showed up on. NOTE the contrast is the render VINTAGE, not
+#  a single line: 311ddd646..c516d800f also carries the DELTA legacyFormatOptions
+#  fix (irrelevant to a LATEST arm) and the prompt's layout example. So this
+#  measures the layout PACKAGE, which is the shipped unit.
+# ===========================================================================
+LAYOUT_OLD_ENDPOINT = "http://localhost:3003"
+
+
+class _LayoutOld(_D8FileIO):
+    """`Files read:` inside `Result:` — the render D8F reps 1-3 ran on."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        # assignment, not setdefault: must beat _D8Latest5kCode's :3002 default
+        kwargs["agent_service_endpoint"] = LAYOUT_OLD_ENDPOINT
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _LayoutNew(_D8FileIO):
+    """`Files read:` above `Code:`, grouped with `Inputs:` — current main."""
+
+
+class DataflowSystemGPT5MiniLayoutOldReplicate1(_LayoutOld):
+    _NAME = "DataflowSystemGPT5MiniLayoutOldReplicate1"
+class DataflowSystemGPT5MiniLayoutOldReplicate2(_LayoutOld):
+    _NAME = "DataflowSystemGPT5MiniLayoutOldReplicate2"
+class DataflowSystemGPT5MiniLayoutOldReplicate3(_LayoutOld):
+    _NAME = "DataflowSystemGPT5MiniLayoutOldReplicate3"
+class DataflowSystemGPT5MiniLayoutNewReplicate1(_LayoutNew):
+    _NAME = "DataflowSystemGPT5MiniLayoutNewReplicate1"
+class DataflowSystemGPT5MiniLayoutNewReplicate2(_LayoutNew):
+    _NAME = "DataflowSystemGPT5MiniLayoutNewReplicate2"
+class DataflowSystemGPT5MiniLayoutNewReplicate3(_LayoutNew):
+    _NAME = "DataflowSystemGPT5MiniLayoutNewReplicate3"
+
+
+# ===========================================================================
 #  RULE B — versions/history on a LATEST core (config-only; no service change).
 #  Base = C8 Latest5k+code (best arm). Each ray adds ONE history channel to
 #  isolate which kind of memory repays the re-derivation tax:
@@ -4113,3 +4164,99 @@ class DataflowSystemSmokeDeltaStats1k(_GPT5MiniSweepD2):
     _CONTEXT_MODE = "delta"
     _RESULT_CHARS = 1000
     _NAME = "DataflowSystemSmokeDeltaStats1k"
+
+
+# ===========================================================================
+#  P-SERIES — the CODE budget. 2026-07-30.
+#
+#  Every context knob to date aimed at the DATA render (rows, stats, schema, chars).
+#  Byte accounting over ~100 traces/arm (judgment_runs/mini_star/byte_accounting.py)
+#  says that was the wrong target:
+#
+#      component share of the rendered dataflow
+#      arm         code    rows   stats  schema
+#      D8  5k     39.4%   46.2%      -    7.1%
+#      D12 1k     33.9%   20.8%  27.7%    9.1%   <- code is the LARGEST component
+#
+#  `max_operator_result_char_limit` clamps table ROWS only, so code has never been
+#  under any budget. This also explains mechanically why source-rich/downstream-lean
+#  lost (C9 67.5 / C10 67.1 / N3 68.4 / N5 67.9 vs uniform-5k 70.1-71.3): on a C9
+#  DataProcessing block the split is code 1,302 B (67%) vs rows 356 B (18%), so the
+#  lever was aimed at 18% of the block.
+#
+#  A CAP, not a drop. Two measurements decided that:
+#   * code size is long-tailed — p50 286 B, p90 2,014 B, p99 6,081 B, max 16,400 B —
+#     so an 800 B cap removes ~49% of code bytes while leaving 76.5% of blocks
+#     untouched, and 400 B removes ~64%;
+#   * dropping code by operator ROLE barely binds. Tried first and smoke-tested: on
+#     these 2-5 operator pipelines `frontier` + `near-frontier` already covers nearly
+#     every operator (near-frontier IS the frontier's upstream), so a role-keyed drop
+#     left 4 of 5 code blocks intact. The `codeBudget` leg in role-policy.ts remains
+#     for longer pipelines but is not what these arms test.
+#
+#  Base config is D8F's (the best arm): LATEST 5k + code + files-read, no stats.
+#  P0 is a same-pool control, so nothing rests on cross-pool engine age.
+#
+#    P0  control, code uncapped (= D8F)
+#    P1  codeMaxChars 800   (~49% of code bytes, ~17% of the dataflow render)
+#    P2  codeMaxChars 400   (~64% of code bytes) — is there a cliff between them?
+#
+#  Served from the code-lean worktree on :3004.
+# ===========================================================================
+CODE_LEAN_ENDPOINT = "http://localhost:3004"
+
+
+def _code_cap_patch(n):
+    """_FILEIO_PATCH plus a code budget. Merged by hand rather than dict-updated:
+    both live under operators.defaults and a shallow update would drop one."""
+    return {
+        "operators": {
+            "defaults": {
+                "result": {"latest": {"column": {"fileIoFacts": True}}},
+                "property": {"codeMaxChars": n},
+            }
+        }
+    }
+
+
+class _PBase(_D8FileIO):
+    """D8F config, pointed at the :3004 build carrying the codeMaxChars param."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["agent_service_endpoint"] = CODE_LEAN_ENDPOINT
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _P0CodeControl(_PBase):
+    """Control: no code cap, so this is byte-parity D8F on the :3004 build."""
+
+
+class _P1Code800(_PBase):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["summarize_params"] = _code_cap_patch(800)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _P2Code400(_PBase):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["summarize_params"] = _code_cap_patch(400)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT5MiniP0CodeControlReplicate1(_P0CodeControl):
+    _NAME = "DataflowSystemGPT5MiniP0CodeControlReplicate1"
+class DataflowSystemGPT5MiniP0CodeControlReplicate2(_P0CodeControl):
+    _NAME = "DataflowSystemGPT5MiniP0CodeControlReplicate2"
+class DataflowSystemGPT5MiniP0CodeControlReplicate3(_P0CodeControl):
+    _NAME = "DataflowSystemGPT5MiniP0CodeControlReplicate3"
+class DataflowSystemGPT5MiniP1Code800Replicate1(_P1Code800):
+    _NAME = "DataflowSystemGPT5MiniP1Code800Replicate1"
+class DataflowSystemGPT5MiniP1Code800Replicate2(_P1Code800):
+    _NAME = "DataflowSystemGPT5MiniP1Code800Replicate2"
+class DataflowSystemGPT5MiniP1Code800Replicate3(_P1Code800):
+    _NAME = "DataflowSystemGPT5MiniP1Code800Replicate3"
+class DataflowSystemGPT5MiniP2Code400Replicate1(_P2Code400):
+    _NAME = "DataflowSystemGPT5MiniP2Code400Replicate1"
+class DataflowSystemGPT5MiniP2Code400Replicate2(_P2Code400):
+    _NAME = "DataflowSystemGPT5MiniP2Code400Replicate2"
+class DataflowSystemGPT5MiniP2Code400Replicate3(_P2Code400):
+    _NAME = "DataflowSystemGPT5MiniP2Code400Replicate3"

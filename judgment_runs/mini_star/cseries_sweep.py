@@ -43,6 +43,9 @@ ARMS = [
     ("N3",     "N3SrcRich5k2k",         range(1, 4), "[era2] LATEST src 5k / down 2k, stats both (+fact)"),
     ("N4",     "N4Latest2kStats",       range(1, 4), "[era2] LATEST 2k + code + stats (+fact)"),
     ("N5",     "N5SrcRich2k1k",         range(1, 4), "[era2] LATEST src 2k / down 1k, stats both (+fact)"),
+    ("N6",     "N6Latest3kStats",       range(1, 4), "[era2] LATEST 3k + code + stats (+fact)"),
+    # reps 4-5 ran after the `Files read:` layout move; kept off D8F's own row
+    ("D8F'",   "D8FileIO",              range(4, 6), "[era2/post-layout] LATEST 5k + code + files-read"),
 ]
 
 
