@@ -118,6 +118,8 @@ class AgentSettings:
     # Optional base-preserving result-decay experiment. None keeps the baseline
     # context byte-identical apart from permanent renderer rules.
     frontier_decay_config: Optional[dict[str, Any]] = None
+    role_policy_config: Optional[dict[str, Any]] = None
+    source_provenance_hint: Optional[bool] = None
     # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
     # one-line resolution facts. None keeps the baseline byte-identical.
     fold_resolved_revisions_config: Optional[dict[str, Any]] = None
@@ -197,6 +199,10 @@ class AgentSettings:
             payload["includeOperatorProperties"] = self.include_operator_properties
         if self.frontier_decay_config is not None:
             payload["frontierDecayConfig"] = self.frontier_decay_config
+        if self.role_policy_config is not None:
+            payload["rolePolicyConfig"] = self.role_policy_config
+        if self.source_provenance_hint is not None:
+            payload["sourceProvenanceHint"] = self.source_provenance_hint
         if self.fold_resolved_revisions_config is not None:
             payload["foldResolvedRevisionsConfig"] = self.fold_resolved_revisions_config
         if self.probe_retirement_config is not None:
@@ -829,6 +835,8 @@ class DataflowAgent:
             context_window_tokens: int = 0,
             static_compaction: bool = False,
             frontier_decay_config: Optional[dict[str, Any]] = None,
+            role_policy_config: Optional[dict[str, Any]] = None,
+            source_provenance_hint: Optional[bool] = None,
             fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
@@ -911,6 +919,8 @@ class DataflowAgent:
             context_window_tokens=context_window_tokens,
             static_compaction=static_compaction,
             frontier_decay_config=frontier_decay_config,
+            role_policy_config=role_policy_config,
+            source_provenance_hint=source_provenance_hint,
             fold_resolved_revisions_config=fold_resolved_revisions_config,
             probe_retirement_config=probe_retirement_config,
             enable_inspect_tool=enable_inspect_tool,
