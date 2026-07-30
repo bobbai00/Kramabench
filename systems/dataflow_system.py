@@ -3915,6 +3915,38 @@ class DataflowSystemGPT5MiniN5SrcRich2k1kReplicate3(_N5SrcRich2k1k):
 
 
 # ===========================================================================
+#  N6 — the 3K tier: LATEST 3k + code + stats (+ files-read fact, now default-on).
+#  Fills the gap between N4 (2k, 67.8) and N1 (5k, 70.1); the measured tiers so
+#  far are 1k 63.8 / 1k+fact 68.8 / 2k 67.8 / 5k 70.1-71.3.
+#
+#  D8F reps 4-5 — more data on the best arm (LATEST 5k + code + fact, 71.2 at
+#  $0.0154). NOTE: these run on a LATER RENDER VINTAGE than reps 1-3 — the
+#  `Files read:` line moved from inside `Result:` to above `Code:` (commit
+#  23a5325fc / f31a017cc). Report reps 4-5 separately before pooling with 1-3.
+# ===========================================================================
+class _N6Latest3kStats(_GPT5MiniSweepD2):
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 3000
+    _NAME = "_N6Latest3kStats"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
+        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT5MiniN6Latest3kStatsReplicate1(_N6Latest3kStats):
+    _NAME = "DataflowSystemGPT5MiniN6Latest3kStatsReplicate1"
+class DataflowSystemGPT5MiniN6Latest3kStatsReplicate2(_N6Latest3kStats):
+    _NAME = "DataflowSystemGPT5MiniN6Latest3kStatsReplicate2"
+class DataflowSystemGPT5MiniN6Latest3kStatsReplicate3(_N6Latest3kStats):
+    _NAME = "DataflowSystemGPT5MiniN6Latest3kStatsReplicate3"
+class DataflowSystemGPT5MiniD8FileIOReplicate4(_D8FileIO):
+    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate4"
+class DataflowSystemGPT5MiniD8FileIOReplicate5(_D8FileIO):
+    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate5"
+
+
+# ===========================================================================
 #  RULE B — versions/history on a LATEST core (config-only; no service change).
 #  Base = C8 Latest5k+code (best arm). Each ray adds ONE history channel to
 #  isolate which kind of memory repays the re-derivation tax:

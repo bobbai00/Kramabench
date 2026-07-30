@@ -41,6 +41,8 @@ ARMS = [
     ("N1",     "N1Latest5kStats",       range(1, 4), "[era2] LATEST 5k + code + stats (+fact)"),
     ("N2",     "N2Delta5kStats",        range(1, 4), "[era2] DELTA  5k + stats        (+fact)"),
     ("N3",     "N3SrcRich5k2k",         range(1, 4), "[era2] LATEST src 5k / down 2k, stats both (+fact)"),
+    ("N4",     "N4Latest2kStats",       range(1, 4), "[era2] LATEST 2k + code + stats (+fact)"),
+    ("N5",     "N5SrcRich2k1k",         range(1, 4), "[era2] LATEST src 2k / down 1k, stats both (+fact)"),
 ]
 
 
