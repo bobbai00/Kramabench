@@ -12,6 +12,17 @@
 # age — the mistake that made D8F reps 4-5 uninterpretable.
 #
 # Task-major emission and P16, for the reasons documented in HANDOFF 4.1/4.2.
+# CONCURRENCY, MEASURED THE HARD WAY (2026-07-30). P16-P32 does NOT work here.
+# The binding resource is not the Kramabench runners but the ENGINE's Python UDF
+# workers: ~10 per run at ~750 MB each, so a run costs ~7.5 GB and ~4.5 cores. At
+# P16 that is 3x CPU oversubscription (load 76 on 24 cores) and at P32 the box
+# reached 60/62 GB with 66 workers holding 49.9 GB. Starved runs then blow the 900s
+# timeout: environment scored only 59 of 118 attempts, where earlier pools at lower
+# effective load completed 100-104 of 104. Recycling the engine returned memory
+# 60/62 -> 3/62 GB, which is also how the leak was confirmed.
+#   safe: P6 main / P4 repair on this 24-core / 62 GB box.
+#   watch `ps -eo args= | grep -c 'dataflow-agent/.venv/bin/python'` (workers),
+#   not the run count.
 set -uo pipefail
 cd ~/Desktop/bobflow/Kramabench
 export $(grep -vE '^#' .env | sed 's/^export //' | xargs)
@@ -23,7 +34,7 @@ overall(){ .venv/bin/python compute_scores.py --sut "$1" 2>/dev/null | awk '/OVE
 
 mapfile -t ARMS < "$D/ruleP.txt"
 mapfile -t TASKS < "$D/tasks_full104.txt"
-log "P-SERIES code budget — ${#ARMS[@]} arms x ${#TASKS[@]} tasks = $(( ${#ARMS[@]} * ${#TASKS[@]} )) runs, xargs -P 16, task-major interleave, :3004."
+log "P-SERIES code budget — ${#ARMS[@]} arms x ${#TASKS[@]} tasks = $(( ${#ARMS[@]} * ${#TASKS[@]} )) runs, xargs -P 6, task-major interleave, :3004."
 
 # Abort if the engine dies, so we never accumulate 26-step/(empty response)
 # garbage the way C12 did. Counts java by /proc/PID/exe, NOT by pattern: a
@@ -67,10 +78,10 @@ run_pass(){
   '
 }
 
-run_pass 16
+run_pass 6
 [[ -f "$D/P_ABORTED" ]] && { log "aborted — not scoring"; exit 1; }
 log "main pass done — repair pass at P8 (lower: repair runs are the heavy tail)"
-run_pass 8
+run_pass 4
 [[ -f "$D/P_ABORTED" ]] && { log "aborted — not scoring"; exit 1; }
 
 # reeval SERIALLY: concurrent `kb.py reeval` corrupted results/aggregated_results.csv
