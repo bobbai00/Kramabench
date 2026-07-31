@@ -4260,3 +4260,209 @@ class DataflowSystemGPT5MiniP2Code400Replicate2(_P2Code400):
     _NAME = "DataflowSystemGPT5MiniP2Code400Replicate2"
 class DataflowSystemGPT5MiniP2Code400Replicate3(_P2Code400):
     _NAME = "DataflowSystemGPT5MiniP2Code400Replicate3"
+
+
+# ===========================================================================
+#  Q-SERIES — the missing cell: 5k + STATS + LATEST + fact on the CURRENT render.
+#
+#  A7 (70.5) and N1 (70.1) already tested 5k+stats+latest+fact, but both finished
+#  before the layout commit 23a5325fc (21:03 Jul 29) and before 6f544c4c1 (20:52)
+#  made `fileIoFacts` an independent default-on flag — they picked the fact up via
+#  the original stats-coupling. So no arm has ever run stats-on against the current
+#  render, where `Files read:` sits above `Code:` with `Inputs:`.
+#
+#  Q0 is a co-run control (= P0: 5k, no stats, fact) rather than a reuse of P0's
+#  reps, so the pair shares engine age exactly.
+#
+#  Prior: stats have never helped LATEST — D8 71.3 (no stats) vs N1 70.1 (stats),
+#  C8 69.0 vs C8s 68.6 — and cost more. Stats only paid at a starved 1k budget
+#  (D12 63.8 -> D12F 68.8), and even there the fact did the work. Expectation is
+#  therefore parity-or-worse; this closes the cell rather than chasing a win.
+# ===========================================================================
+_Q_STATS_PATCH = {
+    "operators": {"defaults": {"result": {"latest": {"column": {"fileIoFacts": True}}}}}
+}
+
+
+class _Q0Control(_PBase):
+    """= P0 exactly: 5k, code, fact, NO stats. Co-run control on :3004."""
+
+
+class _Q1Stats(_GPT5MiniSweepD2):
+    """5k + code + fact + per-column STATS, on the CURRENT render (:3004).
+
+    Derived from _GPT5MiniSweepD2 (which is where data_level=2 / column_stats=True
+    are set) rather than from _PBase — the D8F chain hardcodes stats OFF, so passing
+    column_stats as a kwarg collided with it. Same parent N1 uses; the differences
+    from N1 are the endpoint (current render vintage) and an EXPLICIT fileIoFacts
+    patch instead of relying on the old stats-coupling.
+    """
+    _CONTEXT_MODE = "latest"
+    _RESULT_CHARS = 5000
+    _NAME = "_Q1Stats"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["agent_service_endpoint"] = CODE_LEAN_ENDPOINT
+        kwargs["summarize_params"] = dict(_Q_STATS_PATCH)
+        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
+
+
+class DataflowSystemGPT5MiniQ0ControlReplicate1(_Q0Control):
+    _NAME = "DataflowSystemGPT5MiniQ0ControlReplicate1"
+class DataflowSystemGPT5MiniQ0ControlReplicate2(_Q0Control):
+    _NAME = "DataflowSystemGPT5MiniQ0ControlReplicate2"
+class DataflowSystemGPT5MiniQ0ControlReplicate3(_Q0Control):
+    _NAME = "DataflowSystemGPT5MiniQ0ControlReplicate3"
+class DataflowSystemGPT5MiniQ1StatsReplicate1(_Q1Stats):
+    _NAME = "DataflowSystemGPT5MiniQ1StatsReplicate1"
+class DataflowSystemGPT5MiniQ1StatsReplicate2(_Q1Stats):
+    _NAME = "DataflowSystemGPT5MiniQ1StatsReplicate2"
+class DataflowSystemGPT5MiniQ1StatsReplicate3(_Q1Stats):
+    _NAME = "DataflowSystemGPT5MiniQ1StatsReplicate3"
+
+
+# ===========================================================================
+#  R-SERIES — does the `Files read:` fact RESCUE the lean-downstream split?
+#
+#  The gap: src 5k / down 1k + LATEST + fact was never run. C9 is that exact split
+#  (sourceMaxChars 5000 / nonSourceMaxChars 1000) but ran 2026-07-29 01:59, before
+#  the A7 fact existed — 0 of its 103 traces contain `Files read:`. N3 (5k/2k) and
+#  N5 (2k/1k) both carry the fact; the 5k/1k cell does not.
+#
+#  Why it is worth a pool rather than an assumption: the fact's one large win was on
+#  a STARVED budget — D12 63.8 -> D12F 68.8, +5.0 pt at 3.30x SE, when downstream had
+#  1k. C9 is exactly a starved-downstream arm, so this is the untested mechanism that
+#  could still justify the split family (C9 67.5 / C10 67.1 / N3 68.4 / N5 67.9, all
+#  below uniform-5k's 71.2).
+#
+#  Against it: byte accounting says the split lever aims at `rows` (18% of a
+#  downstream block) while `code` sits at 67% untouched, and the cost rule says only
+#  step reduction pays. The fact does reduce steps, so the prior is genuinely open.
+#
+#    R0  src 5k / down 1k, stats, LATEST, fact OFF   (= C9 on the current render)
+#    R1  src 5k / down 1k, stats, LATEST, fact ON
+#
+#  fileIoFacts defaults ON since 6f544c4c1, so R0 must switch it off EXPLICITLY.
+# ===========================================================================
+_SPLIT_5K_1K = {
+    # NO stats on either side: this isolates the char-budget split itself, on the
+    # same no-stats base as D8F (the best arm). structuralHints off too — A6 showed
+    # the hints leg is its own confound and it was never a stats-free test.
+    "sourceMaxChars": 5000, "sourceStats": False, "sourceStructuralHints": False,
+    "nonSourceMaxChars": 1000, "nonSourceStats": False,
+}
+
+
+class _RSplitBase(_PBase):
+    """src 5k / down 1k, LATEST + code, NO stats, on :3004.
+
+    Derived from _PBase (the D8F chain, stats OFF) rather than _GPT5MiniSweepD2,
+    which forces column_stats=True. `summarize_params` is assigned before super()
+    because _D8FileIO sets it with setdefault, so ours wins.
+    """
+    _NAME = "_RSplitBase"
+    _FACT = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["role_policy_config"] = dict(_SPLIT_5K_1K)
+        kwargs["summarize_params"] = {
+            "operators": {"defaults": {"result": {"latest": {"column": {"fileIoFacts": self._FACT}}}}}
+        }
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _R0SplitNoFact(_RSplitBase):
+    _FACT = False
+
+
+class _R1SplitFact(_RSplitBase):
+    _FACT = True
+
+
+class DataflowSystemGPT5MiniR0SplitNoFactReplicate1(_R0SplitNoFact):
+    _NAME = "DataflowSystemGPT5MiniR0SplitNoFactReplicate1"
+class DataflowSystemGPT5MiniR0SplitNoFactReplicate2(_R0SplitNoFact):
+    _NAME = "DataflowSystemGPT5MiniR0SplitNoFactReplicate2"
+class DataflowSystemGPT5MiniR0SplitNoFactReplicate3(_R0SplitNoFact):
+    _NAME = "DataflowSystemGPT5MiniR0SplitNoFactReplicate3"
+class DataflowSystemGPT5MiniR1SplitFactReplicate1(_R1SplitFact):
+    _NAME = "DataflowSystemGPT5MiniR1SplitFactReplicate1"
+class DataflowSystemGPT5MiniR1SplitFactReplicate2(_R1SplitFact):
+    _NAME = "DataflowSystemGPT5MiniR1SplitFactReplicate2"
+class DataflowSystemGPT5MiniR1SplitFactReplicate3(_R1SplitFact):
+    _NAME = "DataflowSystemGPT5MiniR1SplitFactReplicate3"
+
+
+# ===========================================================================
+#  S-SERIES — isolate HINTS, and re-test the split with neither stats nor hints.
+#
+#  Why: every split arm ever run (C9 67.5 / C10 67.1 / N3 68.4 / N5 67.9) carried
+#  THREE things at once — the char split, per-column stats, AND structuralHints —
+#  because all three ride the _GPT5MiniSweepD2 base. The top arms (D8 71.3, D8F 71.2,
+#  P0 70.8) carry NONE of them. Verified by grepping traces for `Output Table
+#  profile`: 0 occurrences in D8/D8F/P0, 52-56 in A7/N1/C9/Q1. So "splits lose" was
+#  never a clean measurement; stats and hints were confounded into it.
+#
+#  Hints are engine-observed load-quality facts, distinct from stats:
+#      Output Table profile:
+#        - empty rows: 2 of 8365 rows are entirely null
+#        - duplicate rows: 1 of 8365 (0%)
+#        - headers: 29 of 30 columns are unnamed (...)
+#  The engine publishes them unconditionally (`_publish_column_stats` is ungated), so
+#  rendering hints WITHOUT stats is possible — which no arm has ever done except A6's
+#  hintsOnly, and that was on a stats-on base.
+#
+#    S0  uniform 5k, no stats, no hints, +fact      (co-run control = D8F/P0)
+#    S1  uniform 5k, no stats, +HINTS,   +fact      (hints isolated at last)
+#    S2  src 5k / down 2k, no stats, no hints, +fact  (split, finally clean)
+#    S3  src 5k / down 2k, no stats, +HINTS,   +fact
+#
+#  S0 is co-run because engine drift between pools is large: P0 scored 70.8 and Q0
+#  66.4 on IDENTICAL config two hours apart. Cross-pool controls are not usable.
+# ===========================================================================
+def _sp(fact=True, hints=False):
+    col = {"fileIoFacts": fact}
+    if hints:
+        col["structuralHints"] = True
+    return {"operators": {"defaults": {"result": {"latest": {"column": col}}}}}
+
+
+def _split_5k_2k(hints):
+    return {
+        "sourceMaxChars": 5000, "sourceStats": False, "sourceStructuralHints": hints,
+        "nonSourceMaxChars": 2000, "nonSourceStats": False,
+    }
+
+
+class _S0Control(_PBase):
+    """Uniform 5k, no stats, no hints, +fact. Byte-parity with D8F/P0."""
+
+
+class _S1Hints(_PBase):
+    """Uniform 5k, no stats, +hints, +fact — the first stats-free hints arm."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["summarize_params"] = _sp(fact=True, hints=True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _S2Split(_PBase):
+    """src 5k / down 2k, no stats, no hints, +fact."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["role_policy_config"] = _split_5k_2k(False)
+        kwargs["summarize_params"] = _sp(fact=True, hints=False)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _S3SplitHints(_PBase):
+    """src 5k / down 2k, no stats, +hints, +fact."""
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs["role_policy_config"] = _split_5k_2k(True)
+        kwargs["summarize_params"] = _sp(fact=True, hints=True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+for _i in (1, 2, 3):
+    for _cls, _tag in ((_S0Control, "S0Control"), (_S1Hints, "S1Hints"),
+                       (_S2Split, "S2Split"), (_S3SplitHints, "S3SplitHints")):
+        _n = f"DataflowSystemGPT5Mini{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})

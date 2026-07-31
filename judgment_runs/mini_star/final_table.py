@@ -55,6 +55,9 @@ ARMS = [
     ("P0",     "P0CodeControl",          range(1, 4), "5K",     "wo stats", "latest", 4),
     ("P1",     "P1Code800",              range(1, 4), "5K/c800","wo stats", "latest", 4),
     ("P2",     "P2Code400",              range(1, 4), "5K/c400","wo stats", "latest", 4),
+    # Q-SERIES: the missing cell — 5k + stats + fact on the CURRENT render (co-run pair).
+    ("Q0",     "Q0Control",              range(1, 4), "5K",     "wo stats", "latest", 5),
+    ("Q1",     "Q1Stats",                range(1, 4), "5K",     "w stats",  "latest", 5),
 ]
 
 
@@ -87,21 +90,41 @@ def rep(sut):
     if not ce or not ch:
         return None
     n_all = len(ce) + len(ch)
+    allc = sorted(ce + ch)
     return dict(a=d["value"].sum() / len(d) * 100,
                 e=e["value"].sum() / len(e) * 100, h=h["value"].sum() / len(h) * 100,
-                ca=(sum(ce) + sum(ch)) / n_all, ce=st.mean(ce), ch=st.mean(ch))
+                ca=(sum(ce) + sum(ch)) / n_all, ce=st.mean(ce), ch=st.mean(ch),
+                # Cost is heavily tail-dominated: the mean runs ~1.5x the median and
+                # the priciest task costs 10-20x the median, so the top 1% of tasks is
+                # 6-11% of total spend. A 5% two-sided trim moves arms by -8% to -21%
+                # — NOT uniformly — so it reorders them. Report all three: the mean
+                # answers "what will 104 tasks cost", the trim/median answer "what
+                # does a typical task cost", and small (<10%) mean-only deltas should
+                # be treated as tail noise.
+                ct=_trim(allc, 0.05), cm=(allc[len(allc) // 2] if allc else float("nan")))
+
+
+def _trim(v, p):
+    """Two-sided trimmed mean over per-task costs."""
+    if not v:
+        return float("nan")
+    k = int(len(v) * p)
+    w = v[k:len(v) - k] if k else v
+    return st.mean(w) if w else st.mean(v)
 
 
 sd = lambda v: st.pstdev(v) if len(v) > 1 else 0.0
-print("arm    config                              r   acc all      acc easy     acc hard     $ all           $ easy          $ hard")
-print("-" * 142)
+print("arm    config                              r   acc all      acc easy     acc hard     "
+      "$ all           $ trim5%   $ median   $ easy     $ hard")
+print("-" * 158)
 for lab, base, reps, samp, stats, mode, era in ARMS:
     rs = [rep(f"DataflowSystemGPT5Mini{base}Replicate{r}") for r in reps]
     rs = [x for x in rs if x]
     if not rs:
         continue
     g = lambda k: [x[k] for x in rs]
-    cfg = f"{samp}, {stats}, {mode}" + {1: "", 2: " [e2]", 3: " [e2, post-layout]", 4: " [e3 paired]"}[era]
+    cfg = f"{samp}, {stats}, {mode}" + {1: "", 2: " [e2]", 3: " [e2, post-layout]", 4: " [e3 paired]", 5: " [e3b paired]"}[era]
     print(f"{lab:<7}{cfg:<36}{len(rs):>2}  "
           f"{st.mean(g('a')):>5.1f}±{sd(g('a')):<4.1f}  {st.mean(g('e')):>5.1f}±{sd(g('e')):<4.1f}  {st.mean(g('h')):>5.1f}±{sd(g('h')):<4.1f}  "
-          f"{st.mean(g('ca')):.4f}±{sd(g('ca')):.4f}  {st.mean(g('ce')):.4f}±{sd(g('ce')):.4f}  {st.mean(g('ch')):.4f}±{sd(g('ch')):.4f}")
+          f"{st.mean(g('ca')):.4f}±{sd(g('ca')):.4f}  {st.mean(g('ct')):.4f}     "
+          f"{st.mean(g('cm')):.4f}     {st.mean(g('ce')):.4f}     {st.mean(g('ch')):.4f}")

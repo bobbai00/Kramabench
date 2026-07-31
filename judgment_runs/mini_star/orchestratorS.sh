@@ -1,17 +1,20 @@
 #!/bin/bash
-# P-SERIES — the CODE budget. P0 control / P1 codeMaxChars 800 / P2 400, 3 reps, full 104.
+# S-SERIES — isolate HINTS; re-test the char split with neither stats nor hints.
 #
-# Byte accounting over ~100 traces/arm: `Code:` is 27-39% of the rendered dataflow
-# (the LARGEST component at a 1k row budget) and `max_operator_result_char_limit`
-# clamps table ROWS only, so code had never been under any budget. Code size is
-# long-tailed (p50 286 B, p90 2,014 B, p99 6,081 B, max 16,400 B), so an 800 B cap
-# removes ~49% of code bytes touching only 23.5% of blocks; 400 B removes ~64%.
+#   S0  uniform 5k, no stats, no hints, +fact   (co-run control, = D8F/P0)
+#   S1  uniform 5k, no stats, +HINTS,   +fact
+#   S2  src 5k / down 2k, no stats, no hints, +fact
+#   S3  src 5k / down 2k, no stats, +HINTS,   +fact
 #
-# All three arms hit :3004 (the code-lean build). P0 sets no cap and is therefore
-# byte-parity with D8F, present so the comparison never rests on cross-pool engine
-# age — the mistake that made D8F reps 4-5 uninterpretable.
+# Every split arm to date (C9/C10/N3/N5) carried split + stats + hints together, and
+# every top arm (D8/D8F/P0) carried none of the three — verified by grepping traces
+# for `Output Table profile`: 0 in D8/D8F/P0, 52-56 in A7/N1/C9/Q1. So neither the
+# split nor hints has ever been measured alone. Smoke test confirms hints render with
+# stats off, costing ~490 B (+2.8%) vs stats' ~2,000 B.
 #
-# Task-major emission and P16, for the reasons documented in HANDOFF 4.1/4.2.
+# S0 is co-run: engine drift is 4+ pt between pools (P0 70.8 vs Q0 66.4, identical
+# config, two hours apart), so a cross-pool control is unusable.
+#
 # CONCURRENCY, MEASURED THE HARD WAY (2026-07-30). P16-P32 does NOT work here.
 # The binding resource is not the Kramabench runners but the ENGINE's Python UDF
 # workers: ~10 per run at ~750 MB each, so a run costs ~7.5 GB and ~4.5 cores. At
@@ -27,7 +30,7 @@ set -uo pipefail
 cd ~/Desktop/bobflow/Kramabench
 export $(grep -vE '^#' .env | sed 's/^export //' | xargs)
 D=judgment_runs/mini_star
-PROG=$D/orchP_progress.log
+PROG=$D/orchS_progress.log
 # NOTE: append, never truncate. A relaunch (e.g. by memwatch after an engine
 # recycle) used to `: > "$PROG"` and erase the previous instance's audit trail,
 # which is how a bogus "ALL DONE" came to sit alone in the log.
@@ -35,9 +38,9 @@ touch "$PROG"
 log(){ echo "[$(date +%m-%d_%H:%M:%S)] $*" | tee -a "$PROG"; }
 overall(){ .venv/bin/python compute_scores.py --sut "$1" 2>/dev/null | awk '/OVERALL/{print $2,$3,$4}'; }
 
-mapfile -t ARMS < "$D/ruleP.txt"
+mapfile -t ARMS < "$D/ruleS.txt"
 mapfile -t TASKS < "$D/tasks_full104.txt"
-log "P-SERIES code budget — ${#ARMS[@]} arms x ${#TASKS[@]} tasks = $(( ${#ARMS[@]} * ${#TASKS[@]} )) runs, xargs -P 6, task-major interleave, :3004."
+log "S-SERIES hints+split isolation — ${#ARMS[@]} arms x ${#TASKS[@]} tasks = $(( ${#ARMS[@]} * ${#TASKS[@]} )) runs, xargs -P 12, task-major interleave, :3004."
 
 # Abort if the engine dies, so we never accumulate 26-step/(empty response)
 # garbage the way C12 did. Counts java by /proc/PID/exe, NOT by pattern: a
@@ -52,11 +55,11 @@ guard(){
     if [[ "$n" -lt 8 ]] || ! lsof -tiTCP:8085 -sTCP:LISTEN >/dev/null 2>&1; then
       log "!!! ENGINE LOST (java=$n, :8085 down) — killing pool, results after this point would be garbage"
       pkill -P $$ 2>/dev/null
-      touch "$D/P_ABORTED"
+      touch "$D/S_ABORTED"
       return 1
     fi
     for p in 3004; do
-      lsof -tiTCP:$p -sTCP:LISTEN >/dev/null 2>&1 || { log "!!! agent-service :$p DOWN — killing pool"; pkill -P $$ 2>/dev/null; touch "$D/P_ABORTED"; return 1; }
+      lsof -tiTCP:$p -sTCP:LISTEN >/dev/null 2>&1 || { log "!!! agent-service :$p DOWN — killing pool"; pkill -P $$ 2>/dev/null; touch "$D/S_ABORTED"; return 1; }
     done
   done
 }
@@ -67,7 +70,7 @@ trap 'kill $GUARD 2>/dev/null' EXIT
 emit_pending(){
   for T in "${TASKS[@]}"; do
     for A in "${ARMS[@]}"; do
-      L="$D/poolP_${A}__${T}.log"
+      L="$D/poolS_${A}__${T}.log"
       grep -q 'Total score' "$L" 2>/dev/null || echo "$A ${T%%-*} $T"
     done
   done
@@ -77,15 +80,15 @@ run_pass(){
   emit_pending | xargs -P "$1" -L 1 bash -c '
     timeout 900 .venv/bin/python -u evaluate.py --sut "$0" --workload "$1" \
       --task_id "$2" --use_truth_subset --no_pipeline_eval \
-      > "judgment_runs/mini_star/poolP_$0__$2.log" 2>&1
+      > "judgment_runs/mini_star/poolS_$0__$2.log" 2>&1
   '
 }
 
-run_pass 6
-[[ -f "$D/P_ABORTED" ]] && { log "aborted — not scoring"; exit 1; }
+run_pass 12
+[[ -f "$D/S_ABORTED" ]] && { log "aborted — not scoring"; exit 1; }
 log "main pass done — repair pass at P8 (lower: repair runs are the heavy tail)"
-run_pass 4
-[[ -f "$D/P_ABORTED" ]] && { log "aborted — not scoring"; exit 1; }
+run_pass 6
+[[ -f "$D/S_ABORTED" ]] && { log "aborted — not scoring"; exit 1; }
 
 # reeval SERIALLY: concurrent `kb.py reeval` corrupted results/aggregated_results.csv
 # (torn SUT names, 0-row arms) and produced a bogus 43.8% for an N3 rep.
@@ -105,7 +108,7 @@ if [ "$incomplete" -eq 1 ]; then
 fi
 log "repair pass done. reeval (serial) + score:"
 for A in "${ARMS[@]}"; do
-  ./kb.py reeval --sut "$A" >> $D/ruleP_${A}.log 2>&1
+  ./kb.py reeval --sut "$A" >> $D/ruleS_${A}.log 2>&1
   log "  $A -> $(overall "$A")"
 done
-log "############ ORCHP ALL DONE ############"
+log "############ ORCHS ALL DONE ############"

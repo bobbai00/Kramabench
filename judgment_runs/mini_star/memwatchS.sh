@@ -18,7 +18,7 @@
 set -uo pipefail
 cd ~/Desktop/bobflow/Kramabench
 D=judgment_runs/mini_star
-LOG=$D/memwatch.log
+LOG=$D/memwatchS.log
 FLOOR_GB=${1:-18}          # recycle below this many GB available
 MAX_CYCLES=${2:-8}         # backstop against an infinite recycle loop
 cycles=0
@@ -38,8 +38,8 @@ log "memwatch armed: floor=${FLOOR_GB}GB max_cycles=$MAX_CYCLES"
 
 while true; do
   sleep 60
-  grep -q 'ORCHP ALL DONE' $D/orchP_progress.log 2>/dev/null && { log "pool done, exiting"; exit 0; }
-  [ -f $D/P_ABORTED ] && { log "pool aborted, exiting"; exit 0; }
+  grep -q 'ORCHS ALL DONE' $D/orchS_progress.log 2>/dev/null && { log "pool done, exiting"; exit 0; }
+  [ -f $D/S_ABORTED ] && { log "pool aborted, exiting"; exit 0; }
 
   avail=$(free -g | awk 'NR==2{print $7}')
   [ "$avail" -ge "$FLOOR_GB" ] && continue
@@ -97,8 +97,8 @@ while true; do
   fi
 
   # 4. resume the pool; resume-skip re-runs only unscored (arm,task) pairs
-  rm -f $D/P_ABORTED
-  nohup setsid ./judgment_runs/mini_star/orchestratorP.sh > /dev/null 2>&1 &
+  rm -f $D/S_ABORTED
+  nohup setsid ./judgment_runs/mini_star/orchestratorS.sh > /dev/null 2>&1 &
   sleep 20
-  log "pool resumed: scored=$(grep -l 'Total score' $D/poolP_* 2>/dev/null | wc -l)/936"
+  log "pool resumed: scored=$(grep -l 'Total score' $D/poolS_* 2>/dev/null | wc -l)/1248"
 done
