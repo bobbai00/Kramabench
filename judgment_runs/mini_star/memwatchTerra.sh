@@ -18,12 +18,12 @@
 set -uo pipefail
 cd ~/Desktop/bobflow/Kramabench
 D=judgment_runs/mini_star
-LOG=$D/memwatchS.log
+LOG=$D/memwatchTerra.log
 FLOOR_GB=${1:-18}          # recycle below this many GB available
 MAX_CYCLES=${2:-8}         # backstop against an infinite recycle loop
 cycles=0
 LAST_LAUNCH=$(cut -d. -f1 /proc/uptime)
-LAST_SCORED=$(grep -l 'Total score' judgment_runs/mini_star/poolS_* 2>/dev/null | wc -l)
+LAST_SCORED=$(grep -l 'Total score' judgment_runs/mini_star/poolTerra_* 2>/dev/null | wc -l)
 
 log(){ echo "[$(date +%m-%d_%H:%M:%S)] $*" >> "$LOG"; }
 
@@ -32,7 +32,7 @@ java_pids(){
     case "$(readlink "$d/exe" 2>/dev/null)" in */java) echo "${d#/proc/}";; esac
   done
 }
-orch_pids(){ ps -eo pid=,args= | awk '{for(i=2;i<=NF;i++) if($i ~ /orchestratorS\.sh$/){print $1; break}}'; }
+orch_pids(){ ps -eo pid=,args= | awk '{for(i=2;i<=NF;i++) if($i ~ /orchestratorTerra\.sh$/){print $1; break}}'; }
 xargs_pids(){ ps -eo pid=,comm= | awk '$2=="xargs"{print $1}'; }
 worker_pids(){ ps -eo pid=,args= | awk '/dataflow-agent\/\.venv\/bin\/python/{print $1}'; }
 
@@ -40,8 +40,8 @@ log "memwatch armed: floor=${FLOOR_GB}GB max_cycles=$MAX_CYCLES"
 
 while true; do
   sleep 60
-  grep -q 'ORCHS ALL DONE' $D/orchS_progress.log 2>/dev/null && { log "pool done, exiting"; exit 0; }
-  [ -f $D/S_ABORTED ] && { log "pool aborted, exiting"; exit 0; }
+  grep -q 'ORCHTERRA ALL DONE' $D/orchTerra_progress.log 2>/dev/null && { log "pool done, exiting"; exit 0; }
+  [ -f $D/TERRA_ABORTED ] && { log "pool aborted, exiting"; exit 0; }
 
   avail=$(free -g | awk 'NR==2{print $7}')
 
@@ -56,9 +56,9 @@ while true; do
     while read -r A; do
       na=$(ls system_scratch/$A/*/response.txt 2>/dev/null | wc -l)
       [ "$na" -lt "$nmin" ] && nmin=$na
-    done < "$D/ruleS.txt"
+    done < "$D/ruleTerra.txt"
     now=$(cut -d. -f1 /proc/uptime)
-    sc=$(grep -l 'Total score' $D/poolS_* 2>/dev/null | wc -l)
+    sc=$(grep -l 'Total score' $D/poolTerra_* 2>/dev/null | wc -l)
     if [ "$nmin" -ge 100 ]; then
       log "orchestrator gone and pool COMPLETE (min $nmin/104) — nothing to do"
     elif [ $((now - LAST_LAUNCH)) -lt 900 ]; then
@@ -71,10 +71,10 @@ while true; do
     else
       log "orchestrator gone, pool incomplete (min $nmin/104), ${avail}GB free, progress $LAST_SCORED -> $sc — resuming"
       X=$(xargs_pids | tr '\n' ' '); [ -n "$X" ] && kill $X 2>/dev/null; sleep 3
-      nohup setsid ./judgment_runs/mini_star/orchestratorS.sh > /dev/null 2>&1 &
+      nohup setsid ./judgment_runs/mini_star/orchestratorTerra.sh > /dev/null 2>&1 &
       LAST_LAUNCH=$now; LAST_SCORED=$sc
       sleep 30
-      log "resumed: scored=$(grep -l 'Total score' $D/poolS_* 2>/dev/null | wc -l)/1248"
+      log "resumed: scored=$(grep -l 'Total score' $D/poolTerra_* 2>/dev/null | wc -l)/1560"
       continue
     fi
   fi
@@ -146,8 +146,8 @@ while true; do
   fi
 
   # 4. resume the pool; resume-skip re-runs only unscored (arm,task) pairs
-  rm -f $D/S_ABORTED
-  nohup setsid ./judgment_runs/mini_star/orchestratorS.sh > /dev/null 2>&1 &
+  rm -f $D/TERRA_ABORTED
+  nohup setsid ./judgment_runs/mini_star/orchestratorTerra.sh > /dev/null 2>&1 &
   sleep 20
-  log "pool resumed: scored=$(grep -l 'Total score' $D/poolS_* 2>/dev/null | wc -l)/1248"
+  log "pool resumed: scored=$(grep -l 'Total score' $D/poolTerra_* 2>/dev/null | wc -l)/1560"
 done

@@ -96,11 +96,14 @@ run_pass 6
 # COMPLETENESS GATE. On 2026-07-30 a relaunched instance reached this loop with only
 # ~29 of 104 answers per arm and happily reeval'd them, writing measures CSVs that
 # scored 9.6%/12.5% as if complete. Scoring partial data is worse than not scoring:
-# it looks like a result. Refuse unless every arm has nearly all answers.
+# it looks like a result. Threshold is 95, not 100: the timeout tail (astronomy-
+# hard-11 and friends) legitimately leaves an arm at 99-101, and a gate that can
+# never be satisfied stalls the pool forever. 95 still blocks the failure it exists
+# for, which was ~29/104.
 incomplete=0
 for A in "${ARMS[@]}"; do
   na=$(ls system_scratch/$A/*/response.txt 2>/dev/null | wc -l)
-  if [ "$na" -lt 100 ]; then log "  INCOMPLETE $A: $na/104 answers"; incomplete=1; fi
+  if [ "$na" -lt 95 ]; then log "  INCOMPLETE $A: $na/104 answers"; incomplete=1; fi
 done
 if [ "$incomplete" -eq 1 ]; then
   log "REFUSING to reeval — at least one arm is incomplete. Fix and rerun; nothing scored."

@@ -4466,3 +4466,134 @@ for _i in (1, 2, 3):
                        (_S2Split, "S2Split"), (_S3SplitHints, "S3SplitHints")):
         _n = f"DataflowSystemGPT5Mini{_tag}Replicate{_i}"
         globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  LUNA SERIES — gpt-5.6-luna baseline sweep (first non-gpt-5-mini model in the
+#  current render era). Mirrors the gpt-5-mini anchor/C1-C4 factorial so the two
+#  models are directly comparable knob-for-knob.
+#
+#    LunaAnchor  1K, DELTA,  no stats
+#    LunaC1      5K, DELTA,  no stats            (+sampling)
+#    LunaC2      1K, DELTA,  stats + hints       (+stats)
+#    LunaC3      1K, LATEST, no stats, +code     (+latest)
+#    LunaC4      5K, LATEST, stats + hints, +code (all three)
+#
+#  All carry the `Files read:` fact, which is default-on since 6f544c4c1. NOTE: for
+#  a plain DELTA arm `server.ts` never enters the summarize-params branch (it is
+#  gated on frontierDecay / probeRetirement / rolePolicy / renderPrefs /
+#  enableCodeInSnapshot&&LATEST), so setting `summarize_params` here would be a
+#  SILENT NO-OP. DELTA picks the fact up via the legacy default instead
+#  (legacyFormatOptions, fixed in f7cabbe43) — verified by grepping traces, not
+#  assumed.
+#
+#  `stats` and `hints` are deliberately bundled: data_level=2 + column_stats=True is
+#  what produces both the per-column block and the `Output Table profile` hints, and
+#  that bundling is what the gpt-5-mini C2/C8s arms used. On gpt-5-mini the two were
+#  separated later (S-series) and hints turned out to be the cheap half.
+#
+#  LATEST arms carry code-in-snapshot, matching gpt-5-mini's C3/C8s and the current
+#  default (64f5ea4dc).
+# ===========================================================================
+class _LunaBase(DataflowSystem):
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _STATS = False
+    _CODE = False
+    _NAME = "_LunaBase"
+    _MODEL = "gpt-5.6-luna"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", CODE_LEAN_ENDPOINT)
+        super().__init__(
+            model_type=self._MODEL,
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=2 if self._STATS else 1,
+            column_stats=self._STATS,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=self._CODE,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class _LunaAnchor(_LunaBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
+    _NAME = "_LunaAnchor"
+
+
+class _LunaC1(_LunaBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
+    _NAME = "_LunaC1"
+
+
+class _LunaC2(_LunaBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
+    _NAME = "_LunaC2"
+
+
+class _LunaC3(_LunaBase):
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
+    _NAME = "_LunaC3"
+
+
+class _LunaC4(_LunaBase):
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
+    _NAME = "_LunaC4"
+
+
+for _i in (1, 2, 3):
+    for _cls, _tag in ((_LunaAnchor, "LunaAnchor"), (_LunaC1, "LunaC1"), (_LunaC2, "LunaC2"),
+                       (_LunaC3, "LunaC3"), (_LunaC4, "LunaC4")):
+        _n = f"DataflowSystem{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  TERRA SERIES — gpt-5.6-terra, identical five-arm factorial to the luna sweep so
+#  the two 5.6 models compare knob-for-knob and against gpt-5-mini.
+#  Same Responses-API routing and reasoning_effort=medium (terra rejects function
+#  tools on /v1/chat/completions with any effort other than "none", exactly as luna
+#  does — verified directly against the API).
+# ===========================================================================
+class _TerraBase(_LunaBase):
+    _MODEL = "gpt-5.6-terra"
+    _NAME = "_TerraBase"
+
+
+class _TerraAnchor(_TerraBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
+    _NAME = "_TerraAnchor"
+
+
+class _TerraC1(_TerraBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
+    _NAME = "_TerraC1"
+
+
+class _TerraC2(_TerraBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
+    _NAME = "_TerraC2"
+
+
+class _TerraC3(_TerraBase):
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
+    _NAME = "_TerraC3"
+
+
+class _TerraC4(_TerraBase):
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
+    _NAME = "_TerraC4"
+
+
+for _i in (1, 2, 3):
+    for _cls, _tag in ((_TerraAnchor, "TerraAnchor"), (_TerraC1, "TerraC1"), (_TerraC2, "TerraC2"),
+                       (_TerraC3, "TerraC3"), (_TerraC4, "TerraC4")):
+        _n = f"DataflowSystem{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
