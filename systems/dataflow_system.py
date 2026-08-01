@@ -4597,3 +4597,71 @@ for _i in (1, 2, 3):
                        (_TerraC3, "TerraC3"), (_TerraC4, "TerraC4")):
         _n = f"DataflowSystem{_tag}Replicate{_i}"
         globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  T-SERIES — terra round 2, built from the round-1 trace analysis.
+#
+#  Terra's factorial left exactly two positive signals: sampling (C1 +1.7 at
+#  1.19x SE) and the C4 bundle (+2.8 at 1.83x SE). But C4 bundles three knobs and
+#  LATEST alone HURTS terra (C3 -1.4), and both of C4's clean task-level wins over
+#  C3 (environment-hard-18, biomedical-hard-5) look sampling-driven — C1 also wins
+#  environment-hard-18. So the bundle's active ingredients are plausibly
+#  sampling+stats, with LATEST dead weight.
+#
+#    T0  = C4 exactly (5K LATEST stats+hints +code)   — co-run control
+#    T1  = 5K DELTA stats+hints                        — the missing C1xC2 cell;
+#          if T1 >= T0 then DELTA is terra's true mode and 76.0 isn't the ceiling
+#    T2  = C4 with 10K sampling                        — terra is the first model
+#          where sampling clearly pays; every earlier model saturated by 5K.
+#          10K tests whether 76.0 is sampling-limited.
+# ===========================================================================
+class _T0Control(_TerraC4):
+    _NAME = "_T0Control"
+
+
+class _T1Delta5kStats(_TerraBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
+    _NAME = "_T1Delta5kStats"
+
+
+class _T2Latest10k(_TerraBase):
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 10000; _STATS = True; _CODE = True
+    _NAME = "_T2Latest10k"
+
+
+for _i in (1, 2, 3):
+    for _cls, _tag in ((_T0Control, "T0Control"), (_T1Delta5kStats, "T1Delta5kStats"),
+                       (_T2Latest10k, "T2Latest10k")):
+        _n = f"DataflowSystem{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  E-SERIES — reasoning EFFORT, the axis no arm has tested. Every 5.6 arm so far
+#  ran at effort=medium. Two facts motivate this: (1) render knobs are exhausted —
+#  luna's factorial spans 2.6 pt, terra's 4.1, T-round-2 killed the 10K-sampling
+#  and DELTA-mode hypotheses (both <1x SE vs the co-run control); (2) failing runs
+#  burn ~2x the reasoning tokens of passing runs on BOTH models (terra 551 vs
+#  1,222; luna 691 vs 1,391), so the model already modulates effort with
+#  difficulty — the question is whether a higher ceiling converts grind into
+#  correct answers, especially on hard tasks.
+#
+#    E0  terra, 5K DELTA stats+hints, effort=medium   (co-run control = T1 config)
+#    E1  same, effort=high (via the gpt-5.6-terra-high litellm alias)
+#
+#  T1's config is the base because it was round 2's numerically best arm (72.8).
+# ===========================================================================
+class _E0Medium(_T1Delta5kStats):
+    _NAME = "_E0Medium"
+
+
+class _E1High(_T1Delta5kStats):
+    _MODEL = "gpt-5.6-terra-high"
+    _NAME = "_E1High"
+
+
+for _i in (1, 2, 3):
+    for _cls, _tag in ((_E0Medium, "E0Medium"), (_E1High, "E1High")):
+        _n = f"DataflowSystem{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})

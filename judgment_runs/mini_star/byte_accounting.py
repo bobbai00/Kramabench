@@ -163,7 +163,7 @@ def run(arms):
                 by_type[otype]["_block"].append(sum(comp.values()))
             per_task[task] = (sum(tsum.values()), tsum, scores.get(task))
 
-        print(f"=== {label}  ({sut.split('Mini')[1]}) ===")
+        print(f"=== {label}  ({sut.replace(chr(39)+chr(39),chr(39)+chr(39))}) ===")
         print(f"  traces={len(tot_ctx)}  mean full prompt={st.mean(tot_ctx):,.0f} B"
               f"  mean operators/task={st.mean(n_ops):.1f}")
         print(f"  {'op type':<18}{'n':>5}{'block B':>10}{'rows':>9}{'stats':>8}"
