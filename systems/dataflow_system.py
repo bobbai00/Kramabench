@@ -4665,3 +4665,124 @@ for _i in (1, 2, 3):
     for _cls, _tag in ((_E0Medium, "E0Medium"), (_E1High, "E1High")):
         _n = f"DataflowSystem{_tag}Replicate{_i}"
         globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  LS/TS SERIES — the mini S-series 2x2 (hints x split) replicated on BOTH 5.6
+#  models, 5 reps, ONE combined pool so luna and terra share engine age.
+#
+#  Why: the per-operator family was never tested on 5.6. On mini, the clean S2
+#  split was the best arm in its pool (+1.4 at 1.87x SE, -12.4% cost) and S1
+#  hints-only was the largest cost lever found (-24% at parity, via one fewer
+#  step). Terra's render is rows-dominated (52% vs mini's 21-46%), so the split
+#  attacks a bigger share of the budget than it ever did on mini. Against: both
+#  5.6 models were knob-insensitive on global knobs.
+#
+#  Base = 5K LATEST + code, NO stats, fact on (matches mini S-series exactly):
+#    *S0  uniform, no hints          (control)
+#    *S1  uniform, +HINTS            (structuralHints without stats)
+#    *S2  src 5K / down 2K, no hints (the clean split)
+#    *S3  split + hints              (interaction)
+# ===========================================================================
+_S56_SPLIT = lambda hints: {
+    "sourceMaxChars": 5000, "sourceStats": False, "sourceStructuralHints": hints,
+    "nonSourceMaxChars": 2000, "nonSourceStats": False,
+}
+_S56_SP = lambda hints: {"operators": {"defaults": {"result": {"latest": {"column": (
+    {"fileIoFacts": True, "structuralHints": True} if hints else {"fileIoFacts": True}
+)}}}}}
+
+
+def _mk56(base, tag, hints, split):
+    class _A(base):
+        _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = False; _CODE = True
+        _NAME = f"_{tag}"
+
+        def __init__(self, verbose: bool = False, *args, **kwargs):
+            if split:
+                kwargs["role_policy_config"] = _S56_SPLIT(hints)
+            kwargs["summarize_params"] = _S56_SP(hints)
+            super().__init__(verbose=verbose, *args, **kwargs)
+    _A.__name__ = f"_{tag}"
+    return _A
+
+
+for _model_base, _pref in ((_LunaBase, "LS"), (_TerraBase, "TS")):
+    for _suffix, _hints, _split in (("0Control", False, False), ("1Hints", True, False),
+                                    ("2Split", False, True), ("3SplitHints", True, True)):
+        _tag = f"{_pref}{_suffix}"
+        _cls = _mk56(_model_base, _tag, _hints, _split)
+        globals()[f"_{_tag}"] = _cls
+        for _i in (1, 2, 3, 4, 5):
+            _n = f"DataflowSystem{_tag}Replicate{_i}"
+            globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# LS/TS reps 6-7 (user extended the pool to 7 reps per arm).
+for _pref in ("LS", "TS"):
+    for _suffix in ("0Control", "1Hints", "2Split", "3SplitHints"):
+        _tag = f"{_pref}{_suffix}"
+        _cls = globals()[f"_{_tag}"]
+        for _i in (6, 7):
+            _n = f"DataflowSystem{_tag}Replicate{_i}"
+            globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# Round-1 factorial reps 4-5 (both models). Run co-run in ONE pool; do NOT blindly
+# pool with reps 1-3 — different engine era (measured drift -4.5 pt on identical
+# config). Pool across eras only if per-arm levels match; else report separately.
+for _pref, _arms in (("Luna", ("_LunaAnchor", "_LunaC1", "_LunaC2", "_LunaC3", "_LunaC4")),
+                     ("Terra", ("_TerraAnchor", "_TerraC1", "_TerraC2", "_TerraC3", "_TerraC4"))):
+    for _cn in _arms:
+        _cls = globals()[_cn]
+        _tag = _cn[1:]
+        for _i in (4, 5):
+            _n = f"DataflowSystem{_tag}Replicate{_i}"
+            globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  LUNA C5 — 5K DELTA + stats/hints: the missing C1xC2 cell on luna (terra's was
+#  T1). Notes: (1) DELTA carries operator code inline per event by design, so
+#  "+code" is inherent and enable_code_in_snapshot stays False (the server gate
+#  is LATEST-only); (2) the `Files read:` fact is expected NOT to render — known
+#  5.6+DELTA defect, 0/104 across every luna/terra DELTA arm. Stats+hints do.
+#  Co-run control: fresh LunaC1 reps 6-8 (5K DELTA no-stats), so C5-C1 = the
+#  stats effect measured within-pool rather than against last era's C1.
+# ===========================================================================
+class _LunaC5(_LunaBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
+    _NAME = "_LunaC5"
+
+
+for _i in (1, 2, 3, 4, 5):
+    _n = f"DataflowSystemLunaC5Replicate{_i}"
+    globals()[_n] = type(_n, (_LunaC5,), {"_NAME": _n})
+for _i in (6, 7, 8):
+    _n = f"DataflowSystemLunaC1Replicate{_i}"
+    globals()[_n] = type(_n, (_LunaC1,), {"_NAME": _n})
+
+
+# TERRA C5 — same cell as luna C5 (5K DELTA + stats/hints; config identical to
+# _T1Delta5kStats, renamed for the paired 5v3 test). Luna's within-pool result was
+# +2.5 at 3.23x SE (hard +2.5 at 3.46x) — the first 5.6 render knob past 2x SE, an
+# interaction (stats needs the 5K sample; each half alone was noise). Terra's T1 at
+# 3v3 showed +1.3 at 0.93x; this rerun at 5v3 with a co-run C1 control tests whether
+# the interaction generalizes across the 5.6 pair.
+class _TerraC5(_TerraBase):
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
+    _NAME = "_TerraC5"
+
+
+for _i in (1, 2, 3, 4, 5):
+    _n = f"DataflowSystemTerraC5Replicate{_i}"
+    globals()[_n] = type(_n, (_TerraC5,), {"_NAME": _n})
+for _i in (6, 7, 8):
+    _n = f"DataflowSystemTerraC1Replicate{_i}"
+    globals()[_n] = type(_n, (_TerraC1,), {"_NAME": _n})
+
+
+# Terra C5 pool: control extended to 5 reps (5v5).
+for _i in (9, 10):
+    _n = f"DataflowSystemTerraC1Replicate{_i}"
+    globals()[_n] = type(_n, (_TerraC1,), {"_NAME": _n})
