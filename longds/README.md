@@ -125,7 +125,56 @@ The *shape* replicates their headline finding, and more sharply: accuracy decays
 **zero** in the final quarter of the task, and Rollback is the worst pattern under
 both judges.
 
-Three things the pilot establishes:
+## Second experiment — turn-boundary state recall, 2026-08-04
+
+The paper's failures are state failures, and a dataflow's state is addressable, so:
+replace the ever-growing event log at each turn boundary with a `# Prior Turns`
+catalogue (request / operators touched / answer) plus a read-only `recallState`
+tool the model calls to pull what it actually needs — a past turn in full, an
+operator's code as of a past turn, an operator's revision history, a result sample.
+Turn-aligned on purpose: the prompt prefix has to change when a new request
+arrives, so the reorganization is free there and the prefix stays cacheable within
+the turn. Knobs (all default-off): `userTaskPlacement`, `turnHistory`,
+`enableRecallTool`.
+
+**Verdict so far: not a win.** gpt-5.6-luna, judged by deepseek-v4-pro:
+
+| arm | water-potability/task3 (36 turns) | nfl/task1 (42 turns) |
+|---|---|---|
+| baseline (request on top, full history) | **33.3%** / $2.16 | **24.4%** / $9.99 |
+| recall v1 — catalogue only | 11.1% / $1.56 | 2.4% / $2.77 |
+| recall v2 — + current snapshot | 17.1% / $3.04 | 11.9% / $5.51 |
+| recall v4 — + code, + recalled-state | 28.6% / $2.85 | rerun in flight |
+
+Within ~5 points of baseline at ~30% more cost, but faster in wall-clock (32.8 vs
+41.9 min) and better on the early turns (first quarter 77.8 vs 66.7). Rollback got
+*worse* (25.0 → 12.5), which is the opposite of the design intent and is the next
+thing to read traces for.
+
+Four bugs, every one found by running it rather than by reading the code:
+
+1. **Off-by-one turn numbering** — the tool counted the synthetic `initialize`
+   group that the renderer drops, so the catalogue's "Turn 1" and the tool's
+   `turn: 1` disagreed. 44 recall calls in one turn, no answer.
+2. **Snapshot starvation** — legacy DELTA sets `currentSnapshot: false` because
+   every schema and result lives inline in the events. Cataloguing them deleted the
+   state: a 13 KB turn-20 prompt with zero `Output Table`.
+3. **Code starvation** — same class. A baseline prompt carried 79 `def process/load`
+   blocks; the catalogued one carried zero, leaving the agent blind to its own code.
+4. **Tool output does not persist** — the big one. The re-rendered context keeps a
+   tool CALL but not its OUTPUT, so recalled state evaporated on the next step and
+   the model re-asked forever (98 calls in one turn). `inspectResult` already had
+   `# Inspections` for exactly this; `recallState` needed `# Recalled State`. Note a
+   per-turn call budget did **not** contain the loop — refusing a call still costs a
+   step, so 88 steps went to rejections.
+
+The transferable lesson: **in DELTA the event log is not history, it is the working
+state.** Any compaction of it has to re-provide results *and* code by another route,
+and any read-only pull tool needs its output rendered back into context. Both are
+checkable by diffing prompt contents between arms — do that before trusting an arm's
+accuracy number.
+
+## Three things the first pilot establishes
 
 - **Cascade is the mechanism, and the DAG only fixes half of it.** Turn 3 computes
   one percentile wrong (`first_score` 1.0685 vs gold 0.9755) and turns 5, 7, 8, 9,
