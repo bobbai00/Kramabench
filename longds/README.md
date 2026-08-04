@@ -168,6 +168,33 @@ Four bugs, every one found by running it rather than by reading the code:
    per-turn call budget did **not** contain the loop — refusing a call still costs a
    step, so 88 steps went to rejections.
 
+### v5 — the snapshot as an index (2026-08-04)
+
+v4's own snapshot render turned out to be the cost bug: every operator's code and
+result table re-sent every step (323 operators = 438 KB of a 463 KB NFL prompt).
+v5 renders every operator as summary + `Schema:` line only; code and sample rows
+appear only for operators touched by the turn in progress; everything else is one
+`recallState` call away and recalled output persists for the turn.
+
+| task | baseline | recall v5 |
+|---|---|---|
+| water-potability (36 turns) | 33.3% / $2.16 | **36.1% / $1.40** |
+| nfl (42 turns) | 24.4% / $9.99 | 9.8% / $9.92 |
+
+WP wins on both axes under BOTH judges (gpt-5.2: 33.3 vs 25.0), with Update turns
+18.2 → 54.5 and recall usage up 6× — a lean push is what makes the model pull.
+NFL fails from turn 2, its heavy-formula turn: shape-only rendering hides the
+VALUES of the tables the formulas consume, and the baseline still had turn 1's
+sample rows in view. The next lever is a value channel for operators the current
+work reads from (lineage/recency-graded sampling, not the binary
+touched-this-turn rule), plus operator retirement — NFL reaches 300+ operators
+and the index itself grows O(ops).
+
+Judge-noise finding from the same traces: on the recall arm the two judges agree
+100% (35/35); on the baseline they disagree on 5 turns where deepseek-v4-pro
+forgave wrong numbers on yes/no questions. The baseline's WP score is partly
+judge leniency; gpt-5.2 follows the benchmark's exact-numerics rule more strictly.
+
 The transferable lesson: **in DELTA the event log is not history, it is the working
 state.** Any compaction of it has to re-provide results *and* code by another route,
 and any read-only pull tool needs its output rendered back into context. Both are
