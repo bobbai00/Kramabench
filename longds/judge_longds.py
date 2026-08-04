@@ -5,11 +5,15 @@
 copied, so an upstream edit cannot silently desync our scoring from theirs. Only
 the endpoint and the judge model differ from the paper.
 
-DEVIATION, and it must be stated wherever these numbers appear: the paper judges
-with `deepseek-v4-pro`; we have no DeepSeek key, so the judge is a fixed OpenAI
-model behind our litellm gateway. Absolute scores are therefore NOT directly
-comparable to the published 48.45 — arm-vs-arm comparisons are, because the judge
-is held constant.
+The paper's judge, `deepseek-v4-pro`, is reachable through OpenRouter:
+
+    JUDGE_BASE_URL=https://openrouter.ai/api/v1 JUDGE_API_KEY=$OPENROUTER_API_KEY \
+      python longds/judge_longds.py --sut <SUT> --judge-model deepseek/deepseek-v4-pro
+
+Use it for anything that will be compared to published numbers. The litellm default
+(`gpt-5.2`) is the cheap local option; measured against deepseek-v4-pro on 41 turns
+the two agree on 38 (92.7%, about the paper's own 93.11% human-vs-LLM agreement),
+so it is a sound stand-in for arm-vs-arm work but not for absolute claims.
 
 Both aggregations are reported. Upstream's shipped aggregator takes a
 turn-weighted mean; the paper's eq. 2 macro-averages per task and then across
@@ -53,7 +57,8 @@ def load_judge_prompt() -> str:
     return mod.JUDGE_PROMPT
 
 
-def judge_one(client, model: str, prompt_tpl: str, turn: dict, retries: int = 3) -> dict:
+def judge_one(client, model: str, prompt_tpl: str, turn: dict, retries: int = 3,
+              max_tokens: int = 4000) -> dict:
     """One turn, binary. Upstream's own conventions preserved.
 
     An empty solution or gold scores 0 and still counts in the denominator
@@ -75,8 +80,16 @@ def judge_one(client, model: str, prompt_tpl: str, turn: dict, retries: int = 3)
     text = ""
     for _ in range(retries):
         try:
+            # max_tokens is explicit because OpenRouter authorizes a request against
+            # the account's remaining credit: with no purchased credits it rejects
+            # (402) on the model's default ceiling long before any tokens are spent.
+            # It also has to leave room for a reasoning model's hidden tokens, or the
+            # reply gets truncated before the <score> tag.
             resp = client.chat.completions.create(
-                model=model, messages=[{"role": "user", "content": prompt}], temperature=0.0
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=max_tokens,
             )
             text = resp.choices[0].message.content or ""
         except Exception as exc:  # noqa: BLE001
@@ -91,11 +104,12 @@ def judge_one(client, model: str, prompt_tpl: str, turn: dict, retries: int = 3)
     return {"score": None, "reasoning": "", "error_detail": "unparsable judge reply", "raw": text}
 
 
-def judge_task(client, model: str, prompt_tpl: str, run_dir: Path, workers: int) -> list:
+def judge_task(client, model: str, prompt_tpl: str, run_dir: Path, workers: int,
+               max_tokens: int = 4000) -> list:
     turns = json.loads((run_dir / "results_with_ground_truth.json").read_text())
     results = [None] * len(turns)
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(judge_one, client, model, prompt_tpl, t): i for i, t in enumerate(turns)}
+        futures = {pool.submit(judge_one, client, model, prompt_tpl, t, 3, max_tokens): i for i, t in enumerate(turns)}
         for fut in as_completed(futures):
             results[futures[fut]] = fut.result()
     for turn, verdict in zip(turns, results):
@@ -104,7 +118,7 @@ def judge_task(client, model: str, prompt_tpl: str, run_dir: Path, workers: int)
     return turns
 
 
-def report(all_turns: list[list[dict]]) -> None:
+def report(all_turns: list[list[dict]], judge_model: str = "") -> None:
     """Overall, by state pattern, by dependency breadth, by task progress."""
     flat = [t for task in all_turns for t in task]
     scored = [t for t in flat if t["judge"].get("score") is not None]
@@ -150,8 +164,14 @@ def report(all_turns: list[list[dict]]) -> None:
             progress.setdefault(key, []).append(t["judge"]["score"])
     bucket("task progress", progress)
 
-    print("\nNOTE: judge is not deepseek-v4-pro; absolute scores are not comparable")
-    print("      to the paper's 48.45. Arm-vs-arm comparisons hold (judge fixed).")
+    if "deepseek-v4-pro" in judge_model:
+        print("\nJudge is the paper's own model (deepseek-v4-pro), so these scores ARE")
+        print("comparable to its published numbers — with the runtime caveat that the")
+        print("agent builds a workflow instead of running DSGym's fixed ReAct loop.")
+    else:
+        print(f"\nNOTE: judge is {judge_model or 'not deepseek-v4-pro'}, not the paper's")
+        print("deepseek-v4-pro, so absolute scores are not comparable to its published")
+        print("numbers. Arm-vs-arm comparisons hold, with the judge held fixed.")
 
 
 def main() -> int:
@@ -160,6 +180,7 @@ def main() -> int:
     ap.add_argument("--task", help="single prepared task key (default: every task under --sut)")
     ap.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
     ap.add_argument("--max-workers", type=int, default=8)
+    ap.add_argument("--max-tokens", type=int, default=4000, help="judge reply cap; must leave room for a reasoning model's hidden tokens")
     ap.add_argument("--overwrite", action="store_true", help="re-judge tasks that already have results_eval.json")
     args = ap.parse_args()
 
@@ -190,9 +211,9 @@ def main() -> int:
             all_turns.append(json.loads(eval_path.read_text()))
             continue
         print(f"  {d.name}: judging...")
-        all_turns.append(judge_task(client, args.judge_model, prompt_tpl, d, args.max_workers))
+        all_turns.append(judge_task(client, args.judge_model, prompt_tpl, d, args.max_workers, args.max_tokens))
 
-    report(all_turns)
+    report(all_turns, args.judge_model)
     return 0
 
 

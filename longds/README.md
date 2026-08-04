@@ -58,9 +58,23 @@ killed with its parent shell is unrecoverable (below).
 
 ## Deviations from the official protocol — state these with any number
 
-1. **Judge model.** The paper judges with `deepseek-v4-pro`; we have no key, so the
-   judge is `gpt-5.2` behind litellm. Absolute scores are **not** comparable to the
-   published 48.45. Arm-vs-arm comparisons are, with the judge held fixed.
+1. **Judge model — resolved.** The paper's judge, `deepseek-v4-pro`, is reachable
+   through OpenRouter, so scores can be made directly comparable:
+
+   ```bash
+   set -a && . ./.env && set +a
+   JUDGE_BASE_URL=https://openrouter.ai/api/v1 JUDGE_API_KEY=$OPENROUTER_API_KEY \
+     .venv/bin/python longds/judge_longds.py --sut <SUT> \
+       --judge-model deepseek/deepseek-v4-pro --overwrite
+   ```
+
+   The litellm default (`gpt-5.2`) stays the cheap local option. On the pilot's 41
+   judgeable turns the two judges **agree on 38 (92.7%)** — about the paper's own
+   93.11% human-vs-LLM agreement — disagreeing only on turns 12, 13 and 22. So
+   gpt-5.2 is a sound stand-in for arm-vs-arm work, and deepseek-v4-pro is what to
+   use for any number quoted against the paper. Note OpenRouter authorizes each
+   request against the remaining account credit, so `--max-tokens` is explicit
+   (default 4000) — the model's own 65k default 402s on a zero-credit account.
 2. **Runtime.** Not DSGym's pinned Docker Jupyter executor and not their fixed
    40-step `<python>` ReAct loop — the agent builds a workflow with its own tools.
    That is the point of the exercise, but it means this is not a leaderboard score.
@@ -88,21 +102,28 @@ code-in-snapshot, `max_steps=40`/turn, **append-only history** (`contextWindowTo
 nothing trimmed). Task `sports/nfl_big_data_bowl_2023/task1` — 42 turns, the longest
 in the benchmark, and it exercises all four state-evolution patterns.
 
-**23.81%** (10/42 turns), $9.99, 70 min, 7.8 steps/turn mean.
+**24.39%** under the paper's own judge, `deepseek-v4-pro` (10 of 41 judgeable turns;
+one turn's judge reply was unparsable and is excluded). Under `gpt-5.2`: 23.81%
+(10/42). $9.99, 70 min, 7.8 steps/turn mean.
 
-| cut | result |
+| cut (deepseek-v4-pro judge) | result |
 |---|---|
-| by pattern | Update 27.3 · Initial 21.4 · Counterfactual 16.7 · **Rollback 15.4** |
-| by task progress | 0-25% 36.4 · 25-50% 30.0 · 50-75% 27.3 · **75-100% 0.0** |
-| by dependency breadth | ≤1: 66.7 (n=3) · 2-3: 23.1 · 4+: 15.4 |
+| by pattern | Update 27.3 · Counterfactual 25.0 · Initial 15.4 · **Rollback 15.4** |
+| by task progress | 0-25% 30.0 · 25-50% 50.0 · 50-75% 18.2 · **75-100% 0.0** |
+| by dependency breadth | 2-3: 23.1 · 4+: 23.1 |
 | context growth | 20.6 kB → 920 kB (21.9 kB/turn), ending at ~230k tokens ≈ 85% of the window |
 | cost shape | $0.0095 on turn 1 → $0.90 on turn 36 |
 
-Read against the paper: sports is its hardest domain (GPT-5.4 10.52, Claude 19.76,
-Gemini 31.85, Kimi 32.85), so 23.81 on its longest sports task is mid-pack for an
-untuned first run — but the *shape* replicates their headline finding exactly, and
-more sharply: accuracy decays to zero in the final quarter, and Rollback is the
-worst pattern.
+Read against the paper: sports is its hardest domain — GPT-5.4 10.52,
+DeepSeek-V4-Pro 15.82, Claude-4.6-Sonnet 19.76, Gemini-3.1-Pro 31.85, Kimi-K2.6
+32.85. At 24.39 on its longest sports task, an untuned first run sits above Claude
+and DeepSeek and below Gemini and Kimi. Treat that as indicative only: this is one
+task, the domain has three, and the agent builds a workflow rather than running
+DSGym's fixed ReAct loop.
+
+The *shape* replicates their headline finding, and more sharply: accuracy decays to
+**zero** in the final quarter of the task, and Rollback is the worst pattern under
+both judges.
 
 Three things the pilot establishes:
 
