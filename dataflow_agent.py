@@ -120,6 +120,14 @@ class AgentSettings:
     frontier_decay_config: Optional[dict[str, Any]] = None
     role_policy_config: Optional[dict[str, Any]] = None
     source_provenance_hint: Optional[bool] = None
+    # Multi-turn knobs. `user_task_placement="bottom"` moves the request under the
+    # history so the history stays a byte-stable prefix across turns (prompt cache);
+    # `turn_history="index"` collapses prior turns into a catalogue; and
+    # `enable_recall_tool` exposes `recallState` so the model pulls back what the
+    # catalogue elided. None/False keeps the render byte-identical to legacy.
+    user_task_placement: Optional[str] = None
+    turn_history: Optional[str] = None
+    enable_recall_tool: bool = False
     # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
     # one-line resolution facts. None keeps the baseline byte-identical.
     fold_resolved_revisions_config: Optional[dict[str, Any]] = None
@@ -203,6 +211,12 @@ class AgentSettings:
             payload["rolePolicyConfig"] = self.role_policy_config
         if self.source_provenance_hint is not None:
             payload["sourceProvenanceHint"] = self.source_provenance_hint
+        if self.user_task_placement is not None:
+            payload["userTaskPlacement"] = self.user_task_placement
+        if self.turn_history is not None:
+            payload["turnHistory"] = self.turn_history
+        if self.enable_recall_tool:
+            payload["enableRecallTool"] = True
         if self.fold_resolved_revisions_config is not None:
             payload["foldResolvedRevisionsConfig"] = self.fold_resolved_revisions_config
         if self.probe_retirement_config is not None:
@@ -837,6 +851,9 @@ class DataflowAgent:
             frontier_decay_config: Optional[dict[str, Any]] = None,
             role_policy_config: Optional[dict[str, Any]] = None,
             source_provenance_hint: Optional[bool] = None,
+            user_task_placement: Optional[str] = None,
+            turn_history: Optional[str] = None,
+            enable_recall_tool: bool = False,
             fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
@@ -921,6 +938,9 @@ class DataflowAgent:
             frontier_decay_config=frontier_decay_config,
             role_policy_config=role_policy_config,
             source_provenance_hint=source_provenance_hint,
+            user_task_placement=user_task_placement,
+            turn_history=turn_history,
+            enable_recall_tool=enable_recall_tool,
             fold_resolved_revisions_config=fold_resolved_revisions_config,
             probe_retirement_config=probe_retirement_config,
             enable_inspect_tool=enable_inspect_tool,

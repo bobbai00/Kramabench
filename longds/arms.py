@@ -63,6 +63,64 @@ class LongDSLunaDelta1k(LongDSBase):
     _NAME = "LongDSLunaDelta1k"
 
 
+class LongDSLunaDelta1kTaskLast(LongDSBase):
+    """Baseline + the request moved under the history.
+
+    Pure cache/attention change: same bytes, same order of everything else. The
+    baseline put the newest request FIRST, so each new turn changed byte 13 of the
+    prompt and invalidated the identical history below it (measured: consecutive
+    turns shared 13 leading characters of a 233 KB prompt). Isolating it here
+    means any accuracy difference is attributable to placement alone.
+    """
+
+    _NAME = "LongDSLunaDelta1kTaskLast"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaRecall(LongDSBase):
+    """The experiment: catalogue prior turns, let the model pull what it needs.
+
+    Prior turns collapse into `# Prior Turns` (request / operators touched /
+    answer) and the model recalls specifics through `recallState`. The request
+    sits last so the catalogue and the current turn's events stay a stable prefix.
+
+    The bet: LongDS failures are state failures, not retrieval failures, and a
+    dataflow's state is addressable (named operators, per-turn revisions,
+    materialized results), so the model can fetch the exact earlier definition
+    rather than re-deriving it — which is where the numeric drift comes from.
+    """
+
+    _NAME = "LongDSLunaRecall"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaRecallPushFull(LongDSBase):
+    """Ablation: the recall tool WITHOUT trimming history.
+
+    Separates "the model can pull state" from "the push side got leaner". If the
+    tool only helps once history is trimmed, the mechanism is attention/burial,
+    not retrieval ability.
+    """
+
+    _NAME = "LongDSLunaRecallPushFull"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("enable_recall_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 ARMS = {
     "luna-delta-1k": LongDSLunaDelta1k,
+    "luna-task-last": LongDSLunaDelta1kTaskLast,
+    "luna-recall": LongDSLunaRecall,
+    "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }
