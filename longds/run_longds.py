@@ -252,7 +252,10 @@ def main() -> int:
     for idx, turn in enumerate(turns):
         tid = turn["turn_id"]
         tdir = run_dir / f"t{tid:02d}"
-        tdir.mkdir(exist_ok=True)
+        # parents=True so a session survives its run_dir being removed underneath
+        # it (two concurrent runs of the same task raced exactly once, and the
+        # loser died mid-turn on a bare mkdir).
+        tdir.mkdir(parents=True, exist_ok=True)
         prompt = build_turn_1_prompt(manifest, turn) if idx == 0 else build_turn_n_prompt(turn)
         (tdir / "prompt.txt").write_text(prompt)
 
