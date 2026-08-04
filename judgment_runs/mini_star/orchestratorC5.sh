@@ -73,10 +73,19 @@ trap 'kill $GUARD 2>/dev/null' EXIT
 
 # task-major: consecutive lines alternate arms, so all 6 progress together
 emit_pending(){
+  # A run is PENDING if it never scored OR if it died on infrastructure: engine
+  # recycles kill in-flight runs whose agent call then writes
+  # "Error: Unable to connect..." as the RESPONSE — and evaluate.py still prints
+  # "Total score is: 0.0" for it, so a score-only check treats a dead run as done.
+  # The Aug-1 R45 pool accumulated ~6.5 such zeros per arm over 6 recycles, which
+  # masqueraded as a -5 pt "terra endpoint drift" until diagnosed.
   for T in "${TASKS[@]}"; do
     for A in "${ARMS[@]}"; do
       L="$D/poolC5_${A}__${T}.log"
-      grep -q 'Total score' "$L" 2>/dev/null || echo "$A ${T%%-*} $T"
+      R="system_scratch/${A}/${T}/response.txt"
+      if ! grep -q 'Total score' "$L" 2>/dev/null; then echo "$A ${T%%-*} $T"
+      elif [ -f "$R" ] && head -c 6 "$R" 2>/dev/null | grep -q '^Error:'; then echo "$A ${T%%-*} $T"
+      fi
     done
   done
 }
