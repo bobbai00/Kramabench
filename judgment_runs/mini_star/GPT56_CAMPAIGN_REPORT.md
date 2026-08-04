@@ -65,3 +65,48 @@ lets the model talk itself into a more complicated wrong method.
 5. Open engine defect: `Files read:` never renders on 5.6+DELTA (0 across 6
    arms × 3 reps) while LATEST renders 11-19/104 and mini+DELTA renders ~19.
    Immaterial to these conclusions; worth an engine-side instrumentation fix.
+
+---
+
+## POST-REPAIR CORRECTION (2026-08-02) — read this before any number above
+
+Everything above was computed from pools that silently contained **infra zeros**:
+when the memory watchdog recycled the engine, in-flight runs had
+`Error: Unable to connect ...` written as their *response*, `evaluate.py` still
+printed `Total score is: 0.0`, and the score-only resume check treated the dead
+run as complete. 272 such runs were found across the campaign (~6.5 per arm);
+228 were re-run against a live engine. The residual 44 are all the same task
+(`wildfire-hard-19`, a ~1 GB load that kept getting killed mid-flight); they cost
+each arm at most 0.4 pt and are flagged in the final table.
+
+Three claims above are **retracted**:
+
+1. **"−4.5 / −5.3 pt era drift" does not exist.** It was the infra zeros, not a
+   day-to-day endpoint difference. Cross-pool comparison discipline still holds
+   for other reasons, but terra's round-1 edge was never a drift artifact —
+   `TerraC4 = 76.0` reproduces at n=5 (76.0 ± 2.4).
+2. **Every dollar figure above uses gpt-5-mini pricing** and is wrong for these
+   models. True litellm registry prices per M tokens (in / cached / out):
+   luna $0.20 / $0.02 / $1.20, terra $2.00 / $0.20 / $12.00 — terra costs ~9×
+   luna, which reverses the value recommendation.
+3. **C5's effect size shrinks.** With repaired data: luna +2.0 (2.44× SE),
+   terra +1.5 (1.39×), inverse-variance combined **+1.8 at ~2.8× SE** — still the
+   one surviving 5.6 render knob and still an interaction (stats and sampling are
+   each null alone), but not the +2.4 / 3.8× first reported. It also halves
+   rep-to-rep std (±0.8-0.9 vs ±2.4).
+
+**Authoritative post-repair numbers: `LUNA_TERRA_FINAL_TABLE.md`** (n=5, Anchor
+through C5, both models, official KramaBench scores, true pricing, ± = population
+std across per-rep means). Headlines:
+
+| operating point | acc All | $/task |
+|---|---|---|
+| luna C5 (5K DELTA + stats) — best value | 73.4 ± 0.8 | 0.0098 |
+| luna C3 (1K LATEST) — cheapest | 70.3 ± 1.5 | 0.0072 |
+| terra C4 (5K LATEST + stats + code) — best absolute | **76.0 ± 2.4** | 0.0811 |
+
+Conclusions 1, 2, 4 and 5 above survive the repair unchanged: knob sensitivity
+still orders inversely with model strength, effort=high is still negative
+(E1−E0 = −1.6 post-repair), the same tasks still fail deterministically, and the
+`Files read:` DELTA defect is still open. Conclusion 3's operating point is
+superseded by the table.
