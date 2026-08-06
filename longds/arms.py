@@ -63,6 +63,25 @@ class LongDSLunaDelta1k(LongDSBase):
     _NAME = "LongDSLunaDelta1k"
 
 
+class LongDSLunaDelta1kSameEra(LongDSBase):
+    """The baseline again, under a separate name, for a SAME-ERA control.
+
+    Byte-identical config to `LongDSLunaDelta1k`. It exists only so today's
+    baseline can be measured without overwriting the 2026-08-03 one — and it
+    exists at all because the 2026-08-06 comparison was invalid without it.
+
+    Every LongDS arm-vs-arm number before this was cross-vintage: the baseline
+    ran 08-03, the recall arm 08-04 (four agent-service commits back, before the
+    structured layout, the rich-set caps and operator retirement), the
+    turn-recall arm 08-06 — across a full JVM restart, which HANDOFF 4.6 measures
+    at ~2.3 points on its own and calls an era boundary never to compare across.
+    A same-era control is the only way to attribute a difference to an arm rather
+    than to the week.
+    """
+
+    _NAME = "LongDSLunaDelta1kSameEra"
+
+
 class LongDSLunaDelta1kTaskLast(LongDSBase):
     """Baseline + the request moved under the history.
 
@@ -136,6 +155,53 @@ class LongDSLunaTurnRecall(LongDSBase):
         super().__init__(verbose=verbose, *args, **kwargs)
 
 
+class LongDSLunaTurnRecallCap40(LongDSBase):
+    """The turn-recall arm under COUNT-based index retirement (the new default).
+
+    Identical kwargs to `LongDSLunaTurnRecall`; it sets nothing, because the fix
+    is the service default. Separate name only so its results sit beside the
+    arm it replaces.
+
+    The two probe arms this supersedes (`indexRecentTurns` 12 and 24) are gone
+    along with the knob, so their findings live here. All same-era, 2026-08-06,
+    deepseek-v4-pro judge; baseline is `LongDSLunaDelta1kSameEra`:
+
+        task                ops   baseline   recentTurns=3   =12     =24
+        passnyc              31      63.3%           40.0%  76.7%   73.3%
+        water-potability     73      41.7%           33.3%  47.2%      -
+        sustainable-energy  160      16.7%           11.1%  25.0%      -
+        bi                    9      (n/a)           70.4%  70.4%      -
+        rankings             20      (n/a)           19.0%  20.0%      -
+        nfl                 277      31.0%            7.1%  FLOOD       -
+        uber                381      (n/a)           13.9%  FLOOD       -
+
+    Three things that table settles:
+
+      * At 3 the index STARVES. On passnyc the model saw 4 result tables out of
+        ~23 live operators from turn 5 on.
+      * At 12 the same constant FLOODS a big DAG. NFL and uber reached 360-600 kB
+        of context and spent turn after turn burning the entire 40-step budget to
+        return an empty answer; both runs were abandoned.
+      * 24 is slightly WORSE than 12 on passnyc (73.3 vs 76.7), so retirement is
+        worth keeping — the index is what buys the cost reduction — and the old
+        default was simply far too aggressive.
+
+    A turn count cannot satisfy all of those at once, because 12 turns of a
+    31-operator task and 12 turns of a 381-operator task are not the same amount
+    of context. The replacement bounds the COUNT of detailed operators (default
+    40) with the turn's own work exempt: small DAGs keep everything, large ones
+    keep a bounded most-relevant slice.
+    """
+
+    _NAME = "LongDSLunaTurnRecallCap40"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -154,8 +220,10 @@ class LongDSLunaRecallPushFull(LongDSBase):
 
 ARMS = {
     "luna-delta-1k": LongDSLunaDelta1k,
+    "luna-delta-1k-sameera": LongDSLunaDelta1kSameEra,
     "luna-task-last": LongDSLunaDelta1kTaskLast,
     "luna-recall": LongDSLunaRecall,
     "luna-turn-recall": LongDSLunaTurnRecall,
+    "luna-turn-recall-cap40": LongDSLunaTurnRecallCap40,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }

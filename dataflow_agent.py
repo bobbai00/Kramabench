@@ -133,7 +133,11 @@ class AgentSettings:
     # default (12). There is no code cap — the operators a turn touches always
     # render their code in full.
     index_rich_tables: Optional[int] = None
-    index_recent_turns: Optional[int] = None
+    # How many operators keep a full index entry (summary + schema) beyond the
+    # ones this turn is touching, which are never evicted. None keeps the service
+    # default (40). A COUNT, not an age: the age-based rule it replaced starved a
+    # 31-operator task and flooded a 381-operator one with the same constant.
+    index_detailed_operators: Optional[int] = None
     index_thin_observations: Optional[bool] = None
     # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
     # one-line resolution facts. None keeps the baseline byte-identical.
@@ -226,8 +230,8 @@ class AgentSettings:
             payload["enableRecallTool"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
-        if self.index_recent_turns is not None:
-            payload["indexRecentTurns"] = self.index_recent_turns
+        if self.index_detailed_operators is not None:
+            payload["indexDetailedOperators"] = self.index_detailed_operators
         if self.index_thin_observations is not None:
             payload["indexThinObservations"] = self.index_thin_observations
         if self.fold_resolved_revisions_config is not None:
@@ -868,7 +872,7 @@ class DataflowAgent:
             turn_history: Optional[str] = None,
             enable_recall_tool: bool = False,
             index_rich_tables: Optional[int] = None,
-            index_recent_turns: Optional[int] = None,
+            index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
             fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
             probe_retirement_config: Optional[dict[str, Any]] = None,
@@ -958,7 +962,7 @@ class DataflowAgent:
             turn_history=turn_history,
             enable_recall_tool=enable_recall_tool,
             index_rich_tables=index_rich_tables,
-            index_recent_turns=index_recent_turns,
+            index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
             fold_resolved_revisions_config=fold_resolved_revisions_config,
             probe_retirement_config=probe_retirement_config,
