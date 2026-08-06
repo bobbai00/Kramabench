@@ -128,6 +128,13 @@ class AgentSettings:
     user_task_placement: Optional[str] = None
     turn_history: Optional[str] = None
     enable_recall_tool: bool = False
+    # Turn-index cap: how many UPSTREAM operators of the current turn's work may
+    # render sample rows, most-recently-touched first. None keeps the service
+    # default (12). There is no code cap — the operators a turn touches always
+    # render their code in full.
+    index_rich_tables: Optional[int] = None
+    index_recent_turns: Optional[int] = None
+    index_thin_observations: Optional[bool] = None
     # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
     # one-line resolution facts. None keeps the baseline byte-identical.
     fold_resolved_revisions_config: Optional[dict[str, Any]] = None
@@ -217,6 +224,12 @@ class AgentSettings:
             payload["turnHistory"] = self.turn_history
         if self.enable_recall_tool:
             payload["enableRecallTool"] = True
+        if self.index_rich_tables is not None:
+            payload["indexRichTables"] = self.index_rich_tables
+        if self.index_recent_turns is not None:
+            payload["indexRecentTurns"] = self.index_recent_turns
+        if self.index_thin_observations is not None:
+            payload["indexThinObservations"] = self.index_thin_observations
         if self.fold_resolved_revisions_config is not None:
             payload["foldResolvedRevisionsConfig"] = self.fold_resolved_revisions_config
         if self.probe_retirement_config is not None:
@@ -854,6 +867,9 @@ class DataflowAgent:
             user_task_placement: Optional[str] = None,
             turn_history: Optional[str] = None,
             enable_recall_tool: bool = False,
+            index_rich_tables: Optional[int] = None,
+            index_recent_turns: Optional[int] = None,
+            index_thin_observations: Optional[bool] = None,
             fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
@@ -941,6 +957,9 @@ class DataflowAgent:
             user_task_placement=user_task_placement,
             turn_history=turn_history,
             enable_recall_tool=enable_recall_tool,
+            index_rich_tables=index_rich_tables,
+            index_recent_turns=index_recent_turns,
+            index_thin_observations=index_thin_observations,
             fold_resolved_revisions_config=fold_resolved_revisions_config,
             probe_retirement_config=probe_retirement_config,
             enable_inspect_tool=enable_inspect_tool,

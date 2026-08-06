@@ -102,6 +102,40 @@ class LongDSLunaRecall(LongDSBase):
         super().__init__(verbose=verbose, *args, **kwargs)
 
 
+class LongDSLunaTurnRecall(LongDSBase):
+    """`LongDSLunaRecall` after the turn-addressing simplification (2026-08-06).
+
+    Same knobs as `LongDSLunaRecall` — the changes are all service-side, so this
+    exists to keep the two sets of results apart rather than to set anything
+    differently. What changed under it:
+
+      * No `# Session Brief`. A session is one conversation and turn 1 is
+        catalogue entry 1, rendered like every other turn. Requests are now
+        verbatim in the catalogue instead of clipped to a 260-char gist, which
+        also fixes the answers: 73% of them were over that clip, so the
+        catalogue was misreporting the agent's own prior results on three turns
+        in four.
+      * `recallState` is addressed by TURN only. The five-way `what` selector is
+        gone; one call returns a turn's request, answer and operator delta, and
+        the caller chooses the verbosity (`includeCode`, `includeResults`,
+        `includeStats`, `maxResultChars`) instead of a fixed policy choosing for
+        it. The char budget is clamped service-side, because a recalled block is
+        re-sent on every remaining step of the turn.
+      * No cap on how many of the turn's own operators render their code.
+
+    (`indexThinObservations` is not set: full observations are the service
+    default since the A/B that settled it — same accuracy, cheaper, faster.)
+    """
+
+    _NAME = "LongDSLunaTurnRecall"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -122,5 +156,6 @@ ARMS = {
     "luna-delta-1k": LongDSLunaDelta1k,
     "luna-task-last": LongDSLunaDelta1kTaskLast,
     "luna-recall": LongDSLunaRecall,
+    "luna-turn-recall": LongDSLunaTurnRecall,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }

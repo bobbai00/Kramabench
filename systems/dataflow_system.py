@@ -63,6 +63,9 @@ class DataflowSystem(System):
         user_task_placement: Optional[str] = None,
         turn_history: Optional[str] = None,
         enable_recall_tool: bool = False,
+        index_rich_tables: Optional[int] = None,
+        index_recent_turns: Optional[int] = None,
+        index_thin_observations: Optional[bool] = None,
         agent_service_endpoint: Optional[str] = None,
         fold_resolved_revisions_config: Optional[Dict[str, object]] = None,
         probe_retirement_config: Optional[Dict[str, object]] = None,
@@ -176,6 +179,9 @@ class DataflowSystem(System):
         self.user_task_placement = user_task_placement
         self.turn_history = turn_history
         self.enable_recall_tool = enable_recall_tool
+        self.index_rich_tables = index_rich_tables
+        self.index_recent_turns = index_recent_turns
+        self.index_thin_observations = index_thin_observations
         self.agent_service_endpoint = agent_service_endpoint
         self.fold_resolved_revisions_config = fold_resolved_revisions_config
         self.probe_retirement_config = probe_retirement_config
@@ -363,6 +369,9 @@ class DataflowSystem(System):
             user_task_placement=self.user_task_placement,
             turn_history=self.turn_history,
             enable_recall_tool=self.enable_recall_tool,
+            index_rich_tables=self.index_rich_tables,
+            index_recent_turns=self.index_recent_turns,
+            index_thin_observations=self.index_thin_observations,
             **({"agent_service_endpoint": self.agent_service_endpoint} if self.agent_service_endpoint else {}),
             fold_resolved_revisions_config=self.fold_resolved_revisions_config,
             probe_retirement_config=self.probe_retirement_config,
