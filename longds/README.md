@@ -221,3 +221,115 @@ accuracy number.
   appended log at full price. At $9.99 for one task, the full 68-task benchmark
   would cost ~$680 on this arm — so compaction is a prerequisite for scale, not an
   optimization.
+
+## v6 — turn addressing, and the retirement rule that was doing the damage (2026-08-06)
+
+Three changes to the context, then a much larger finding underneath them.
+
+**What changed.** (agent-service `f6cc01f39`)
+
+1. **No `# Session Brief`.** Turn 1 had its own verbatim section while every later
+   turn was clipped to a 260-character gist, which taught the model that only turn
+   1's conventions bind. A session is one conversation; turn 1 is catalogue entry
+   1. Requests are now verbatim for every turn — they average 624 characters, so
+   the whole 42-turn NFL catalogue is ~30 kB against a 400 kB+ prompt, and it sits
+   in the append-only prefix. The same clip was also truncating **73% of answers**
+   (mean payload 752 chars), so the catalogue had been misreporting the agent's own
+   prior results on three turns in four.
+2. **`recallState` is addressed by TURN.** The five-way `what` selector is gone;
+   one call returns a turn's request, answer and operator delta, with the verb from
+   a snapshot diff and code/results read from *that turn's* snapshot rather than
+   HEAD. Verbosity is the caller's (`includeCode`, `includeResults`,
+   `includeStats`, `maxResultChars`), clamped service-side because a recalled block
+   is re-rendered on every remaining step of the turn.
+3. **No cap on the turn's own code.** `indexRichCode` (default 6) meant the model
+   could not tell whether a definition was absent or merely not rendered, so it
+   rebuilt what it already had.
+
+The tool behaves: 28 calls over 36 turns on water-potability, **zero** duplicate
+fetches within a turn (the old version once made 98 in one turn), and the model
+picks 2000–3000 char budgets, never near the clamp.
+
+### The methodology error, first
+
+Every arm-vs-arm number before this was **cross-vintage**: baseline 08-03, recall
+arm 08-04 (four agent-service commits back), new arm 08-06, across a full JVM
+restart. Re-running the baseline today:
+
+| task | 08-03 | same-era | Δ |
+|---|---|---|---|
+| water-potability | 27.8% | 41.7% | **+13.9** |
+| nfl | 24.4% | 31.0% | +6.6 |
+| github | 93.3% | 86.7% | −6.6 |
+| netflix | 8.8% | 8.8% | 0.0 |
+
+Large, task-specific and **bidirectional** — so there is no global correction
+factor, and several hours went into explaining a 31→7 NFL "regression" that was
+partly an artifact. HANDOFF §4.6 already says this. Only same-era controls count.
+
+### The finding: retirement was a turn count, and a turn count is the wrong variable
+
+With the index as the primary state channel, `indexRecentTurns` (default 3) became
+load-bearing — and it retires on recency-of-touch alone. On passnyc, from turn 5
+the model saw **4 result tables out of ~23 live operators**, jumping back to 27 at
+turn 8 when that turn happened to touch many. Visible state was a function of what
+the current turn touched, not what it needed. The signature is progressive decay
+*within* a run (so it survives the vintage problem): passnyc Q1 71.4% — better than
+baseline's 57.1% — then 37.5% / 14.3% / 37.5% against baseline's 87.5% by Q4.
+
+Same-era, deepseek-v4-pro judge:
+
+| task | ops | baseline | K=3 | K=12 | K=24 | count cap 40 |
+|---|---|---|---|---|---|---|
+| passnyc | 31 | 63.3% | 40.0% | 76.7% | 73.3% | **83.3%** |
+| water-potability | 73 | 41.7% | 33.3% | 47.2% | — | — |
+| sustainable-energy | 160 | 16.7% | 11.1% | 25.0% | — | — |
+| netflix | 194 | 8.8% | 14.7% | 5.9% | — | — |
+| nfl | 277 | 31.0% | 7.1% | FLOOD | — | **21.4%** |
+| uber | 381 | — | 13.9% | FLOOD | — | — |
+
+On the two tasks that exposed OPPOSITE failure modes — passnyc starved at K=3,
+NFL flooded at K=12 — the count cap beats the baseline on both axes at once
+(72 turns, turn-weighted): **47.2% at $6.44 against 44.4% at $10.27**, with cost
+per correct answer $0.189 against $0.321. The shipped K=3 arm scored 20.8%.
+
+NFL is improved rather than solved: 7.1% -> 21.4% is a 3x recovery and it costs
+34% less than the baseline, but it still trails baseline's 31.0% by 9.6 points.
+It has 277 operators and the heaviest formula turns in the set, and it is the one
+task where no configuration tried has beaten append-only history. The remaining
+eight tasks were not re-run under the new default (time and budget), so the
+count cap is validated on two tasks, not ten.
+
+The same constant fails in **both directions at once**. At K=3 it starves a small
+DAG. At K=12 it floods a large one: NFL and uber reached 360–600 kB of context and
+spent turn after turn burning the entire 40-step budget to return an empty answer
+(both abandoned). K=24 is *worse* than K=12 on passnyc, so retirement is worth
+keeping — the index is what buys the cost reduction — and 3 was simply far too
+aggressive.
+
+Twelve turns of a 31-operator task and twelve turns of a 381-operator task are not
+the same amount of context. So retirement now bounds the **count** of detailed
+operators (`indexDetailedOperators`, default 40), most-recently-touched first, with
+the turn's own work and its direct inputs exempt (agent-service `d968a2434`). Small
+DAGs keep everything; large ones keep a bounded, relevant slice.
+
+Two things that are NOT the mechanism, ruled out with measurement rather than
+argument: it is not monotonic in DAG size (netflix, 194 operators, beat its
+baseline at K=3), and it is not the value channel running out of width (max
+operator fan-in is 4–6 on every task, against a cap of 12, so it almost never
+binds).
+
+### Operational notes
+
+- **kiva is excluded**, for a measured reason: `kiva_loans.csv` is 195 MB, every
+  operator edit re-executes it at ~190 s/step, and turn 1 blew even a 3600 s budget
+  identically on both arms. That is an engine data-scale limit, not an arm
+  property. `run_all.sh` gained `TURN_TIMEOUT` and the measurement is in its
+  comment.
+- `numeric_gate.py` now takes `--task` and handles what actually varies between
+  tasks (path style, imports missing from upstream's unexported notebook cell,
+  dict-vs-print answer publishing, and `dumps4`, the 4-decimal rounding step
+  task.json was built through). **145/145 answers reproduce exactly** on the four
+  tasks gated.
+- Judge nondeterminism is ~1 turn (2.8 points on a 36-turn task): the same
+  energy-baseline data judged 13.89% and 16.7% on two runs. Do not read small gaps.
