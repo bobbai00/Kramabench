@@ -396,3 +396,54 @@ pick turn-level paired designs (same seed, flip one thing mid-run) — and treat
 the cascade lottery itself as the phenomenon to attack: the highest-value
 mechanism is whatever makes turn-12-class micro-choices deterministic
 (verification at state-creation), not whatever moves the mean by 5 points.
+
+## v8 — execution telemetry, replicated (2026-08-07)
+
+Two render channels over facts the engine already computes (agent-service
+`a8eba09a3`), tested at **two replicates per cell** — the v7 lesson applied:
+
+* `Lineage: N rows in → M rows out (P%)` on every consuming operator, from the
+  engine's execution counts. A fact, no thresholds.
+* Coercion dataloss alarms (count + sample of values silently nulled by
+  `errors="coerce"`), worker-computed unconditionally, render-gated. Verified
+  general on synthetic dirt before running anything.
+* Both ride along on `recallState` results, so a recalled version carries the
+  defects recorded when it ran.
+
+Three arms, one variable each: control (cap40), telemetry (cap40 + both lines),
+stats (cap40 + `data_level=2`). Scores as run1/run2, deepseek-v4-pro judge:
+
+| arm | passnyc | water-potability | github |
+|---|---|---|---|
+| control | 83 / 83 | 36 / 56 | 100 / 87 |
+| telemetry | 73 / 80 | 36 / 33 | 87 / 87 |
+| stats | **17 / 37** | 33 / 50 | 93 / 93 |
+
+**The t12 lottery, now with 15 observations.** Every passnyc run's fate is set
+by one number at turn 12 (complete-school count, gold 472): the four runs that
+computed 462 score 17–43%; the ten that computed 472 score 63–83% (the one
+exception, resume-v2 at 23%, failed for its own known reason). The telemetry
+arm rendered the designed line — `Lineage: 477 rows in → 472 rows out (99.0%)`
+— and took the correct branch in both replicates.
+
+**Verdicts at n=2, stated with n=2 humility:**
+
+* **Telemetry is accuracy-neutral and near-free** (≤1 line per operator, cost
+  within noise). It did not demonstrably *prevent* the trap — control avoided
+  the trap 3/3 without it — but it makes row loss legible, costs nothing, and
+  is the only channel that records the defect on the version `recallState`
+  returns. Keep it on.
+* **Stats hurt passnyc, both replicates in the trap (462 twice), 17/37 vs
+  control's 83/83.** The traces suggest a mechanism rather than pure luck:
+  with every column's stats visible in one block, both stats runs folded the
+  five-source join into ONE merge operator with less per-source dedup
+  (`drop_duplicates('DBN')` per source is what the correct runs did), and
+  duplicate keys survived. Stats describe the data well and seem to invite a
+  flatter decomposition. n=2 — a hypothesis to test, not a conclusion.
+* **Control variance remains the loudest signal**: 36 vs 56 on
+  water-potability, same config. Nothing under ~20 points is real at n=1;
+  ~10 points needs n≥3.
+
+Costs (per task set, mean of reps): control $2.16, telemetry $1.72, stats
+$2.12 — telemetry is the cheapest arm, stats the most expensive on the tasks
+where it is also least accurate.
