@@ -333,3 +333,66 @@ binds).
   tasks gated.
 - Judge nondeterminism is ~1 turn (2.8 points on a 36-turn task): the same
   energy-baseline data judged 13.89% and 16.7% on two runs. Do not read small gaps.
+
+## v7 — answer grounding, restore-via-recall, and what n=1 actually measures (2026-08-07)
+
+Two general mechanisms, both keyed to dataflow properties, tested on five tasks
+against same-era baselines (agent-service `ff26a2ef6`):
+
+1. **Answer grounding** (`enableAnswerGrounding`): a final answer's substantive
+   numbers must trace to a materialized operator result or to state recalled
+   this turn; on total failure, one feedback round. The property is only
+   checkable because results are addressable tables.
+2. **Restore-via-recall + conventions** (prompt): rebuild earlier versions by
+   copying recalled code verbatim, never from memory; rules stated in any turn
+   bind until restated.
+
+**Both were behaviorally inert.** Grounding fired 0 times in ~180 turns — under
+index arms the model's answers *are* computed from tables (the restatement
+failure it targets was observed on the append-only baseline, whose late-turn
+burial the index already fixed). Rollback-turn recall usage was unchanged
+(4/8 vs 5/8 turns), so the restore rule didn't move behavior either.
+
+**The scores moved anyway, and that is the finding.** passnyc, all same-era,
+all identical configs within each pair:
+
+| run | score |
+|---|---|
+| cap40 #1 | 83.3% |
+| cap40 #2 | 83.3% |
+| grounded #1 | **43.3%** |
+| grounded #2 | **80.0%** |
+
+Two identical grounded runs differ by **37 points**. The mechanism is visible
+at single-turn resolution: run #1's turn 12 counted **462** complete schools
+where run #2 (and both cap40 runs, and gold) counted **472** — one join
+micro-choice — and turns 13–30 all build on that clustering table. Quarter
+accuracies: run #1 86/43/14/29, run #2 57/86/100/71. One number, thirteen turns.
+Water-potability shows the same shape (turn 7 leader-comparison flip, five
+downstream regressions, 25.0% vs K=12's 47.2%).
+
+So: **on state-chained tasks, a single run does not measure the config — it
+measures the config times one cascade lottery draw.** Deltas under ~20 points
+at n=1 are unattributable. This retroactively widens the error bars on every
+single-run comparison in this file; the cap40-vs-K3 passnyc gap (83.3 stable
+twice vs 40.0) and the resume-v2 collapse (23.3, mechanistically explained)
+survive it; single-run differences like grounded-vs-K12 on energy (11.1 vs
+25.0) do not.
+
+Remaining results: github grounded 86.7% (= baseline), energy 11.1% (n=1,
+see above). NFL grounded was abandoned at 26/42: its seed failed turn 4 (both
+arms' seeds did) and never recovered — 20 empty 40-step turns, $14.28. The
+turn-4 trace refutes a render bug: of 27 operators the turn wrote, the model
+itself deleted 14, and 13 of the 14 alive rendered rich. The thrash is
+task-content difficulty, not starvation.
+
+Operational: the catalogue's revision marker now names `recallState`, not
+`resumeFrom` — an arm was being pointed at a tool it lacks, the same trap as
+the resumeFrom turn-1 error loop (35 identical failing calls before the fix).
+
+The forward directive this implies: **stop buying single runs.** For any
+arm-vs-arm claim on LongDS, either replicate (2-3 seeds on cheap tasks) or
+pick turn-level paired designs (same seed, flip one thing mid-run) — and treat
+the cascade lottery itself as the phenomenon to attack: the highest-value
+mechanism is whatever makes turn-12-class micro-choices deterministic
+(verification at state-creation), not whatever moves the mean by 5 points.

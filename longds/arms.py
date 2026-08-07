@@ -278,6 +278,33 @@ class LongDSLunaGrounded(LongDSBase):
         super().__init__(verbose=verbose, *args, **kwargs)
 
 
+class LongDSLunaGroundedR2(LongDSLunaGrounded):
+    """Replicate of `LongDSLunaGrounded` — same config, second seed.
+
+    Exists because LongDS scores at n=1 are dominated by cascade variance: one
+    micro-choice early (passnyc turn 12 counted 462 complete schools where a
+    sibling run counted 472) rewrites every downstream turn. Two runs of the
+    same config bound that noise; without the bound, arm deltas of +-20 points
+    are unattributable.
+    """
+
+    _NAME = "LongDSLunaGroundedR2"
+
+
+class LongDSLunaTurnRecallCap40R2(LongDSLunaTurnRecallCap40):
+    """Replicate of `LongDSLunaTurnRecallCap40` — same config, second seed.
+
+    NOTE: unlike the original cap40 run (which relied on the then-default of
+    40), this sets the cap explicitly, because the service default is now 0.
+    """
+
+    _NAME = "LongDSLunaTurnRecallCap40R2"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("index_detailed_operators", 40)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -303,5 +330,7 @@ ARMS = {
     "luna-turn-recall-cap40": LongDSLunaTurnRecallCap40,
     "luna-turn-resume": LongDSLunaTurnResume,
     "luna-grounded": LongDSLunaGrounded,
+    "luna-grounded-r2": LongDSLunaGroundedR2,
+    "luna-cap40-r2": LongDSLunaTurnRecallCap40R2,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }
