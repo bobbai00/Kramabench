@@ -305,6 +305,73 @@ class LongDSLunaTurnRecallCap40R2(LongDSLunaTurnRecallCap40):
         super().__init__(verbose=verbose, *args, **kwargs)
 
 
+class LongDSLunaTelemetry(LongDSBase):
+    """cap40 + execution telemetry: the Lineage fact and the coercion alarm.
+
+    Both are computed by the worker unconditionally and merely rendered here;
+    both are name-agnostic (row counts from the engine; pandas wrapped at the
+    library level, keyed on value shape). Neither knows anything about any
+    benchmark. They also ride along on `recallState` results, so a later turn
+    diagnosing a drift sees the defect recorded on the old version.
+
+    Target: the cascade lottery. The measured case — an inner join keeping 462
+    of 472 rows at passnyc turn 12, thirteen downstream turns lost, a 37-point
+    swing between identical runs. `Lineage: 472 rows in -> 462 rows out (97.9%)`
+    puts that loss in front of the model at the step it can still fix it.
+
+    NO answer grounding and NO new prompt text: one variable per arm.
+    """
+
+    _NAME = "LongDSLunaTelemetry"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        kwargs.setdefault("index_detailed_operators", 40)
+        kwargs.setdefault("row_lineage", True)
+        kwargs.setdefault("coercion_facts", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaStats(LongDSBase):
+    """cap40 + per-column statistics (data_level=2, column_stats).
+
+    The other half of the comparison: stats describe THE DATA before code is
+    written (min/max/nulls/distinct/histograms), telemetry describes WHAT AN
+    OPERATOR DID after it ran. Validated on KramaBench (the mini structural-
+    profile accuracy win; stats-at-5k for gpt-5.6); untested on LongDS.
+    """
+
+    _NAME = "LongDSLunaStats"
+    _STATS = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        kwargs.setdefault("index_detailed_operators", 40)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaTelemetryR2(LongDSLunaTelemetry):
+    """Second seed of `LongDSLunaTelemetry` — replicates are the price of a claim."""
+
+    _NAME = "LongDSLunaTelemetryR2"
+
+
+class LongDSLunaStatsR2(LongDSLunaStats):
+    """Second seed of `LongDSLunaStats`."""
+
+    _NAME = "LongDSLunaStatsR2"
+
+
+class LongDSLunaTurnRecallCap40R3(LongDSLunaTurnRecallCap40R2):
+    """Third seed of the cap40 control (R1/R2 already hold passnyc)."""
+
+    _NAME = "LongDSLunaTurnRecallCap40R3"
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -332,5 +399,10 @@ ARMS = {
     "luna-grounded": LongDSLunaGrounded,
     "luna-grounded-r2": LongDSLunaGroundedR2,
     "luna-cap40-r2": LongDSLunaTurnRecallCap40R2,
+    "luna-telemetry": LongDSLunaTelemetry,
+    "luna-stats": LongDSLunaStats,
+    "luna-telemetry-r2": LongDSLunaTelemetryR2,
+    "luna-stats-r2": LongDSLunaStatsR2,
+    "luna-cap40-r3": LongDSLunaTurnRecallCap40R3,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }

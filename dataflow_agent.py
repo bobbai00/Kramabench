@@ -133,6 +133,10 @@ class AgentSettings:
     # Check that a final answer's numbers trace to materialized results or
     # recalled state; one feedback round on total failure.
     enable_answer_grounding: bool = False
+    # Execution telemetry renders (worker computes both unconditionally):
+    # coerce-to-NaN dataloss diagnostics, and the rows-in/rows-out Lineage fact.
+    coercion_facts: bool = False
+    row_lineage: bool = False
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -237,6 +241,10 @@ class AgentSettings:
             payload["enableResumeTool"] = True
         if self.enable_answer_grounding:
             payload["enableAnswerGrounding"] = True
+        if self.coercion_facts:
+            payload["coercionTelemetry"] = True
+        if self.row_lineage:
+            payload["rowLineage"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -882,6 +890,8 @@ class DataflowAgent:
             enable_recall_tool: bool = False,
             enable_resume_tool: bool = False,
             enable_answer_grounding: bool = False,
+            coercion_facts: bool = False,
+            row_lineage: bool = False,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -974,6 +984,8 @@ class DataflowAgent:
             enable_recall_tool=enable_recall_tool,
             enable_resume_tool=enable_resume_tool,
             enable_answer_grounding=enable_answer_grounding,
+            coercion_facts=coercion_facts,
+            row_lineage=row_lineage,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
