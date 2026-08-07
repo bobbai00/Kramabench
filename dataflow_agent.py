@@ -130,6 +130,9 @@ class AgentSettings:
     enable_recall_tool: bool = False
     # Expose `resumeFrom(turn)`: the model names the turn it builds on.
     enable_resume_tool: bool = False
+    # Check that a final answer's numbers trace to materialized results or
+    # recalled state; one feedback round on total failure.
+    enable_answer_grounding: bool = False
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -232,6 +235,8 @@ class AgentSettings:
             payload["enableRecallTool"] = True
         if self.enable_resume_tool:
             payload["enableResumeTool"] = True
+        if self.enable_answer_grounding:
+            payload["enableAnswerGrounding"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -876,6 +881,7 @@ class DataflowAgent:
             turn_history: Optional[str] = None,
             enable_recall_tool: bool = False,
             enable_resume_tool: bool = False,
+            enable_answer_grounding: bool = False,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -967,6 +973,7 @@ class DataflowAgent:
             turn_history=turn_history,
             enable_recall_tool=enable_recall_tool,
             enable_resume_tool=enable_resume_tool,
+            enable_answer_grounding=enable_answer_grounding,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,

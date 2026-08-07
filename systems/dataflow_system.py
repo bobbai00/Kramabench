@@ -64,6 +64,7 @@ class DataflowSystem(System):
         turn_history: Optional[str] = None,
         enable_recall_tool: bool = False,
         enable_resume_tool: bool = False,
+        enable_answer_grounding: bool = False,
         index_rich_tables: Optional[int] = None,
         index_detailed_operators: Optional[int] = None,
         index_thin_observations: Optional[bool] = None,
@@ -181,6 +182,7 @@ class DataflowSystem(System):
         self.turn_history = turn_history
         self.enable_recall_tool = enable_recall_tool
         self.enable_resume_tool = enable_resume_tool
+        self.enable_answer_grounding = enable_answer_grounding
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
         self.index_thin_observations = index_thin_observations
@@ -372,6 +374,7 @@ class DataflowSystem(System):
             turn_history=self.turn_history,
             enable_recall_tool=self.enable_recall_tool,
             enable_resume_tool=self.enable_resume_tool,
+            enable_answer_grounding=self.enable_answer_grounding,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
             index_thin_observations=self.index_thin_observations,

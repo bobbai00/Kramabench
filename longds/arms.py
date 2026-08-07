@@ -238,6 +238,46 @@ class LongDSLunaTurnResume(LongDSBase):
         super().__init__(verbose=verbose, *args, **kwargs)
 
 
+class LongDSLunaGrounded(LongDSBase):
+    """cap40 + answer grounding + restore-via-recall. All general, all dataflow-native.
+
+    Three additions over the cap40 configuration, none tuned to any task:
+
+      * **Answer grounding** (`enable_answer_grounding`). A final answer's
+        substantive numbers must trace to a materialized operator result or to
+        state recalled this turn; on total failure the agent gets ONE feedback
+        round. This checks a property only a dataflow has — results are
+        addressable tables, so "did this answer come from the analysis?" is
+        mechanically decidable. Target: the measured late-turn failure where
+        answers restate an earlier turn (pilot turns 29/32/42 answered in ~1
+        step), and the paper's finding that verification collapses late
+        (steps/turn drop 4.3, Fig 6d).
+      * **Restore-via-recall** (prompt). For "as it originally was" requests:
+        recall the owning turn's code and rebuild it VERBATIM as new operators.
+        Drift-free because the code is copied from the record, state-safe
+        because nothing moves — the lesson of the resumeFrom experiment, where
+        wrong-base checkouts destroyed state (passnyc 73.3% -> 23.3%).
+      * **Conventions never expire** (prompt). Rules stated in any turn bind
+        until changed; copy their constants from the catalogue, later statement
+        wins. Target: the wrong-formula cascade's root (pilot turn 3 guessed a
+        convention turn 1 had stated; 6 later turns inherited the drift).
+
+    `index_detailed_operators=40` is set EXPLICITLY: the service default became
+    0 (uncapped) during the resume evaluation, so relying on the default would
+    silently change the comparison base.
+    """
+
+    _NAME = "LongDSLunaGrounded"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        kwargs.setdefault("enable_answer_grounding", True)
+        kwargs.setdefault("index_detailed_operators", 40)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -262,5 +302,6 @@ ARMS = {
     "luna-turn-recall": LongDSLunaTurnRecall,
     "luna-turn-recall-cap40": LongDSLunaTurnRecallCap40,
     "luna-turn-resume": LongDSLunaTurnResume,
+    "luna-grounded": LongDSLunaGrounded,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }
