@@ -22,6 +22,7 @@ Usage:
 """
 import argparse
 import json
+import re
 import os
 import sys
 from pathlib import Path
@@ -48,6 +49,29 @@ def file_inventory(data_dir: Path) -> list[str]:
             out.append(os.path.relpath(abs_path, KB))
     return sorted(out)
 
+
+
+def _norm_turn_ids(raw) -> list[int]:
+    """Turn references as ints, whatever upstream wrote them as.
+
+    `depends_tasks` is not consistently typed across the dataset: most tasks
+    ship `[1, 2]`, nfl ships `["task_1", "task_2"]`. Anything comparing a
+    dependency to a turn number silently mismatches on the string form — which
+    already produced one wrong conclusion (every nfl turn counted as "skips
+    back", inflating that statistic across the whole set). Normalising once,
+    here, means nothing downstream has to know.
+    """
+    out: list[int] = []
+    for x in raw or []:
+        if isinstance(x, bool):
+            continue
+        if isinstance(x, int):
+            out.append(x)
+        elif isinstance(x, str):
+            m = re.search(r"(\d+)", x)
+            if m:
+                out.append(int(m.group(1)))
+    return sorted(set(out))
 
 def prepare_one(entry: dict, turn_limit: int | None) -> dict | None:
     domain, dataset, tid = entry["task_domain"], entry["dataset_name"], entry["task_id"]
@@ -97,7 +121,9 @@ def prepare_one(entry: dict, turn_limit: int | None) -> dict | None:
                 "answer": t["answer"],
                 # analysis-only; never rendered into a prompt
                 "state_type": meta_by_turn.get(t["turn_id"], {}).get("state_type", []),
-                "depends_tasks": meta_by_turn.get(t["turn_id"], {}).get("depends_tasks", []),
+                "depends_tasks": _norm_turn_ids(
+                    meta_by_turn.get(t["turn_id"], {}).get("depends_tasks", [])
+                ),
                 "depends_span": meta_by_turn.get(t["turn_id"], {}).get("depends_span", []),
             }
             for t in turns

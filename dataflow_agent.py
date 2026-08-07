@@ -128,6 +128,8 @@ class AgentSettings:
     user_task_placement: Optional[str] = None
     turn_history: Optional[str] = None
     enable_recall_tool: bool = False
+    # Expose `resumeFrom(turn)`: the model names the turn it builds on.
+    enable_resume_tool: bool = False
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -228,6 +230,8 @@ class AgentSettings:
             payload["turnHistory"] = self.turn_history
         if self.enable_recall_tool:
             payload["enableRecallTool"] = True
+        if self.enable_resume_tool:
+            payload["enableResumeTool"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -871,6 +875,7 @@ class DataflowAgent:
             user_task_placement: Optional[str] = None,
             turn_history: Optional[str] = None,
             enable_recall_tool: bool = False,
+            enable_resume_tool: bool = False,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -961,6 +966,7 @@ class DataflowAgent:
             user_task_placement=user_task_placement,
             turn_history=turn_history,
             enable_recall_tool=enable_recall_tool,
+            enable_resume_tool=enable_resume_tool,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,

@@ -202,6 +202,42 @@ class LongDSLunaTurnRecallCap40(LongDSBase):
         super().__init__(verbose=verbose, *args, **kwargs)
 
 
+class LongDSLunaTurnResume(LongDSBase):
+    """The session as a version tree: the model picks the state it continues from.
+
+    Adds `resumeFrom(turn)` next to `recallState`. `resumeFrom` MOVES — the
+    dataflow becomes that turn's dataflow and new work branches from there;
+    `recallState` still only READS. The index cap is OFF
+    (`indexDetailedOperators: 0`), so the two size mechanisms can be told apart:
+    whatever this arm saves has to come from choosing a smaller base, not from a
+    render budget.
+
+    Why a tree rather than a line, measured over the ten tasks:
+
+      * 47% of turns' newest dependency is NOT the previous turn.
+      * Half of all counterfactual turns are depended on again later, so those
+        "what if" branches are not throwaway.
+      * Resuming to the newest dependency instead of inheriting everything
+        shrinks the DAG ~20-40% on the mean and ~30-50% at the peak
+        (nfl 182 -> 143 mean, 335 -> 232 peak; passnyc 56 -> 35, 94 -> 48).
+
+    No `merge`. On all 20 observed multi-turn recalls, resuming to the newest of
+    the requested turns alone would have sufficed — because the agent creates
+    new operators far more often than it revises old ones, which leaves history
+    effectively append-only. That property is what makes single-parent checkout
+    enough, and it is worth re-checking if operator sprawl is ever fixed.
+    """
+
+    _NAME = "LongDSLunaTurnResume"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("user_task_placement", "bottom")
+        kwargs.setdefault("turn_history", "index")
+        kwargs.setdefault("enable_recall_tool", True)
+        kwargs.setdefault("enable_resume_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -225,5 +261,6 @@ ARMS = {
     "luna-recall": LongDSLunaRecall,
     "luna-turn-recall": LongDSLunaTurnRecall,
     "luna-turn-recall-cap40": LongDSLunaTurnRecallCap40,
+    "luna-turn-resume": LongDSLunaTurnResume,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }

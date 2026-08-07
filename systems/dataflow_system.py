@@ -63,6 +63,7 @@ class DataflowSystem(System):
         user_task_placement: Optional[str] = None,
         turn_history: Optional[str] = None,
         enable_recall_tool: bool = False,
+        enable_resume_tool: bool = False,
         index_rich_tables: Optional[int] = None,
         index_detailed_operators: Optional[int] = None,
         index_thin_observations: Optional[bool] = None,
@@ -179,6 +180,7 @@ class DataflowSystem(System):
         self.user_task_placement = user_task_placement
         self.turn_history = turn_history
         self.enable_recall_tool = enable_recall_tool
+        self.enable_resume_tool = enable_resume_tool
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
         self.index_thin_observations = index_thin_observations
@@ -369,6 +371,7 @@ class DataflowSystem(System):
             user_task_placement=self.user_task_placement,
             turn_history=self.turn_history,
             enable_recall_tool=self.enable_recall_tool,
+            enable_resume_tool=self.enable_resume_tool,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
             index_thin_observations=self.index_thin_observations,
