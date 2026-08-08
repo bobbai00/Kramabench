@@ -452,6 +452,74 @@ class LongDSLunaDelta1kE0808(LongDSBase):
     _NAME = "LongDSLunaDelta1kE0808"
 
 
+class _LongDSLayoutSmoke(LongDSBase):
+    """Base for the 2026-08-08 layout-matrix smoke arms: rich ReAct knobs
+    (2k samples, stats, lineage, coercion facts) so every observation channel
+    is visible in the rendered context. Two-turn smoke runs only."""
+
+    _RESULT_CHARS = 2000
+    _STATS = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("row_lineage", True)
+        kwargs.setdefault("coercion_facts", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaSmokeSessionDelta(_LongDSLayoutSmoke):
+    """Session layout × DELTA: # Session of turn entries (Task/Steps/Final
+    Answer) + # Your Task; full step replay inside each turn."""
+
+    _NAME = "LongDSLunaSmokeSessionDelta"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("session_turns", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaSmokeSessionLatest(_LongDSLayoutSmoke):
+    """Session layout × LATEST: finished turns show touched operators
+    (as-of-turn-end), the current turn the full leaf snapshot.
+
+    `_CODE = True` deliberately: DELTA carries code inline per event, so a
+    code-blind LATEST cell would confound the layout A/B with a code axis."""
+
+    _NAME = "LongDSLunaSmokeSessionLatest"
+    _CONTEXT_MODE = "latest"
+    _CODE = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("session_turns", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaSmokeVCatDelta(_LongDSLayoutSmoke):
+    """Versioned catalog × DELTA — the shipped versioned mode plus the
+    # Your Task tail (added with the session-layout work)."""
+
+    _NAME = "LongDSLunaSmokeVCatDelta"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("versioned_mode", True)
+        kwargs.setdefault("enable_recall_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaSmokeVCatLatest(_LongDSLayoutSmoke):
+    """Versioned catalog × LATEST (the new cell): catalog entries for finished
+    turns; the current turn keeps thoughts/actions + recall pulls in its step
+    log and collapses observations into a ### Dataflow leaf snapshot."""
+
+    _NAME = "LongDSLunaSmokeVCatLatest"
+    _CONTEXT_MODE = "latest"
+    _CODE = True
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("versioned_mode", True)
+        kwargs.setdefault("enable_recall_tool", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 ARMS = {
     "luna-delta-1k": LongDSLunaDelta1k,
     "luna-delta-1k-sameera": LongDSLunaDelta1kSameEra,
@@ -474,4 +542,8 @@ ARMS = {
     "luna-versioned-rich-r2": LongDSLunaVersionedRichR2,
     "luna-versioned-rich-r3": LongDSLunaVersionedRichR3,
     "luna-delta-1k-e0808": LongDSLunaDelta1kE0808,
+    "luna-smoke-session-delta": LongDSLunaSmokeSessionDelta,
+    "luna-smoke-session-latest": LongDSLunaSmokeSessionLatest,
+    "luna-smoke-vcat-delta": LongDSLunaSmokeVCatDelta,
+    "luna-smoke-vcat-latest": LongDSLunaSmokeVCatLatest,
 }

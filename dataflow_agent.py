@@ -128,6 +128,9 @@ class AgentSettings:
     versioned_mode: bool = False
     # Versioned mode: render the Latest-versions pointer table (None -> service default true).
     versioned_heads: bool | None = None
+    # Session layout (non-versioned multi-turn): group the context by turn
+    # (# Session + # Your Task). See agent-service sessionTurns.
+    session_turns: bool = False
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -152,7 +155,10 @@ class AgentSettings:
     enable_render_prefs: bool = False
     # Code-in-snapshot (LATEST-only): render each operator's current code in the
     # snapshot + tell the agent (tool-def/prompt/example) to write short summaries.
-    enable_code_in_snapshot: bool = False
+    # Default TRUE = the service default. (Before 2026-08-08 this defaulted
+    # False but was only transmitted when True, so False never reached the
+    # service; the flip keeps every unset arm's effective behavior.)
+    enable_code_in_snapshot: bool = True
     # How DELTA compacts over budget: "sliding" (drop oldest events) or "compress"
     # (fold the prefix into a stats deck, resume raw delta). Default "compress".
     compaction_strategy: str = "compress"
@@ -240,6 +246,8 @@ class AgentSettings:
             payload["versionedMode"] = True
         if self.versioned_heads is not None:
             payload["versionedHeads"] = self.versioned_heads
+        if self.session_turns:
+            payload["sessionTurns"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -254,8 +262,15 @@ class AgentSettings:
             payload["enableInspectTool"] = True
         if self.enable_render_prefs:
             payload["enableRenderPrefs"] = True
-        if self.enable_code_in_snapshot:
-            payload["enableCodeInSnapshot"] = True
+        # Always transmitted. The service default is TRUE, so the old
+        # send-only-when-true pattern made `enable_code_in_snapshot=False`
+        # silently become service-true — False was inexpressible (found via
+        # the 2026-08-08 layout smoke: a "code-blind" LATEST arm rendered
+        # `Code:` blocks). Existing arms keep their effective behavior: every
+        # arm that ran LATEST did so under the service default (True), and the
+        # KB-side False declared by delta arms was a no-op there (DELTA always
+        # carries code inline per event).
+        payload["enableCodeInSnapshot"] = self.enable_code_in_snapshot
         if self.summarize_params is not None:
             payload["summarizeParams"] = self.summarize_params
         return payload
@@ -889,6 +904,7 @@ class DataflowAgent:
             row_lineage: bool = False,
             versioned_mode: bool = False,
             versioned_heads: bool | None = None,
+            session_turns: bool = False,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -896,7 +912,10 @@ class DataflowAgent:
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
             enable_render_prefs: bool = False,
-            enable_code_in_snapshot: bool = False,
+            # Default TRUE = the service default. (Before 2026-08-08 this defaulted
+    # False but was only transmitted when True, so False never reached the
+    # service; the flip keeps every unset arm's effective behavior.)
+    enable_code_in_snapshot: bool = True,
             compaction_strategy: str = "compress",
             deck_sample_ratio: float = 0.10,
             error_reflection: bool = False,
@@ -985,6 +1004,7 @@ class DataflowAgent:
             row_lineage=row_lineage,
             versioned_mode=versioned_mode,
             versioned_heads=versioned_heads,
+            session_turns=session_turns,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,

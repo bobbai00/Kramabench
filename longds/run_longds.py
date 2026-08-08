@@ -40,8 +40,13 @@ sys.path.insert(0, str(KB))
 PREPARED = KB / "longds" / "prepared"
 SCRATCH = KB / "system_scratch"
 
+# Both bold conventions must parse: the LongDS per-turn contract writes
+# `**Final Answer: <json>**` (bold wraps everything), while the service-side
+# convention the # Your Task directive teaches writes `**Final Answer:** <json>`
+# (bold wraps the marker). The second `(?:\*\*\s*)?` eats the marker-closing
+# `**` so neither convention leaks asterisks into the judged payload.
 FINAL_ANSWER_RE = re.compile(
-    r"(?:\*\*\s*)?final answer:\s*(.+?)(?:\s*\*\*)?\s*$", re.IGNORECASE | re.DOTALL
+    r"(?:\*\*\s*)?final answer:\s*(?:\*\*\s*)?(.+?)(?:\s*\*\*)?\s*$", re.IGNORECASE | re.DOTALL
 )
 
 ANSWER_CONTRACT = (
