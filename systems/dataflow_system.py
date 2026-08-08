@@ -73,6 +73,7 @@ class DataflowSystem(System):
         row_lineage: bool = False,
         versioned_mode: bool = False,
         session_turns: bool = False,
+        recall_max_result_chars: Optional[int] = None,
         # None -> service default (currently False; the heads-table A/B showed no effect).
         versioned_heads: bool | None = None,
         index_rich_tables: Optional[int] = None,
@@ -197,6 +198,7 @@ class DataflowSystem(System):
         self.row_lineage = row_lineage
         self.versioned_mode = versioned_mode
         self.session_turns = session_turns
+        self.recall_max_result_chars = recall_max_result_chars
         self.versioned_heads = versioned_heads
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
@@ -394,6 +396,7 @@ class DataflowSystem(System):
             row_lineage=self.row_lineage,
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
+            recall_max_result_chars=self.recall_max_result_chars,
             versioned_heads=self.versioned_heads,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
