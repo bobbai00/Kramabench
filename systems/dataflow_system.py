@@ -4827,3 +4827,29 @@ for _i in (6, 7, 8):
 for _i in (9, 10):
     _n = f"DataflowSystemTerraC1Replicate{_i}"
     globals()[_n] = type(_n, (_TerraC1,), {"_NAME": _n})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Stable-branch verification arm: claude-haiku-4.5 (cheapest gateway model)
+# on the converge stack. Used by the dataflow-agent repo's benchmark/bench.sh
+# smoke runs; parameters mirror DataflowSystemGPT54LatestSchemaConverge with
+# only the model swapped.
+# ─────────────────────────────────────────────────────────────────────────
+class DataflowSystemStableHaiku(DataflowSystem):
+    """claude-haiku-4.5 converge stack (LATEST, flow_level=1, data_level=1)."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name="DataflowSystemStableHaiku",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )

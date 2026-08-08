@@ -244,6 +244,60 @@ def run_groups(sut, groups, oracle=True, parallel=False, watchdog_min=8,
 
 
 # ----------------------------- commands -----------------------------
+def cmd_setup_data(a):
+    """Verify the data lake and fetch the one file the repo does not ship.
+
+    Everything the 6 scored workloads reference is committed under data/
+    EXCEPT wildfire's WeatherEvents_Jan2016-Dec2022.csv (~900 MB) — the repo
+    deliberately excludes it for size (see data/wildfire/input/load_data.py).
+    Source of record: Kaggle dataset `sobhanmoosavi/us-weather-events`.
+    """
+    import fnmatch, shutil, glob as _glob
+
+    target = KB_ROOT / "data" / "wildfire" / "input" / "WeatherEvents_Jan2016-Dec2022.csv"
+    if target.exists():
+        print(f"[kb] OK: {target.relative_to(KB_ROOT)} present ({target.stat().st_size // 2**20} MB)")
+    elif a.copy_from and Path(a.copy_from).exists():
+        src = Path(a.copy_from)
+        if src.is_dir():
+            src = src / "data" / "wildfire" / "input" / "WeatherEvents_Jan2016-Dec2022.csv"
+        print(f"[kb] copying {src} -> {target}")
+        shutil.copy2(src, target)
+    else:
+        print("[kb] downloading Kaggle dataset sobhanmoosavi/us-weather-events (~900 MB) …")
+        try:
+            import kagglehub
+        except ImportError:
+            sys.exit("FATAL: pip install kagglehub (or pass --copy-from <existing checkout>)")
+        path = Path(kagglehub.dataset_download("sobhanmoosavi/us-weather-events"))
+        csvs = list(path.rglob("WeatherEvents_*.csv"))
+        if not csvs:
+            sys.exit(f"FATAL: no WeatherEvents csv under {path}")
+        print(f"[kb] copying {csvs[0]} -> {target}")
+        shutil.copy2(csvs[0], target)
+
+    # Verify every scored workload's data_sources resolve (globs allowed).
+    bad = 0
+    for wl in WORKLOADS:
+        wl_file = KB_ROOT / "workload" / f"{wl}.json"
+        tasks = json.loads(wl_file.read_text())
+        if isinstance(tasks, dict):
+            tasks = tasks.get("tasks", [])
+        missing = []
+        inp = KB_ROOT / "data" / wl / "input"
+        for t in tasks:
+            for src in t.get("data_sources") or []:
+                pat = str(inp / src)
+                if not (_glob.glob(pat) or (inp / src).exists()):
+                    missing.append(f"{t.get('id')}: {src}")
+        state = "OK" if not missing else f"MISSING {len(missing)}"
+        print(f"[kb] {wl}: {state}")
+        for m in missing[:5]:
+            print(f"       {m}")
+        bad += len(missing)
+    sys.exit(1 if bad else 0)
+
+
 def cmd_systems(a):
     suts = list_suts()
     if not suts:
@@ -1447,6 +1501,15 @@ def main():
                        help="use the full data lake instead of --use_truth_subset (oracle is the default)")
         p.add_argument("--watchdog-min", type=int, default=8, metavar="N",
                        help="kill any group whose log is silent N min — gpt-5.x hang guard (default 8)")
+
+    p = P("setup-data",
+          "verify the data lake and fetch the one non-committed file\n"
+          "(wildfire's WeatherEvents csv, from Kaggle). exits non-zero if any scored\n"
+          "workload still references a missing file.\n\n"
+          "example:\n  kb.py setup-data --copy-from ~/other/Kramabench")
+    p.add_argument("--copy-from", metavar="PATH",
+                   help="existing checkout (or csv path) to copy WeatherEvents from instead of Kaggle")
+    p.set_defaults(fn=cmd_setup_data)
 
     p = P("systems",
           "list the SUT class names available from the systems package\n"

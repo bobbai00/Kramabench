@@ -7,6 +7,7 @@ from .dataflow_system import (
     # Core
     DataflowSystem,
     DataflowSystemHaiku45,
+    DataflowSystemStableHaiku,
     DataflowSystemGPT5Mini,
     # Thesis converge stacks (DataFlow-vs-Script, both models)
     DataflowSystemGPT52LatestSchemaConverge,
