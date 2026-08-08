@@ -372,6 +372,38 @@ class LongDSLunaTurnRecallCap40R3(LongDSLunaTurnRecallCap40R2):
     _NAME = "LongDSLunaTurnRecallCap40R3"
 
 
+class LongDSLunaVersioned(LongDSBase):
+    """VERSIONED MODE: one catalog over an immutable version DAG.
+
+    The design that dissolves the state-vs-history duplication: no `# Dataflow`
+    section (state renders once, in the turn entry that created it), the turn
+    in progress is the last catalog entry, recall output persists as an
+    ordinary observation, and every write names its versions — `upstreams`
+    maps each input to the turn whose version it builds on, revisions carry
+    `fromTurn`. "Current" exists only as the `Current operators` pointer table.
+
+    Telemetry rides along (lineage facts in the delta entries and observations)
+    since the delta IS the state record now. recallState stays for pulling old
+    code/results. No cap — the render is append-only by construction, which is
+    the principled replacement for one.
+    """
+
+    _NAME = "LongDSLunaVersioned"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("versioned_mode", True)
+        kwargs.setdefault("enable_recall_tool", True)
+        kwargs.setdefault("row_lineage", True)
+        kwargs.setdefault("coercion_facts", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaVersionedR2(LongDSLunaVersioned):
+    """Second seed of `LongDSLunaVersioned` — the t12 lottery demands replicates."""
+
+    _NAME = "LongDSLunaVersionedR2"
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -404,5 +436,7 @@ ARMS = {
     "luna-telemetry-r2": LongDSLunaTelemetryR2,
     "luna-stats-r2": LongDSLunaStatsR2,
     "luna-cap40-r3": LongDSLunaTurnRecallCap40R3,
+    "luna-versioned": LongDSLunaVersioned,
+    "luna-versioned-r2": LongDSLunaVersionedR2,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }

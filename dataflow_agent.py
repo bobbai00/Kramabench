@@ -137,6 +137,9 @@ class AgentSettings:
     # coerce-to-NaN dataloss diagnostics, and the rows-in/rows-out Lineage fact.
     coercion_facts: bool = False
     row_lineage: bool = False
+    # Versioned mode: one catalog over an immutable version DAG; strict
+    # (operatorId, turn) refs on writes. See agent-service versionedMode.
+    versioned_mode: bool = False
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -245,6 +248,8 @@ class AgentSettings:
             payload["coercionTelemetry"] = True
         if self.row_lineage:
             payload["rowLineage"] = True
+        if self.versioned_mode:
+            payload["versionedMode"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -892,6 +897,7 @@ class DataflowAgent:
             enable_answer_grounding: bool = False,
             coercion_facts: bool = False,
             row_lineage: bool = False,
+            versioned_mode: bool = False,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -986,6 +992,7 @@ class DataflowAgent:
             enable_answer_grounding=enable_answer_grounding,
             coercion_facts=coercion_facts,
             row_lineage=row_lineage,
+            versioned_mode=versioned_mode,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
