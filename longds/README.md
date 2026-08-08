@@ -447,3 +447,57 @@ arm rendered the designed line — `Lineage: 477 rows in → 472 rows out (99.0%
 Costs (per task set, mean of reps): control $2.16, telemetry $1.72, stats
 $2.12 — telemetry is the cheapest arm, stats the most expensive on the tasks
 where it is also least accurate.
+
+## v9 — the versioned catalog: one immutable DAG, strict (op, turn) refs (2026-08-07)
+
+The design discussion's fixed point, built and tested (agent-service
+`1d540a489`): the whole context is ONE `# Catalog` over an immutable version
+DAG. Finished turns are structured entries (`### Task` verbatim /
+`### Dataflow delta` with word verbs, per-operator Summary, Upstream *with
+version provenance*, Result shape+schema / `### Answer`); "current" exists only
+as a `### Current operators` pointer table; the turn in progress is the last
+entry; recall output persists inline as an ordinary observation ("every
+action's observation stays" — one rule replaces the `# Recalled State` tail).
+No `# Dataflow` section at all: state renders once, at creation, so the prompt
+is append-only end to end — the cache-optimal shape by structure instead of by
+a cap.
+
+On the write path, **every reference names its version**: `upstreams` maps each
+def-arg to the turn whose version it builds on, revisions carry `fromTurn`,
+and every rejection lists the valid turns (the resumeFrom lesson). Building on
+the wrong version — the paper's Update/Rollback/Composition error class —
+becomes a mistake that must be written down where the catalog contradicts it.
+
+**The mechanics work.** Live traces: 29/35 (github) and 70/89 (passnyc)
+process-writes carried `(op, turn)` refs, including cross-turn references in a
+single call (`{"top10_issue_languages": 1, "top10_pr_languages": 6}`); one
+version error across both, corrected on the teaching message; `fromTurn` used
+on revisions.
+
+**Results** (gpt-5.2 judge on BOTH arms — OpenRouter credits ran out mid-
+campaign, so the deepseek evals are preserved as `results_eval.deepseek.json`
+and this comparison is same-judge by construction):
+
+| arm | passnyc | water-pot | github |
+|---|---|---|---|
+| control (cap40) | 80 / 73 · $0.50 | 31 / 42 · $1.53 | 100 / 73 · $0.13 |
+| versioned | **33 / 37** · $0.66 | 28 / 36 · $1.12 | 100 · $0.18 |
+
+github ties the control's best; water-potability sits inside the control's own
+replicate spread at 27% lower cost; **passnyc fails, and both replicates fail
+the same way: t12 = 462.** The trap count now reads — control 0/3 in the trap,
+versioned 2/2, stats 2/2, telemetry 0/2. At these n's that is suggestive, not
+proven, but versioned mode plausibly raises the odds of the bad t12 path
+(less schema detail in view at the join-building moment than the cap40 index
+provided). One hypothesis died en route: R2's trace deduped four of five
+sources per-source and still landed 462, so the earlier "one big merge, no
+per-source dedup" story is not the mechanism.
+
+**Verdict: keep cap40 as the shipping config; keep versioned mode as the
+research branch.** Its properties (append-only prompt, auditable version refs,
+cheapest structure on big tasks) are the right shape, and its failure is the
+same single unsolved failure everything else has: turn-12-class silent
+derivation divergence. That is now unambiguously the bottleneck — no render
+design tried so far moves it, which is the strongest argument yet for
+verification at state creation (dual derivation of foundational quantities)
+as the next mechanism.
