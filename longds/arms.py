@@ -404,6 +404,23 @@ class LongDSLunaVersionedR2(LongDSLunaVersioned):
     _NAME = "LongDSLunaVersionedR2"
 
 
+class LongDSLunaVersionedNoHeads(LongDSLunaVersioned):
+    """Versioned mode WITHOUT the `Latest versions` pointer table.
+
+    The A/B for whether the table earns its place. It is strictly derivable
+    from the catalog entries (the newest version of X = the last entry that
+    mentions X), so its value is an attention bet, not a correctness need.
+    Readout: wrong-version reference errors per write, against the with-table
+    runs (0 errors on github, 0 on passnyc).
+    """
+
+    _NAME = "LongDSLunaVersionedNoHeads"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("versioned_heads", False)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
 class LongDSLunaRecallPushFull(LongDSBase):
     """Ablation: the recall tool WITHOUT trimming history.
 
@@ -438,5 +455,6 @@ ARMS = {
     "luna-cap40-r3": LongDSLunaTurnRecallCap40R3,
     "luna-versioned": LongDSLunaVersioned,
     "luna-versioned-r2": LongDSLunaVersionedR2,
+    "luna-versioned-noheads": LongDSLunaVersionedNoHeads,
     "luna-recall-pushfull": LongDSLunaRecallPushFull,
 }

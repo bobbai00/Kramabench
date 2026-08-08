@@ -72,6 +72,7 @@ class DataflowSystem(System):
         coercion_facts: bool = False,
         row_lineage: bool = False,
         versioned_mode: bool = False,
+        versioned_heads: bool = True,
         index_rich_tables: Optional[int] = None,
         index_detailed_operators: Optional[int] = None,
         index_thin_observations: Optional[bool] = None,
@@ -193,6 +194,7 @@ class DataflowSystem(System):
         self.coercion_facts = coercion_facts
         self.row_lineage = row_lineage
         self.versioned_mode = versioned_mode
+        self.versioned_heads = versioned_heads
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
         self.index_thin_observations = index_thin_observations
@@ -388,6 +390,7 @@ class DataflowSystem(System):
             coercion_facts=self.coercion_facts,
             row_lineage=self.row_lineage,
             versioned_mode=self.versioned_mode,
+            versioned_heads=self.versioned_heads,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
             index_thin_observations=self.index_thin_observations,

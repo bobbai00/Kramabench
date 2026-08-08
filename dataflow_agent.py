@@ -140,6 +140,8 @@ class AgentSettings:
     # Versioned mode: one catalog over an immutable version DAG; strict
     # (operatorId, turn) refs on writes. See agent-service versionedMode.
     versioned_mode: bool = False
+    # Versioned mode: render the Latest-versions pointer table (None -> service default true).
+    versioned_heads: bool | None = None
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -250,6 +252,8 @@ class AgentSettings:
             payload["rowLineage"] = True
         if self.versioned_mode:
             payload["versionedMode"] = True
+        if self.versioned_heads is not None:
+            payload["versionedHeads"] = self.versioned_heads
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -898,6 +902,7 @@ class DataflowAgent:
             coercion_facts: bool = False,
             row_lineage: bool = False,
             versioned_mode: bool = False,
+            versioned_heads: bool | None = None,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -993,6 +998,7 @@ class DataflowAgent:
             coercion_facts=coercion_facts,
             row_lineage=row_lineage,
             versioned_mode=versioned_mode,
+            versioned_heads=versioned_heads,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
