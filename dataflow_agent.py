@@ -131,6 +131,10 @@ class AgentSettings:
     # Session layout (non-versioned multi-turn): group the context by turn
     # (# Session + # Your Task). See agent-service sessionTurns.
     session_turns: bool = False
+    # Per-operator ceiling for recallState's includeOutputTableSample (chars).
+    # None -> service default (5000). Requests above it are clamped with a
+    # teaching message that points at the catalog's per-output size facts.
+    recall_max_result_chars: Optional[int] = None
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -248,6 +252,8 @@ class AgentSettings:
             payload["versionedHeads"] = self.versioned_heads
         if self.session_turns:
             payload["sessionTurns"] = True
+        if self.recall_max_result_chars is not None:
+            payload["recallMaxResultChars"] = self.recall_max_result_chars
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -905,6 +911,7 @@ class DataflowAgent:
             versioned_mode: bool = False,
             versioned_heads: bool | None = None,
             session_turns: bool = False,
+            recall_max_result_chars: Optional[int] = None,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -1005,6 +1012,7 @@ class DataflowAgent:
             versioned_mode=versioned_mode,
             versioned_heads=versioned_heads,
             session_turns=session_turns,
+            recall_max_result_chars=recall_max_result_chars,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
