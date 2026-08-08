@@ -404,6 +404,54 @@ class LongDSLunaVersionedR2(LongDSLunaVersioned):
     _NAME = "LongDSLunaVersionedR2"
 
 
+class LongDSLunaVersionedRich(LongDSLunaVersioned):
+    """Versioned catalog + a RICH observation channel (2026-08-08 campaign).
+
+    Same catalog as `LongDSLunaVersioned` (versioned mode, recallState, lineage
+    facts, coercion facts). What changes is what the model SEES when an operator
+    runs, inside the current turn:
+
+      * `_RESULT_CHARS = 2000` — sample rows up to 2k chars (baseline: 1k);
+      * `_STATS = True` — data_level=2 + `column_stats`: schema, structural
+        hints, and per-column statistics (numeric min/max/mean, string
+        distinct/top, nulls) on every materialized result.
+
+    The bet, from the t12 post-mortem: versioned mode went 3/3 into the
+    turn-12 cascade trap most plausibly because dropping the state dump also
+    dropped upstream VALUE evidence at the moment join decisions are made.
+    This arm restores value evidence through the observation channel — the
+    general mechanism — rather than through any task-specific fix.
+    """
+
+    _NAME = "LongDSLunaVersionedRich"
+    _STATS = True
+    _RESULT_CHARS = 2000
+
+
+class LongDSLunaVersionedRichR2(LongDSLunaVersionedRich):
+    """Second seed of `LongDSLunaVersionedRich`."""
+
+    _NAME = "LongDSLunaVersionedRichR2"
+
+
+class LongDSLunaVersionedRichR3(LongDSLunaVersionedRich):
+    """Third seed of `LongDSLunaVersionedRich`."""
+
+    _NAME = "LongDSLunaVersionedRichR3"
+
+
+class LongDSLunaDelta1kE0808(LongDSBase):
+    """The baseline a third time, for the 2026-08-08 era.
+
+    Byte-identical config to `LongDSLunaDelta1k`/`...SameEra`. Exists because
+    the engine restarted 2026-08-07 11:17 and agent-service 2026-08-08 00:57 —
+    an era boundary (HANDOFF 4.6) — so neither earlier baseline is a valid
+    control for runs started after it. Covers all ten tasks in one era.
+    """
+
+    _NAME = "LongDSLunaDelta1kE0808"
+
+
 ARMS = {
     "luna-delta-1k": LongDSLunaDelta1k,
     "luna-delta-1k-sameera": LongDSLunaDelta1kSameEra,
@@ -422,4 +470,8 @@ ARMS = {
     "luna-cap40-r3": LongDSLunaTurnRecallCap40R3,
     "luna-versioned": LongDSLunaVersioned,
     "luna-versioned-r2": LongDSLunaVersionedR2,
+    "luna-versioned-rich": LongDSLunaVersionedRich,
+    "luna-versioned-rich-r2": LongDSLunaVersionedRichR2,
+    "luna-versioned-rich-r3": LongDSLunaVersionedRichR3,
+    "luna-delta-1k-e0808": LongDSLunaDelta1kE0808,
 }
