@@ -91,20 +91,6 @@ class AgentSettings:
     # Render each operator's `Properties:` line in the assembled snapshot.
     # None -> server default (true); code operators are stripped regardless.
     include_operator_properties: Optional[bool] = None
-    # Render a compact `Schema:` line (col + type) per result — cheaper
-    # substitute for full column-stats (lever E). False = no-op default.
-    # Append a `Loader hint:` remediation line to a failed load-stage operator,
-    # keyed on the exception class (plan4, lever D). False = no-op default.
-    # Flag currency/percent/thousands string columns with cleaning hints
-    # (value-format flags). False = no-op default.
-    # Per-operator cardinality lineage line (rows in→out, kept %) + alarms on
-    # empty-output / fan-out explosion (lever 1). False = no-op default.
-    # Surface worker-flagged degenerate joins (near-zero key match w/ unmatched-key
-    # sample, or many-to-many fan-out) as a `Join check` line (lever 2). No-op default.
-    # Flag dead/disconnected DataLoading operators via typed-DAG reachability
-    # (lever 3, `Graph check`). No-op default.
-    # Surface coerce-to-NaN dataloss from to_numeric/to_datetime(errors="coerce")
-    # with a sample of dropped values (lever 4). No-op default.
     thought_replay: bool = False
     thought_replay_k: int = 10
     agent_turns: bool = False

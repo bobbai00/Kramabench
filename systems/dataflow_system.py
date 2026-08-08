@@ -72,7 +72,8 @@ class DataflowSystem(System):
         coercion_facts: bool = False,
         row_lineage: bool = False,
         versioned_mode: bool = False,
-        versioned_heads: bool = True,
+        # None -> service default (currently False; the heads-table A/B showed no effect).
+        versioned_heads: bool | None = None,
         index_rich_tables: Optional[int] = None,
         index_detailed_operators: Optional[int] = None,
         index_thin_observations: Optional[bool] = None,
