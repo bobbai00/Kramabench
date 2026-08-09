@@ -74,6 +74,7 @@ class DataflowSystem(System):
         versioned_mode: bool = False,
         session_turns: bool = False,
         recall_max_result_chars: Optional[int] = None,
+        recall_operator_level: bool = False,
         # None -> service default (currently False; the heads-table A/B showed no effect).
         versioned_heads: bool | None = None,
         index_rich_tables: Optional[int] = None,
@@ -199,6 +200,7 @@ class DataflowSystem(System):
         self.versioned_mode = versioned_mode
         self.session_turns = session_turns
         self.recall_max_result_chars = recall_max_result_chars
+        self.recall_operator_level = recall_operator_level
         self.versioned_heads = versioned_heads
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
@@ -397,6 +399,7 @@ class DataflowSystem(System):
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
             recall_max_result_chars=self.recall_max_result_chars,
+            recall_operator_level=self.recall_operator_level,
             versioned_heads=self.versioned_heads,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
@@ -4833,3 +4836,305 @@ for _i in (6, 7, 8):
 for _i in (9, 10):
     _n = f"DataflowSystemTerraC1Replicate{_i}"
     globals()[_n] = type(_n, (_TerraC1,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  PROMPT-FIX PAIR (PF) — the DELTA context-format fragment corrected.
+#
+#  `context-format.delta.md` carried three prompt-vs-render mismatches that have
+#  been in EVERY KramaBench arm ever run:
+#    1. it documented a `# Current Dataflow` section that a lossless DELTA arm
+#       never renders (it only appears under compaction, which has its own
+#       gated fragment), and spent its longest sentence on a reconciliation
+#       rule for a conflict that cannot arise;
+#    2. it claimed "Operator code is not shown for successful operators" —
+#       false in DELTA, where every `Action:` block carries the submitted code;
+#    3. it never mentioned `# Operators needing attention`, the one section
+#       meant to be read first.
+#
+#  The fix is confined to that .md. PF0 and PF1 are otherwise byte-identical
+#  configs (both = _LunaC5, the one 5.6 render knob that cleared 2x SE); they
+#  differ ONLY in which agent-service they talk to, and therefore only in the
+#  system prompt:
+#    PF0 -> :3004  worktree code-lean       @ afc64b980, fragment UNCHANGED
+#    PF1 -> :3005  worktree prompt-fix      @ afc64b980 + the .md, nothing else
+#  (`git diff afc64b980` in prompt-fix is 1 file, +4/-3.)
+#
+#  RUN THEM CO-RUN, IN ONE POOL. The prompt is a per-service constant, so a
+#  restart-in-place would have split a single arm across two prompts with no
+#  trace in the results — the same silent-contamination class as the infra
+#  zeros. Two endpoints is what keeps the comparison honest.
+#
+#  Baseline prompt = 20,329 chars; fixed = 20,290 (-39). The fix is not a
+#  size lever; it is a correctness lever. Expect a null on accuracy and treat
+#  a null as the good outcome — what it buys is that the prompt stops lying.
+# ===========================================================================
+PROMPT_FIX_ENDPOINT = "http://localhost:3005"
+
+
+class _PF0PromptOld(_LunaC5):
+    """Control: LunaC5 against the unmodified fragment on :3004."""
+    _NAME = "_PF0PromptOld"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", CODE_LEAN_ENDPOINT)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _PF1PromptNew(_LunaC5):
+    """Experiment: same config, corrected fragment on :3005."""
+    _NAME = "_PF1PromptNew"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+for _i in (1, 2, 3):
+    for _cls, _tag in ((_PF0PromptOld, "PF0PromptOld"), (_PF1PromptNew, "PF1PromptNew")):
+        _n = f"DataflowSystemLuna{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  GPT-5.2 SERIES — the anchor/C1-C4 factorial on gpt-5.2.
+#
+#  Knob-for-knob identical to the gpt-5-mini factorial (and therefore to the
+#  luna/terra mirrors of it), so all four models compare cell-for-cell:
+#
+#    Anchor  1K, DELTA,  no stats                    (the bare baseline)
+#    C1      5K, DELTA,  no stats                    (+sampling)
+#    C2      1K, DELTA,  stats + hints               (+stats)
+#    C3      1K, LATEST, no stats, +code             (+latest)
+#    C4      5K, LATEST, stats + hints, +code        (all three)
+#
+#  Source configs mimicked, arm by arm:
+#    Anchor <- DataflowSystemGPT5MiniDelta1kSchemaOnly     (_GPT5MiniSchemaOnlySweep)
+#    C1     <- DataflowSystemGPT5MiniDelta5kSchemaOnly     (_GPT5MiniSchemaOnlySweep)
+#    C2     <- DataflowSystemGPT5MiniDeltaStats1kD2        (_GPT5MiniSweepD2)
+#    C3     <- DataflowSystemGPT5MiniLatest1kCodeInSnap    (_GPT5MiniSchemaOnlySweep + code)
+#    C4     <- DataflowSystemGPT5MiniLatestStats5kD2Code   (_GPT5MiniSweepD2 + code)
+#
+#  Shared knobs, taken verbatim from both mini bases (they agree on all of
+#  these): max_steps=25, flow_level=1, attempt_reflection=True, cell char cap
+#  3000. The two mini bases differ ONLY in the data facet — SchemaOnly is
+#  data_level=1 / column_stats=False, D2 is data_level=2 / column_stats=True —
+#  which is exactly the `_STATS` switch below, so one base covers both.
+#
+#  `stats` and `hints` stay BUNDLED, as in every prior run of this factorial:
+#  data_level=2 + column_stats=True is what produces the per-column block AND
+#  the `Output Table profile` hints together. The mini S-series separated them
+#  later and found hints to be the cheap half; separating them here too would
+#  make this a different experiment.
+#
+#  ENDPOINT: unset, so `DataflowSystem` falls back to :3001 — the same default
+#  the mini arms ran on. This is the one thing NOT inherited from luna/terra,
+#  which pin :3004 (CODE_LEAN_ENDPOINT). Note :3001, :3002, :3003, :3004 and
+#  :3005 are five DIFFERENT checkouts, so the endpoint is a code-era axis, not
+#  just a port: all five arms here co-run on one service and are internally
+#  comparable, but comparing them to the luna table inherits whatever differs
+#  between those two checkouts. To move the whole factorial, add one
+#  `kwargs.setdefault("agent_service_endpoint", ...)` to `_GPT52FactorialBase`.
+# ===========================================================================
+class _GPT52FactorialBase(DataflowSystem):
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _STATS = False
+    _CODE = False
+    _NAME = "_GPT52FactorialBase"
+    _MODEL = "gpt-5.2"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        # `enable_code_in_snapshot` is passed ONLY by the arms that want it on,
+        # which is what the mini classes do (C3/C4 pass True; the DELTA arms
+        # never mention it and inherit the True default). It is a no-op on
+        # DELTA either way — `isCodeShownToAgent()` is
+        # `contextMode === DELTA || enableCodeInSnapshot`, so DELTA short-
+        # circuits it in the tool schema, the prompt fragment and the renderer
+        # alike — but passing `False` there would leave the recorded config
+        # differing from mini's for no behavioral reason, and someone would
+        # eventually have to re-derive that it did not matter.
+        # NOTE: a future LATEST-without-code arm must pass False EXPLICITLY;
+        # the default is True and this base will not infer it from `_CODE`.
+        if self._CODE:
+            kwargs.setdefault("enable_code_in_snapshot", True)
+        super().__init__(
+            model_type=self._MODEL,
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=2 if self._STATS else 1,
+            column_stats=self._STATS,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class _GPT52Anchor(_GPT52FactorialBase):
+    """gpt-5.2, DELTA, 1k, schema-only. Mimics DataflowSystemGPT5MiniDelta1kSchemaOnly."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
+    _NAME = "_GPT52Anchor"
+
+
+class _GPT52C1(_GPT52FactorialBase):
+    """+sampling. gpt-5.2, DELTA, 5k, schema-only. Mimics DataflowSystemGPT5MiniDelta5kSchemaOnly."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
+    _NAME = "_GPT52C1"
+
+
+class _GPT52C2(_GPT52FactorialBase):
+    """+stats. gpt-5.2, DELTA, 1k, stats + hints. Mimics DataflowSystemGPT5MiniDeltaStats1kD2."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
+    _NAME = "_GPT52C2"
+
+
+class _GPT52C3(_GPT52FactorialBase):
+    """+latest. gpt-5.2, LATEST, 1k, schema-only, code in snapshot.
+    Mimics DataflowSystemGPT5MiniLatest1kCodeInSnap.
+
+    `_CODE = True` is not an extra knob: DELTA carries operator code inline per
+    event, so a code-blind LATEST cell would confound the mode axis with a code
+    axis. Same reasoning the luna/terra C3 cells use."""
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
+    _NAME = "_GPT52C3"
+
+
+class _GPT52C4(_GPT52FactorialBase):
+    """All three. gpt-5.2, LATEST, 5k, stats + hints, code in snapshot.
+    Mimics DataflowSystemGPT5MiniLatestStats5kD2Code."""
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
+    _NAME = "_GPT52C4"
+
+
+# Five replicates, numbered from 0. Each name gets its own scratch dir, so a
+# replicate is an independent single-shot run, not a re-score of the same one;
+# 5 is what the post-repair luna/terra table used and what the +-across-reps
+# std in that table is computed over.
+for _i in (0, 1, 2, 3, 4):
+    for _cls, _tag in ((_GPT52Anchor, "Anchor"), (_GPT52C1, "C1"), (_GPT52C2, "C2"),
+                       (_GPT52C3, "C3"), (_GPT52C4, "C4")):
+        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  GPT-5.2 — the 2k sampling cells, ADDED alongside C1/C4 rather than replacing
+#  them. Anchor/C2/C3 already pin 1k and C1/C4 pin 5k, so adding 2k turns the
+#  sampling knob into three points (1k / 2k / 5k) at both ends of the mode axis
+#  while leaving the anchor/C1-C4 factorial byte-identical to the gpt-5-mini
+#  mirror it was built to be.
+#
+#    C1Sample2k   2K, DELTA,  no stats                 (C1 at 2k)
+#    C4Sample2k   2K, LATEST, stats + hints, +code     (C4 at 2k)
+#
+#  Mini twins, for the cross-model read:
+#    C1Sample2k <- DataflowSystemGPT5MiniDelta2kSchemaOnly  (mini's C7, reps 0-4)
+#    C4Sample2k <- NONE. Mini's LATEST+stats+code cell exists only at 5k
+#      (LatestStats5kD2Code); its LATEST+stats arms without code are 1k and 3k.
+#      So C4Sample2k is a NEW cell, not a mirror — read it against gpt-5.2's own
+#      C4 (same config at 5k) and C3 (LATEST at 1k), not against mini.
+#
+#  Why 2k specifically: it is the observation channel LongDS standardized on
+#  (`_LongDS2kD2` in longds/arms.py), so a 2k point here is directly readable
+#  against the LongDS layout results instead of needing a knob translation.
+# ===========================================================================
+class _GPT52C1Sample2k(_GPT52FactorialBase):
+    """C1 at 2k. gpt-5.2, DELTA, 2k, schema-only. Mimics DataflowSystemGPT5MiniDelta2kSchemaOnly."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 2000; _STATS = False; _CODE = False
+    _NAME = "_GPT52C1Sample2k"
+
+
+class _GPT52C4Sample2k(_GPT52FactorialBase):
+    """C4 at 2k. gpt-5.2, LATEST, 2k, stats + hints, code in snapshot.
+    No gpt-5-mini twin — see the block comment above."""
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 2000; _STATS = True; _CODE = True
+    _NAME = "_GPT52C4Sample2k"
+
+
+for _i in (0, 1, 2, 3, 4):
+    for _cls, _tag in ((_GPT52C1Sample2k, "C1Sample2k"), (_GPT52C4Sample2k, "C4Sample2k")):
+        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  FILE-IO E2E PAIR — verifies the `Files read:` DELTA render fix end to end.
+#
+#  Both are the gpt-5.2 Anchor config (1K DELTA, schema-only). The ONLY
+#  difference is which agent-service they talk to:
+#    FileIOOld -> :3004  worktree code-lean  @ afc64b980           (unfixed)
+#    FileIONew -> :3005  worktree prompt-fix @ afc64b980 + fix     (fixed)
+#  prompt-fix branched from code-lean's exact HEAD, so this is a one-variable
+#  comparison of the render change rather than a cross-vintage one.
+#
+#  Run against a MULTI-FILE task (e.g. environment-easy-4, which loads five
+#  water-body-testing CSVs). On a single-file load `formatFileIo` correctly
+#  returns nothing, so a single-file task cannot distinguish fixed from broken —
+#  which is exactly why the earlier archeology-easy-3 smoke showed 0 on every
+#  arm and proved nothing.
+#
+#  Throwaway: delete once the fix lands. Not part of any factorial.
+# ===========================================================================
+class _GPT52FileIOOld(_GPT52Anchor):
+    _NAME = "_GPT52FileIOOld"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", CODE_LEAN_ENDPOINT)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _GPT52FileIONew(_GPT52Anchor):
+    _NAME = "_GPT52FileIONew"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+for _cls, _tag in ((_GPT52FileIOOld, "FileIOOld"), (_GPT52FileIONew, "FileIONew")):
+    _n = f"DataflowSystemGPT52{_tag}E2E"
+    globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# Throwaway smoke: the gpt-5.2-medium litellm alias (reasoning_effort pinned to
+# medium; the bare gpt-5.2 alias defaults to NO reasoning on chat/completions).
+# One task, checks reasoning_tokens lands in stats.json. Delete after use.
+class _GPT52MediumSmoke(_GPT52Anchor):
+    _MODEL = "gpt-5.2-medium"
+    _NAME = "_GPT52MediumSmoke"
+
+
+DataflowSystemGPT52MediumSmokeE2E = type(
+    "DataflowSystemGPT52MediumSmokeE2E", (_GPT52MediumSmoke,), {"_NAME": "DataflowSystemGPT52MediumSmokeE2E"}
+)
+
+
+# ===========================================================================
+#  GPT-5.2-MEDIUM — the same seven cells, but with reasoning actually ON.
+#
+#  Every gpt-5.2 arm before 2026-08-09 ran through the bare `gpt-5.2` litellm
+#  alias, which sends no `reasoning_effort`; probed directly, that is byte-
+#  identical to `reasoning_effort:"none"` (0 reasoning tokens), so the whole
+#  gpt-5.2 family to date is a NO-REASONING baseline. The `gpt-5.2-medium`
+#  alias pins medium. Measured on archeology-easy-3, Anchor config:
+#      bare   -> 0 reasoning tok,   340 out,  $0.0199
+#      medium -> 952 reasoning tok, 1527 out, $0.0391
+#  so expect roughly 2x cost per task.
+#
+#  Only the model changes; every render knob is inherited unchanged from the
+#  corresponding cell, so `GPT52MediumC4Sample2k` vs `GPT52C4Sample2k` is a
+#  clean one-variable test of what reasoning buys.
+# ===========================================================================
+class _GPT52MediumC4Sample2k(_GPT52C4Sample2k):
+    _MODEL = "gpt-5.2-medium"
+    _NAME = "_GPT52MediumC4Sample2k"
+
+
+for _i in (0, 1, 2, 3, 4):
+    _n = f"DataflowSystemGPT52MediumC4Sample2kReplicate{_i}"
+    globals()[_n] = type(_n, (_GPT52MediumC4Sample2k,), {"_NAME": _n})

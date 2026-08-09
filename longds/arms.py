@@ -615,6 +615,33 @@ class LongDSLunaVersioned2kD2V2R3(LongDSLunaVersioned2kD2V2):
     _NAME = "LongDSLunaVersioned2kD2V2R3"
 
 
+class LongDSLunaVersioned2kD2V3(LongDSLunaVersioned2kD2V2):
+    """v2 + OPERATOR-LEVEL recall (one variable changed from v2).
+
+    `recallState` is re-addressed from turns to operator versions — the model
+    passes the same `"opId (turn N)"` string it reads in the catalog and
+    writes in `upstreams`, and gets back that ONE version's code, values and
+    telemetry. Turn-level pulls were ~98% redundant (the catalog already
+    carries every request verbatim and 98.3% of answers under its clip) and
+    over-fetched whole turn deltas, which kept values invisible-by-default —
+    recall showed zero accuracy benefit under it. The prompt teaches the
+    natural discipline this enables: recall the versions you are about to
+    build on, look at the numbers, THEN wire.
+    """
+
+    _NAME = "LongDSLunaVersioned2kD2V3"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("recall_operator_level", True)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class LongDSLunaSession2kD2R7(LongDSLunaSession2kD2):
+    """Session anchor for the v3 pair."""
+
+    _NAME = "LongDSLunaSession2kD2R7"
+
+
 class LongDSLunaVersioned2kD2R2(LongDSLunaVersioned2kD2):
     _NAME = "LongDSLunaVersioned2kD2R2"
 
@@ -661,4 +688,6 @@ ARMS = {
     "luna-versioned-2k-d2-v2": LongDSLunaVersioned2kD2V2,
     "luna-versioned-2k-d2-v2-r2": LongDSLunaVersioned2kD2V2R2,
     "luna-versioned-2k-d2-v2-r3": LongDSLunaVersioned2kD2V2R3,
+    "luna-versioned-2k-d2-v3": LongDSLunaVersioned2kD2V3,
+    "luna-session-2k-d2-r7": LongDSLunaSession2kD2R7,
 }
