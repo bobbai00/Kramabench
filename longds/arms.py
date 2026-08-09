@@ -560,6 +560,21 @@ class LongDSLunaSession2kD2R3(LongDSLunaSession2kD2):
     _NAME = "LongDSLunaSession2kD2R3"
 
 
+# Fresh session anchors for the catalog-v2 campaign: each v2 rep runs paired
+# with one of these in the same era, so v2-vs-session is direct and v2-vs-v1
+# goes through the anchor (difference-in-differences cancels the era shift).
+class LongDSLunaSession2kD2R4(LongDSLunaSession2kD2):
+    _NAME = "LongDSLunaSession2kD2R4"
+
+
+class LongDSLunaSession2kD2R5(LongDSLunaSession2kD2):
+    _NAME = "LongDSLunaSession2kD2R5"
+
+
+class LongDSLunaSession2kD2R6(LongDSLunaSession2kD2):
+    _NAME = "LongDSLunaSession2kD2R6"
+
+
 class LongDSLunaVersioned2kD2(_LongDS2kD2):
     """EXPERIMENT layout: # Catalog — state-once entries + recallState pull,
     # Your Task tail. Same observation channel as the session arm."""
@@ -637,6 +652,9 @@ ARMS = {
     "luna-session-2k-d2": LongDSLunaSession2kD2,
     "luna-session-2k-d2-r2": LongDSLunaSession2kD2R2,
     "luna-session-2k-d2-r3": LongDSLunaSession2kD2R3,
+    "luna-session-2k-d2-r4": LongDSLunaSession2kD2R4,
+    "luna-session-2k-d2-r5": LongDSLunaSession2kD2R5,
+    "luna-session-2k-d2-r6": LongDSLunaSession2kD2R6,
     "luna-versioned-2k-d2": LongDSLunaVersioned2kD2,
     "luna-versioned-2k-d2-r2": LongDSLunaVersioned2kD2R2,
     "luna-versioned-2k-d2-r3": LongDSLunaVersioned2kD2R3,
