@@ -675,6 +675,16 @@ class LongDSLunaVersioned2kD2V32R2(LongDSLunaVersioned2kD2V32):
     _NAME = "LongDSLunaVersioned2kD2V32R2"
 
 
+class LongDSLunaVersioned2kD2V32R3(LongDSLunaVersioned2kD2V32):
+    """Third rep. Reps exist because the aggregate is cascade-dominated: a task's
+    score is set largely by where its FIRST wrong turn lands, so single-rep
+    per-task numbers swing wildly (v3.1 saw 10-76 on world_university_rankings
+    across three reps). Three reps is the minimum that separates a real effect
+    from that lottery."""
+
+    _NAME = "LongDSLunaVersioned2kD2V32R3"
+
+
 class LongDSLunaVersioned2kD2V31R2(LongDSLunaVersioned2kD2V31):
     """v3.1 rep 2 — first CLEAN rep on the fixed build (version store +
     checkout + graph guards + failure surfacing, commits 9b0adadf8 /
@@ -741,5 +751,6 @@ ARMS = {
     "luna-versioned-2k-d2-v31-r2": LongDSLunaVersioned2kD2V31R2,
     "luna-versioned-2k-d2-v32": LongDSLunaVersioned2kD2V32,
     "luna-versioned-2k-d2-v32-r2": LongDSLunaVersioned2kD2V32R2,
+    "luna-versioned-2k-d2-v32-r3": LongDSLunaVersioned2kD2V32R3,
     "luna-versioned-2k-d2-v31-r3": LongDSLunaVersioned2kD2V31R3,
 }
