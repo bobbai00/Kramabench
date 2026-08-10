@@ -642,6 +642,53 @@ class LongDSLunaSession2kD2R7(LongDSLunaSession2kD2):
     _NAME = "LongDSLunaSession2kD2R7"
 
 
+class LongDSLunaVersioned2kD2V31(LongDSLunaVersioned2kD2V3):
+    """v3.1 — SELECTIVE recall (prompt-only change from v3).
+
+    v3 tied its anchor (32.03 vs 32.14) while solving passnyc t12 (472, gold,
+    in a 462-era; task 36.7 -> 80.0) — but reflexive read-before-wire cost
+    1121 recall calls and 5.5 steps/turn, taxing exactly the tasks that carry
+    no inherited-state risk (github -13). The fragment now gates recall on
+    VALUES-DECIDE-WHAT-YOU-BUILD (revision/rollback/comparison/foundation) and
+    tells the model to wire directly otherwise, leaning on the write-time
+    input-values attach as the safety net. Same knobs as v3; the fragment is
+    the variable.
+    """
+
+    _NAME = "LongDSLunaVersioned2kD2V31"
+
+
+class LongDSLunaVersioned2kD2V32(LongDSLunaVersioned2kD2V31):
+    """v3.2 — v3.1 plus the inherited-baseline fix (commit ad5301b4a).
+
+    The live turn's steps now diff against the previous turn's leaf snapshot
+    instead of the empty root, so inherited operators stop being re-dumped in
+    step 1. Measured share of prompt that dump occupied on NFL: 53% at turn 42
+    (238 of 450 kB, 179 operators). Nothing else changes, so any difference is
+    attributable to removing that duplication.
+    """
+
+    _NAME = "LongDSLunaVersioned2kD2V32"
+
+
+class LongDSLunaVersioned2kD2V32R2(LongDSLunaVersioned2kD2V32):
+    _NAME = "LongDSLunaVersioned2kD2V32R2"
+
+
+class LongDSLunaVersioned2kD2V31R2(LongDSLunaVersioned2kD2V31):
+    """v3.1 rep 2 — first CLEAN rep on the fixed build (version store +
+    checkout + graph guards + failure surfacing, commits 9b0adadf8 /
+    49d3ec7e0 / 079b6b39d)."""
+
+    _NAME = "LongDSLunaVersioned2kD2V31R2"
+
+
+class LongDSLunaVersioned2kD2V31R3(LongDSLunaVersioned2kD2V31):
+    """v3.1 rep 3 — second clean rep on the fixed build."""
+
+    _NAME = "LongDSLunaVersioned2kD2V31R3"
+
+
 class LongDSLunaVersioned2kD2R2(LongDSLunaVersioned2kD2):
     _NAME = "LongDSLunaVersioned2kD2R2"
 
@@ -690,4 +737,9 @@ ARMS = {
     "luna-versioned-2k-d2-v2-r3": LongDSLunaVersioned2kD2V2R3,
     "luna-versioned-2k-d2-v3": LongDSLunaVersioned2kD2V3,
     "luna-session-2k-d2-r7": LongDSLunaSession2kD2R7,
+    "luna-versioned-2k-d2-v31": LongDSLunaVersioned2kD2V31,
+    "luna-versioned-2k-d2-v31-r2": LongDSLunaVersioned2kD2V31R2,
+    "luna-versioned-2k-d2-v32": LongDSLunaVersioned2kD2V32,
+    "luna-versioned-2k-d2-v32-r2": LongDSLunaVersioned2kD2V32R2,
+    "luna-versioned-2k-d2-v31-r3": LongDSLunaVersioned2kD2V31R3,
 }
