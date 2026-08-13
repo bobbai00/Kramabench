@@ -3239,3 +3239,59 @@ class _Haiku2kLatestStatsD2(_Haiku2kD2Base):
 for _cls, _tag in ((_Haiku2kDeltaStatsD2, "Haiku2kDeltaStatsD2"), (_Haiku2kLatestStatsD2, "Haiku2kLatestStatsD2")):
     _n = f"DataflowSystem{_tag}Rep0"
     globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Context-matrix smoke arms for the dataflow-agent repo's stack verification:
+# claude-haiku-4.5 × {LATEST, DELTA} × {bare, decorated}. The four arms vary
+# ONLY the context knobs, so running all four proves both context modes and
+# both DECORATE ladders assemble and render.
+#   bare      — flow_level=0, data_level=0, no column stats
+#   decorated — flow_level=1 (loader hints + `Operators needing attention`),
+#               data_level=2 (typed `Schema (N cols)` + `Output Table profile`),
+#               column_stats (`Column Schema and stats:` per result)
+# Everything else mirrors DataflowSystemStableHaiku.
+# ─────────────────────────────────────────────────────────────────────────
+class _HaikuContextMatrix(DataflowSystem):
+    _CONTEXT_MODE = "latest"; _FLOW = 0; _DATA = 0; _STATS = False
+    _NAME = "_HaikuContextMatrix"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=self._FLOW,
+            data_level=self._DATA,
+            column_stats=self._STATS,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemHaikuLatestBare(_HaikuContextMatrix):
+    """LATEST × flow_level=0, data_level=0 — leaf snapshot, no decoration."""
+    _NAME = "DataflowSystemHaikuLatestBare"
+
+
+class DataflowSystemHaikuLatestRich(_HaikuContextMatrix):
+    """LATEST × flow_level=1, data_level=2 + column stats."""
+    _FLOW = 1; _DATA = 2; _STATS = True
+    _NAME = "DataflowSystemHaikuLatestRich"
+
+
+class DataflowSystemHaikuDeltaBare(_HaikuContextMatrix):
+    """DELTA × flow_level=0, data_level=0 — event trajectory, no decoration."""
+    _CONTEXT_MODE = "delta"
+    _NAME = "DataflowSystemHaikuDeltaBare"
+
+
+class DataflowSystemHaikuDeltaRich(_HaikuContextMatrix):
+    """DELTA × flow_level=1, data_level=2 + column stats — the shipped shape."""
+    _CONTEXT_MODE = "delta"; _FLOW = 1; _DATA = 2; _STATS = True
+    _NAME = "DataflowSystemHaikuDeltaRich"
