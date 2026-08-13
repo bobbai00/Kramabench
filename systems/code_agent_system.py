@@ -8,7 +8,7 @@ import json
 from typing import Dict, List, Optional
 
 from benchmark.benchmark_api import System
-from code_agent import CodeAgentWrapper, CodeAgentResult
+from code_agent import CodeAgentWrapper, CodeAgentResult, DEFAULT_API_BASE, DEFAULT_API_KEY
 from systems.data_source_utils import expand_data_sources
 from utils.answer_parser import parse_answer
 
@@ -24,8 +24,8 @@ class CodeAgentSystem(System):
         self,
         model_type: str = "claude-haiku-4.5",
         max_steps: int = DEFAULT_MAX_STEPS,
-        api_base: str = "http://localhost:4000",
-        api_key: str = "dummy",
+        api_base: str = DEFAULT_API_BASE,
+        api_key: str = DEFAULT_API_KEY,
         verbose: bool = False,
         name: str = "CodeAgentSystem",
         use_fine_grained_prompt: bool = None,

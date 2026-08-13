@@ -18,8 +18,12 @@ from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTI
 # Default settings (CODE_AGENT_MAX_STEPS env var overrides default)
 DEFAULT_MODEL_TYPE = "claude-haiku-4.5"
 DEFAULT_MAX_STEPS = int(os.environ.get("CODE_AGENT_MAX_STEPS", 50))
-DEFAULT_API_BASE = "http://localhost:4000"
-DEFAULT_API_KEY = "dummy"
+DEFAULT_API_BASE = os.environ.get("CODE_AGENT_API_BASE", "http://localhost:4000")
+# "dummy" only works against a proxy that enforces no key. The local-dev LiteLLM
+# sets a master_key, and any other key sends it looking for a virtual key in a
+# database it does not have — the request fails with 400 `no_db_connection`.
+# Same env-var convention code_agent_session.py already uses.
+DEFAULT_API_KEY = os.environ.get("CODE_AGENT_API_KEY") or os.environ.get("LITELLM_MASTER_KEY") or "dummy"
 
 # Customized prompt setting (set to "true" to enable)
 CUSTOMIZED_PROMPT_ENABLED = os.environ.get("CUSTOMIZED_PROMPT_ENABLED", "false").lower() == "true"
