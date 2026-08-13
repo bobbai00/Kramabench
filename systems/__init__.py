@@ -529,3 +529,9 @@ from .code_agent_system import (
 )
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem
 from .dataflow_agent_session import DataflowAgentSessionRunner, DataflowAgentSessionSystem
+from .claude_code_system import (
+    ClaudeCodeSystem,
+    ClaudeCodeSystemHaiku45Stateless,
+    ClaudeCodeSystemHaiku45Persistent,
+    ClaudeCodeSystemHaiku45PersistentChars2k,
+)

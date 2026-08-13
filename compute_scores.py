@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import os
+import sys
 import pandas as pd
 
 # Score metrics used in evaluate.py (lines 54-60)
@@ -92,6 +93,16 @@ def compute_all_scores(aggregated_path: str, sut_filter: str = None) -> pd.DataF
         DataFrame with all scores
     """
     df = pd.read_csv(aggregated_path)
+
+    # A handful of rows can carry an empty `sut`. Left in, `unique()` yields a
+    # float NaN alongside the name strings and `sorted(systems)` below raises
+    # TypeError, so the whole leaderboard fails for every SUT - which is also
+    # why `kb.py scores` reports "no scores found" for a SUT that scored fine.
+    unnamed = int(df['sut'].isna().sum())
+    if unnamed:
+        print(f"warning: ignoring {unnamed} row(s) in {aggregated_path} with no 'sut' value",
+              file=sys.stderr)
+        df = df[df['sut'].notna()]
 
     systems = df['sut'].unique()
     if sut_filter:
