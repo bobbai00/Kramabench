@@ -75,6 +75,7 @@ class DataflowSystem(System):
         session_turns: bool = False,
         recall_max_result_chars: Optional[int] = None,
         recall_operator_level: bool = False,
+        spec_audit: bool = False,
         # None -> service default (currently False; the heads-table A/B showed no effect).
         versioned_heads: bool | None = None,
         index_rich_tables: Optional[int] = None,
@@ -201,6 +202,7 @@ class DataflowSystem(System):
         self.session_turns = session_turns
         self.recall_max_result_chars = recall_max_result_chars
         self.recall_operator_level = recall_operator_level
+        self.spec_audit = spec_audit
         self.versioned_heads = versioned_heads
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
@@ -400,6 +402,7 @@ class DataflowSystem(System):
             session_turns=self.session_turns,
             recall_max_result_chars=self.recall_max_result_chars,
             recall_operator_level=self.recall_operator_level,
+            spec_audit=self.spec_audit,
             versioned_heads=self.versioned_heads,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
@@ -537,9 +540,19 @@ Your last line MUST BE: **Final Answer: <value>**"""
             # The service's code lives in the worktree that serves that PORT — not
             # in the main checkout. Stamping main's SHA for a worktree-served port
             # would be a confidently wrong provenance record.
+            # VERIFY THIS AGAINST REALITY BEFORE TRUSTING A STAMP:
+            #   readlink /proc/$(lsof -tiTCP:PORT -sTCP:LISTEN)/cwd
+            # A wrong entry is worse than none — it stamps a confident, false
+            # provenance. Both known failures happened:
+            #   * :3001 was mapped to the frontier-decay worktree while the
+            #     service actually ran from the MAIN checkout, so every gpt-5.2
+            #     arm recorded `fee02701d`, a commit on a branch that service
+            #     was not running.
+            #   * :3005 was absent, so it fell through to the main-repo default
+            #     and stamped main's SHA (dirty) for a clean worktree.
             _WORKTREE_BY_PORT = {
-                "3001": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-agent-context-frontier-decay",
                 "3002": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-role-policy",
+                "3005": "~/Desktop/bobflow/dataflow-agent-worktrees/prompt-fix",
             }
             _port = _endpoint.rsplit(":", 1)[-1].strip("/")
             _svc_dir = _os.path.expanduser(_WORKTREE_BY_PORT.get(_port, "~/Desktop/bobflow/dataflow-agent"))
@@ -5138,3 +5151,89 @@ class _GPT52MediumC4Sample2k(_GPT52C4Sample2k):
 for _i in (0, 1, 2, 3, 4):
     _n = f"DataflowSystemGPT52MediumC4Sample2kReplicate{_i}"
     globals()[_n] = type(_n, (_GPT52MediumC4Sample2k,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  HAIKU-4.5 2k/D2 PAIR — DELTA vs LATEST, both with stats, on the PROMPT-FIX
+#  agent-service (:3005).
+#
+#    Haiku2kDeltaStatsD2   2K, DELTA,  stats + hints, data_level=2
+#    Haiku2kLatestStatsD2  2K, LATEST, stats + hints, data_level=2, +code
+#
+#  ENDPOINT IS THE POINT: these run against :3005 (worktree `prompt-fix`,
+#  branch fix/context-format-delta), NOT :3001. That branch carries the three
+#  prompt/render fixes, and one of them is load-bearing for the DELTA arm here:
+#
+#    * `Files read:` renders in DELTA at all. On every other service the fact is
+#      computed and discarded, so a DELTA arm shows it 0/104 tasks. The LATEST
+#      arm would get it either way — this pair is the first time both modes do.
+#    * context-format.delta.md no longer describes a `# Current Dataflow`
+#      section that a lossless DELTA arm never renders, and no longer claims
+#      operator code is hidden when every Action carries it.
+#    * the Key Principles no longer tell a code-visible arm its code was
+#      discarded (applies to BOTH arms: DELTA shows code inline, LATEST via
+#      enable_code_in_snapshot).
+#
+#  So these are NOT comparable with any gpt-5.2 / luna / mini arm — those all
+#  ran against services without these fixes. Read them only against each other.
+#
+#  `_CODE = True` on the LATEST arm is not an extra knob: DELTA carries code
+#  inline per event, so a code-blind LATEST cell would confound the mode axis
+#  with a code axis — same reasoning the luna/terra C3 cells use.
+# ===========================================================================
+PROMPT_FIX_ENDPOINT_HAIKU = "http://localhost:3005"
+
+
+class _Haiku2kD2Base(DataflowSystem):
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 2000
+    _CODE = False
+    _NAME = "_Haiku2kD2Base"
+    _MODEL = "claude-haiku-4.5"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT_HAIKU)
+        if self._CODE:
+            kwargs.setdefault("enable_code_in_snapshot", True)
+        super().__init__(
+            model_type=self._MODEL,
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            # flow_level=0: NO `# Operators needing attention` section. Raw
+            # errors are unaffected — formatOperatorResult renders
+            # `[ERROR] <engine message>` + the failing operator's code purely on
+            # `opInfo.error`, with no flow gate. What is given up is the triage
+            # layer: topological (root-cause-first) ordering, the
+            # `blocked — upstream X errored; fix those first` line for operators
+            # that never ran (those render nothing per-operator, so that link is
+            # stated nowhere else), and the exception-keyed loader remediation
+            # hints. Measured incidence of the section on comparable arms: ~30%
+            # of tasks (33/104, 23/102, 32/104).
+            flow_level=0,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class _Haiku2kDeltaStatsD2(_Haiku2kD2Base):
+    """2K, DELTA, stats + hints, d=2. The arm the `Files read:` fix unblocks."""
+    _CONTEXT_MODE = "delta"; _CODE = False
+    _NAME = "_Haiku2kDeltaStatsD2"
+
+
+class _Haiku2kLatestStatsD2(_Haiku2kD2Base):
+    """2K, LATEST, stats + hints, d=2, code in snapshot."""
+    _CONTEXT_MODE = "latest"; _CODE = True
+    _NAME = "_Haiku2kLatestStatsD2"
+
+
+for _cls, _tag in ((_Haiku2kDeltaStatsD2, "Haiku2kDeltaStatsD2"), (_Haiku2kLatestStatsD2, "Haiku2kLatestStatsD2")):
+    _n = f"DataflowSystem{_tag}Rep0"
+    globals()[_n] = type(_n, (_cls,), {"_NAME": _n})

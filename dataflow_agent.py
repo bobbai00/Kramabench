@@ -138,6 +138,10 @@ class AgentSettings:
     # v3: recallState addressed by operator version ("opId (turn N)") instead
     # of turn. See agent-service recallOperatorLevel.
     recall_operator_level: bool = False
+    # v3.3: require a filled AUDIT checklist before the final answer — every
+    # requested quantity traced to an "opId (turn N)" + column, every binding
+    # clause of the task text quoted. Prompt-only; see agent-service specAudit.
+    spec_audit: bool = False
     # Turn-index cap: how many UPSTREAM operators of the current turn's work may
     # render sample rows, most-recently-touched first. None keeps the service
     # default (12). There is no code cap — the operators a turn touches always
@@ -259,6 +263,8 @@ class AgentSettings:
             payload["recallMaxResultChars"] = self.recall_max_result_chars
         if self.recall_operator_level:
             payload["recallOperatorLevel"] = True
+        if self.spec_audit:
+            payload["specAudit"] = True
         if self.index_rich_tables is not None:
             payload["indexRichTables"] = self.index_rich_tables
         if self.index_detailed_operators is not None:
@@ -918,6 +924,7 @@ class DataflowAgent:
             session_turns: bool = False,
             recall_max_result_chars: Optional[int] = None,
             recall_operator_level: bool = False,
+            spec_audit: bool = False,
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
@@ -1020,6 +1027,7 @@ class DataflowAgent:
             session_turns=session_turns,
             recall_max_result_chars=recall_max_result_chars,
             recall_operator_level=recall_operator_level,
+            spec_audit=spec_audit,
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
