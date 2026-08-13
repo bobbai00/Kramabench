@@ -74,6 +74,8 @@ class DataflowSystem(System):
         versioned_mode: bool = False,
         session_turns: bool = False,
         recall_max_result_chars: Optional[int] = None,
+        recall_operator_level: bool = False,
+        spec_audit: bool = False,
         # None -> service default (currently False; the heads-table A/B showed no effect).
         versioned_heads: bool | None = None,
         index_rich_tables: Optional[int] = None,
@@ -199,6 +201,8 @@ class DataflowSystem(System):
         self.versioned_mode = versioned_mode
         self.session_turns = session_turns
         self.recall_max_result_chars = recall_max_result_chars
+        self.recall_operator_level = recall_operator_level
+        self.spec_audit = spec_audit
         self.versioned_heads = versioned_heads
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
@@ -397,6 +401,8 @@ class DataflowSystem(System):
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
             recall_max_result_chars=self.recall_max_result_chars,
+            recall_operator_level=self.recall_operator_level,
+            spec_audit=self.spec_audit,
             versioned_heads=self.versioned_heads,
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
@@ -534,9 +540,19 @@ Your last line MUST BE: **Final Answer: <value>**"""
             # The service's code lives in the worktree that serves that PORT — not
             # in the main checkout. Stamping main's SHA for a worktree-served port
             # would be a confidently wrong provenance record.
+            # VERIFY THIS AGAINST REALITY BEFORE TRUSTING A STAMP:
+            #   readlink /proc/$(lsof -tiTCP:PORT -sTCP:LISTEN)/cwd
+            # A wrong entry is worse than none — it stamps a confident, false
+            # provenance. Both known failures happened:
+            #   * :3001 was mapped to the frontier-decay worktree while the
+            #     service actually ran from the MAIN checkout, so every gpt-5.2
+            #     arm recorded `fee02701d`, a commit on a branch that service
+            #     was not running.
+            #   * :3005 was absent, so it fell through to the main-repo default
+            #     and stamped main's SHA (dirty) for a clean worktree.
             _WORKTREE_BY_PORT = {
-                "3001": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-agent-context-frontier-decay",
                 "3002": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-role-policy",
+                "3005": "~/Desktop/bobflow/dataflow-agent-worktrees/prompt-fix",
             }
             _port = _endpoint.rsplit(":", 1)[-1].strip("/")
             _svc_dir = _os.path.expanduser(_WORKTREE_BY_PORT.get(_port, "~/Desktop/bobflow/dataflow-agent"))
@@ -2933,3 +2949,293 @@ class DataflowSystemStableHaiku(DataflowSystem):
             *args,
             **kwargs,
         )
+
+
+class _GPT52FactorialBase(DataflowSystem):
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 1000
+    _STATS = False
+    _CODE = False
+    _NAME = "_GPT52FactorialBase"
+    _MODEL = "gpt-5.2"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        # `enable_code_in_snapshot` is passed ONLY by the arms that want it on,
+        # which is what the mini classes do (C3/C4 pass True; the DELTA arms
+        # never mention it and inherit the True default). It is a no-op on
+        # DELTA either way — `isCodeShownToAgent()` is
+        # `contextMode === DELTA || enableCodeInSnapshot`, so DELTA short-
+        # circuits it in the tool schema, the prompt fragment and the renderer
+        # alike — but passing `False` there would leave the recorded config
+        # differing from mini's for no behavioral reason, and someone would
+        # eventually have to re-derive that it did not matter.
+        # NOTE: a future LATEST-without-code arm must pass False EXPLICITLY;
+        # the default is True and this base will not infer it from `_CODE`.
+        if self._CODE:
+            kwargs.setdefault("enable_code_in_snapshot", True)
+        super().__init__(
+            model_type=self._MODEL,
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            flow_level=1,
+            data_level=2 if self._STATS else 1,
+            column_stats=self._STATS,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class _GPT52Anchor(_GPT52FactorialBase):
+    """gpt-5.2, DELTA, 1k, schema-only. Mimics DataflowSystemGPT5MiniDelta1kSchemaOnly."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
+    _NAME = "_GPT52Anchor"
+
+
+class _GPT52C1(_GPT52FactorialBase):
+    """+sampling. gpt-5.2, DELTA, 5k, schema-only. Mimics DataflowSystemGPT5MiniDelta5kSchemaOnly."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
+    _NAME = "_GPT52C1"
+
+
+class _GPT52C2(_GPT52FactorialBase):
+    """+stats. gpt-5.2, DELTA, 1k, stats + hints. Mimics DataflowSystemGPT5MiniDeltaStats1kD2."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
+    _NAME = "_GPT52C2"
+
+
+class _GPT52C3(_GPT52FactorialBase):
+    """+latest. gpt-5.2, LATEST, 1k, schema-only, code in snapshot.
+    Mimics DataflowSystemGPT5MiniLatest1kCodeInSnap.
+
+    `_CODE = True` is not an extra knob: DELTA carries operator code inline per
+    event, so a code-blind LATEST cell would confound the mode axis with a code
+    axis. Same reasoning the luna/terra C3 cells use."""
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
+    _NAME = "_GPT52C3"
+
+
+class _GPT52C4(_GPT52FactorialBase):
+    """All three. gpt-5.2, LATEST, 5k, stats + hints, code in snapshot.
+    Mimics DataflowSystemGPT5MiniLatestStats5kD2Code."""
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
+    _NAME = "_GPT52C4"
+
+
+# Five replicates, numbered from 0. Each name gets its own scratch dir, so a
+# replicate is an independent single-shot run, not a re-score of the same one;
+# 5 is what the post-repair luna/terra table used and what the +-across-reps
+# std in that table is computed over.
+for _i in (0, 1, 2, 3, 4):
+    for _cls, _tag in ((_GPT52Anchor, "Anchor"), (_GPT52C1, "C1"), (_GPT52C2, "C2"),
+                       (_GPT52C3, "C3"), (_GPT52C4, "C4")):
+        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  GPT-5.2 — the 2k sampling cells, ADDED alongside C1/C4 rather than replacing
+#  them. Anchor/C2/C3 already pin 1k and C1/C4 pin 5k, so adding 2k turns the
+#  sampling knob into three points (1k / 2k / 5k) at both ends of the mode axis
+#  while leaving the anchor/C1-C4 factorial byte-identical to the gpt-5-mini
+#  mirror it was built to be.
+#
+#    C1Sample2k   2K, DELTA,  no stats                 (C1 at 2k)
+#    C4Sample2k   2K, LATEST, stats + hints, +code     (C4 at 2k)
+#
+#  Mini twins, for the cross-model read:
+#    C1Sample2k <- DataflowSystemGPT5MiniDelta2kSchemaOnly  (mini's C7, reps 0-4)
+#    C4Sample2k <- NONE. Mini's LATEST+stats+code cell exists only at 5k
+#      (LatestStats5kD2Code); its LATEST+stats arms without code are 1k and 3k.
+#      So C4Sample2k is a NEW cell, not a mirror — read it against gpt-5.2's own
+#      C4 (same config at 5k) and C3 (LATEST at 1k), not against mini.
+#
+#  Why 2k specifically: it is the observation channel LongDS standardized on
+#  (`_LongDS2kD2` in longds/arms.py), so a 2k point here is directly readable
+#  against the LongDS layout results instead of needing a knob translation.
+# ===========================================================================
+class _GPT52C1Sample2k(_GPT52FactorialBase):
+    """C1 at 2k. gpt-5.2, DELTA, 2k, schema-only. Mimics DataflowSystemGPT5MiniDelta2kSchemaOnly."""
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 2000; _STATS = False; _CODE = False
+    _NAME = "_GPT52C1Sample2k"
+
+
+class _GPT52C4Sample2k(_GPT52FactorialBase):
+    """C4 at 2k. gpt-5.2, LATEST, 2k, stats + hints, code in snapshot.
+    No gpt-5-mini twin — see the block comment above."""
+    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 2000; _STATS = True; _CODE = True
+    _NAME = "_GPT52C4Sample2k"
+
+
+for _i in (0, 1, 2, 3, 4):
+    for _cls, _tag in ((_GPT52C1Sample2k, "C1Sample2k"), (_GPT52C4Sample2k, "C4Sample2k")):
+        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  FILE-IO E2E PAIR — verifies the `Files read:` DELTA render fix end to end.
+#
+#  Both are the gpt-5.2 Anchor config (1K DELTA, schema-only). The ONLY
+#  difference is which agent-service they talk to:
+#    FileIOOld -> :3004  worktree code-lean  @ afc64b980           (unfixed)
+#    FileIONew -> :3005  worktree prompt-fix @ afc64b980 + fix     (fixed)
+#  prompt-fix branched from code-lean's exact HEAD, so this is a one-variable
+#  comparison of the render change rather than a cross-vintage one.
+#
+#  Run against a MULTI-FILE task (e.g. environment-easy-4, which loads five
+#  water-body-testing CSVs). On a single-file load `formatFileIo` correctly
+#  returns nothing, so a single-file task cannot distinguish fixed from broken —
+#  which is exactly why the earlier archeology-easy-3 smoke showed 0 on every
+#  arm and proved nothing.
+#
+#  Throwaway: delete once the fix lands. Not part of any factorial.
+# ===========================================================================
+class _GPT52FileIOOld(_GPT52Anchor):
+    _NAME = "_GPT52FileIOOld"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", CODE_LEAN_ENDPOINT)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+class _GPT52FileIONew(_GPT52Anchor):
+    _NAME = "_GPT52FileIONew"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT)
+        super().__init__(verbose=verbose, *args, **kwargs)
+
+
+for _cls, _tag in ((_GPT52FileIOOld, "FileIOOld"), (_GPT52FileIONew, "FileIONew")):
+    _n = f"DataflowSystemGPT52{_tag}E2E"
+    globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# Throwaway smoke: the gpt-5.2-medium litellm alias (reasoning_effort pinned to
+# medium; the bare gpt-5.2 alias defaults to NO reasoning on chat/completions).
+# One task, checks reasoning_tokens lands in stats.json. Delete after use.
+class _GPT52MediumSmoke(_GPT52Anchor):
+    _MODEL = "gpt-5.2-medium"
+    _NAME = "_GPT52MediumSmoke"
+
+
+DataflowSystemGPT52MediumSmokeE2E = type(
+    "DataflowSystemGPT52MediumSmokeE2E", (_GPT52MediumSmoke,), {"_NAME": "DataflowSystemGPT52MediumSmokeE2E"}
+)
+
+
+# ===========================================================================
+#  GPT-5.2-MEDIUM — the same seven cells, but with reasoning actually ON.
+#
+#  Every gpt-5.2 arm before 2026-08-09 ran through the bare `gpt-5.2` litellm
+#  alias, which sends no `reasoning_effort`; probed directly, that is byte-
+#  identical to `reasoning_effort:"none"` (0 reasoning tokens), so the whole
+#  gpt-5.2 family to date is a NO-REASONING baseline. The `gpt-5.2-medium`
+#  alias pins medium. Measured on archeology-easy-3, Anchor config:
+#      bare   -> 0 reasoning tok,   340 out,  $0.0199
+#      medium -> 952 reasoning tok, 1527 out, $0.0391
+#  so expect roughly 2x cost per task.
+#
+#  Only the model changes; every render knob is inherited unchanged from the
+#  corresponding cell, so `GPT52MediumC4Sample2k` vs `GPT52C4Sample2k` is a
+#  clean one-variable test of what reasoning buys.
+# ===========================================================================
+class _GPT52MediumC4Sample2k(_GPT52C4Sample2k):
+    _MODEL = "gpt-5.2-medium"
+    _NAME = "_GPT52MediumC4Sample2k"
+
+
+for _i in (0, 1, 2, 3, 4):
+    _n = f"DataflowSystemGPT52MediumC4Sample2kReplicate{_i}"
+    globals()[_n] = type(_n, (_GPT52MediumC4Sample2k,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  HAIKU-4.5 2k/D2 PAIR — DELTA vs LATEST, both with stats, on the PROMPT-FIX
+#  agent-service (:3005).
+#
+#    Haiku2kDeltaStatsD2   2K, DELTA,  stats + hints, data_level=2
+#    Haiku2kLatestStatsD2  2K, LATEST, stats + hints, data_level=2, +code
+#
+#  ENDPOINT IS THE POINT: these run against :3005 (worktree `prompt-fix`,
+#  branch fix/context-format-delta), NOT :3001. That branch carries the three
+#  prompt/render fixes, and one of them is load-bearing for the DELTA arm here:
+#
+#    * `Files read:` renders in DELTA at all. On every other service the fact is
+#      computed and discarded, so a DELTA arm shows it 0/104 tasks. The LATEST
+#      arm would get it either way — this pair is the first time both modes do.
+#    * context-format.delta.md no longer describes a `# Current Dataflow`
+#      section that a lossless DELTA arm never renders, and no longer claims
+#      operator code is hidden when every Action carries it.
+#    * the Key Principles no longer tell a code-visible arm its code was
+#      discarded (applies to BOTH arms: DELTA shows code inline, LATEST via
+#      enable_code_in_snapshot).
+#
+#  So these are NOT comparable with any gpt-5.2 / luna / mini arm — those all
+#  ran against services without these fixes. Read them only against each other.
+#
+#  `_CODE = True` on the LATEST arm is not an extra knob: DELTA carries code
+#  inline per event, so a code-blind LATEST cell would confound the mode axis
+#  with a code axis — same reasoning the luna/terra C3 cells use.
+# ===========================================================================
+PROMPT_FIX_ENDPOINT_HAIKU = "http://localhost:3005"
+
+
+class _Haiku2kD2Base(DataflowSystem):
+    _CONTEXT_MODE = "delta"
+    _RESULT_CHARS = 2000
+    _CODE = False
+    _NAME = "_Haiku2kD2Base"
+    _MODEL = "claude-haiku-4.5"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT_HAIKU)
+        if self._CODE:
+            kwargs.setdefault("enable_code_in_snapshot", True)
+        super().__init__(
+            model_type=self._MODEL,
+            context_mode=self._CONTEXT_MODE,
+            max_steps=25,
+            # flow_level=0: NO `# Operators needing attention` section. Raw
+            # errors are unaffected — formatOperatorResult renders
+            # `[ERROR] <engine message>` + the failing operator's code purely on
+            # `opInfo.error`, with no flow gate. What is given up is the triage
+            # layer: topological (root-cause-first) ordering, the
+            # `blocked — upstream X errored; fix those first` line for operators
+            # that never ran (those render nothing per-operator, so that link is
+            # stated nowhere else), and the exception-keyed loader remediation
+            # hints. Measured incidence of the section on comparable arms: ~30%
+            # of tasks (33/104, 23/102, 32/104).
+            flow_level=0,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=self._RESULT_CHARS,
+            max_operator_result_cell_char_limit=3000,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class _Haiku2kDeltaStatsD2(_Haiku2kD2Base):
+    """2K, DELTA, stats + hints, d=2. The arm the `Files read:` fix unblocks."""
+    _CONTEXT_MODE = "delta"; _CODE = False
+    _NAME = "_Haiku2kDeltaStatsD2"
+
+
+class _Haiku2kLatestStatsD2(_Haiku2kD2Base):
+    """2K, LATEST, stats + hints, d=2, code in snapshot."""
+    _CONTEXT_MODE = "latest"; _CODE = True
+    _NAME = "_Haiku2kLatestStatsD2"
+
+
+for _cls, _tag in ((_Haiku2kDeltaStatsD2, "Haiku2kDeltaStatsD2"), (_Haiku2kLatestStatsD2, "Haiku2kLatestStatsD2")):
+    _n = f"DataflowSystem{_tag}Rep0"
+    globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
