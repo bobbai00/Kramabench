@@ -868,52 +868,6 @@ class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
         )
 
 
-class DataflowSystemGPT54LatestSchemaConverge(DataflowSystem):
-    """gpt-5.4 converge stack, LATEST context (flow_level=1, data_level=1).
-    gpt-5.4 peer of DataflowSystemGPT52LatestSchemaConverge; pairs with the
-    DELTA variant below for a clean context-mode A/B (only context_mode differs;
-    both capped at max_steps=25)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.4",
-            context_mode="latest",
-            max_steps=25,
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54LatestSchemaConverge",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
-class DataflowSystemGPT54DeltaSchemaConverge(DataflowSystem):
-    """gpt-5.4 converge stack, DELTA context (flow_level=1, data_level=1).
-    DELTA-context counterpart of DataflowSystemGPT54LatestSchemaConverge — same
-    knobs, context_mode=delta (per-step incremental context instead of the
-    aggregated LATEST snapshot)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.4",
-            context_mode="delta",
-            max_steps=25,
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT54DeltaSchemaConverge",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
-
-
 class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
     """gpt-5-mini converge stack (flow_level=1, data_level=1). Thesis arm
     (the gpt-5-mini peer for the symmetric DataFlow-vs-Script comparison)."""

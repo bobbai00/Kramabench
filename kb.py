@@ -34,16 +34,16 @@ Commands (run `kb.py <cmd> -h` for details):
   traces     --sut S      per-task traces + react-step/workflow metrics (system_scratch/)
 
 Examples:
-  ./kb.py run --sut DataflowSystemGPT54DeltaSchemaConverge --parallel
-  ./kb.py tasks --sut DataflowSystemGPT54LatestSchemaConverge --ids "legal-hard-2 astronomy-easy-1" --parallel
-  ./kb.py rerun-failed --sut DataflowSystemGPT54DeltaSchemaConverge --parallel
-  ./kb.py failed --sut DataflowSystemGPT54DeltaSchemaConverge --zero-only --ids-only
-  ./kb.py scores --sut DataflowSystemGPT54DeltaSchemaConverge
-  ./kb.py cost --sut DataflowSystemGPT54DeltaSchemaConverge --by workload
-  ./kb.py tokens --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
-  ./kb.py tokens --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge
-  ./kb.py traces --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2
-  ./kb.py compare --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge
+  ./kb.py run --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --parallel
+  ./kb.py tasks --sut DataflowSystemGPT5MiniDelta1kSchemaOnly --ids "legal-hard-2 astronomy-easy-1" --parallel
+  ./kb.py rerun-failed --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --parallel
+  ./kb.py failed --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --zero-only --ids-only
+  ./kb.py scores --sut DataflowSystemGPT5MiniDelta5kSchemaOnly
+  ./kb.py cost --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --by workload
+  ./kb.py tokens --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --task legal-hard-2
+  ./kb.py tokens --sut DataflowSystemGPT5MiniDelta1kSchemaOnly DataflowSystemGPT5MiniDelta5kSchemaOnly
+  ./kb.py traces --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --task legal-hard-2
+  ./kb.py compare --sut DataflowSystemGPT5MiniDelta1kSchemaOnly DataflowSystemGPT5MiniDelta5kSchemaOnly
 """
 import argparse, csv, json, math, os, re, signal, statistics, subprocess, sys, time
 from collections import Counter, defaultdict
@@ -1525,7 +1525,7 @@ def main():
           "oracle mode (--use_truth_subset) is ON by default; a stall watchdog kills any\n"
           "workload group that hangs; afterwards the bulk cache is rebuilt and scores printed.\n\n"
           "examples:\n"
-          "  kb.py run --sut DataflowSystemGPT54DeltaSchemaConverge --parallel\n"
+          "  kb.py run --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --parallel\n"
           "  kb.py run --sut <S> --workloads \"legal environment\"\n"
           "  kb.py run --sut <S> --limit 3 --parallel        # quick smoke: first 3 tasks/workload")
     p.add_argument("--sut", required=True, help="SUT class name (see `kb.py systems`)")
@@ -1589,7 +1589,7 @@ def main():
           "cost_usd (litellm pricing — includes cache-read discounts, so gpt-5.4 etc. price\n"
           "correctly). breakdown via --by {workload,difficulty,task}; pass several --sut to compare.\n\n"
           "examples:\n"
-          "  kb.py cost --sut DataflowSystemGPT54DeltaSchemaConverge\n"
+          "  kb.py cost --sut DataflowSystemGPT5MiniDelta5kSchemaOnly\n"
           "  kb.py cost --sut <S> --by difficulty\n"
           "  kb.py cost --sut <S1> <S2> --trim-top 5 10 # drop top-cost outliers\n"
           "  kb.py cost --sut <S1> <S2>                 # compare totals\n"
@@ -1609,7 +1609,7 @@ def main():
           "B-only / both fail), the both-pass cost split (who's cheaper when both succeed),\n"
           "and the cost DOMINATORS — the few tasks driving the total-cost gap, each with\n"
           "steps + pass/fail, plus what %% of the gap the top-N account for.\n\n"
-          "example:\n  kb.py compare --sut DataflowSystemGPT54LatestSchemaConverge DataflowSystemGPT54DeltaSchemaConverge")
+          "example:\n  kb.py compare --sut DataflowSystemGPT5MiniDelta1kSchemaOnly DataflowSystemGPT5MiniDelta5kSchemaOnly")
     p.add_argument("--sut", required=True, nargs=2, metavar="SUT", help="exactly two SUT class names (A B)")
     p.add_argument("--top", type=int, default=10, metavar="N", help="how many cost dominators to show (default 10)")
     p.set_defaults(fn=cmd_compare)
@@ -1621,7 +1621,7 @@ def main():
           "distribution, cache-hit %, and the input-GROWTH curve (mean input tokens at step k,\n"
           "which exposes the context-accumulation dynamics). pass several --sut to compare arms.\n\n"
           "examples:\n"
-          "  kb.py tokens --sut DataflowSystemGPT54DeltaSchemaConverge --task legal-hard-2\n"
+          "  kb.py tokens --sut DataflowSystemGPT5MiniDelta5kSchemaOnly --task legal-hard-2\n"
           "  kb.py tokens --sut <S1> <S2>                 # compare per-step token profiles\n"
           "  kb.py tokens --sut <S> --max-steps 8")
     p.add_argument("--sut", required=True, nargs="+", metavar="SUT", help="one or more SUT class names")

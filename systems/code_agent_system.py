@@ -217,41 +217,14 @@ class CodeAgentSystemHaiku(CodeAgentSystem):
         super().__init__(model_type="claude-haiku-4.5", name="CodeAgentSystemHaiku", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemSonnet(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="claude-sonnet-4-5", name="CodeAgentSystemSonnet", verbose=verbose, *args, **kwargs)
-
-
 class CodeAgentSystemGPT(CodeAgentSystem):
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(model_type="gpt-5-mini", name="CodeAgentSystemGPT", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGptO3(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="o3", name="CodeAgentSystemGptO3", verbose=verbose, *args, **kwargs)
-
-
-class CodeAgentSystemSonnet4(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="claude-sonnet-4", name="CodeAgentSystemSonnet4", verbose=verbose, *args, **kwargs)
-
-
 class CodeAgentSystemHaiku45(CodeAgentSystem):
     def __init__(self, verbose: bool = False, *args, **kwargs):
         super().__init__(model_type="claude-haiku-4.5", name="CodeAgentSystemHaiku45", verbose=verbose, *args, **kwargs)
-
-
-class CodeAgentSystemO4Mini(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="o4-mini", name="CodeAgentSystemO4Mini", verbose=verbose, *args, **kwargs)
-
-
-class CodeAgentSystemGemini25Pro(CodeAgentSystem):
-    """CodeAgentSystem using Google Gemini 2.5 Pro model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="gemini-2.5-pro", name="CodeAgentSystemGemini25Pro", verbose=verbose, *args, **kwargs)
 
 
 class CodeAgentSystemGpt52(CodeAgentSystem):
@@ -555,20 +528,6 @@ CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1 = _mk_replicate(CodeAgentSys
 CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars5kGuided, 2)
 
 
-class CodeAgentSystemGpt54Proxy(CodeAgentSystem):
-    """Code agent on gpt-5.4 via the routing proxy (-> OpenAI). Peer of the
-    DataflowSystem gpt-5.4 latest+replay config."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.4",
-            api_base=PROXY_API_BASE,
-            name="CodeAgentSystemGpt54Proxy",
-            verbose=verbose,
-            *args, **kwargs
-        )
-
-
 # --- CA-guided replicate study (gpt-5-mini via litellm :4000): guided code agent
 # at 1k and 5k stdout-preview caps, 5 single-shot samples each (base = rep0,
 # + Replicate1-4). Code-agent runs never touch the Texera engine, so these pools
@@ -663,3 +622,60 @@ class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate4(CodeAgentSystem):
             name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate4",
             max_print_outputs_length=5000, use_custom_prompt=True,
             verbose=verbose, *args, **kwargs)
+
+
+# ===========================================================================
+#  MODEL-GROUPED CHAR-BUDGET x PROMPT MATRIX (medium reasoning)
+#
+#  The code-agent peer of the dataflow char-budget sweep. Per model: the
+#  stdout-preview cap at 1k / 2k / 5k, with CUSTOM_INSTRUCTIONS off (plain) and
+#  on (Guided). Only those two axes move, so any pair is a one-variable read —
+#  `...Chars2k` vs `...Chars2kGuided` isolates the prompt, `...Chars1k` vs
+#  `...Chars5k` isolates the budget.
+#
+#  REASONING IS MEDIUM ON EVERY GPT ARM, and the names say so. The bare
+#  `gpt-5.2` / `gpt-5-mini` aliases send no reasoning_effort, which probes
+#  byte-identical to "none" (0 reasoning tokens) — the pre-existing
+#  CodeAgentSystemGpt52Chars* arms are those NO-REASONING baselines and are
+#  deliberately left alone. `Med` in a name means the `-medium` litellm alias
+#  (see bin/single-node/litellm-config.yaml). gpt-5.6-luna is already pinned
+#  medium at the proxy; claude-haiku-4.5 has no reasoning-effort knob at all.
+# ===========================================================================
+_CHAR_BUDGETS = (("1k", 1000), ("2k", 2000), ("5k", 5000))
+
+#: display tag -> litellm model alias (all medium-reasoning where the knob exists)
+_MATRIX_MODELS = (
+    ("MiniMed",  "gpt-5-mini-medium"),  # gpt-5-mini @ medium
+    ("Gpt52Med", "gpt-5.2-medium"),     # gpt-5.2    @ medium
+    ("Luna",     "gpt-5.6-luna"),       # pinned medium at the proxy
+    ("Haiku45",  "claude-haiku-4.5"),   # no reasoning-effort knob
+)
+
+
+def _mk_matrix_arm(model_tag, model_alias, chars_tag, chars, guided):
+    name = f"CodeAgentSystem{model_tag}Chars{chars_tag}{'Guided' if guided else ''}"
+    # Never shadow an existing arm: rebinding a name that already has recorded
+    # results would silently change what that SUT means.
+    if name in globals():
+        raise RuntimeError(f"refusing to overwrite existing SUT {name}")
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kw = {"max_print_outputs_length": chars}
+        if guided:
+            kw["use_custom_prompt"] = True
+        kw.update(kwargs)
+        super(cls, self).__init__(model_type=model_alias, name=name, verbose=verbose, *args, **kw)
+
+    cls = type(name, (CodeAgentSystem,), {
+        "__init__": __init__,
+        "__doc__": (f"{model_alias} code agent, {chars_tag} stdout-preview cap, "
+                    f"CUSTOM_INSTRUCTIONS {'ON' if guided else 'OFF'}."),
+    })
+    return name, cls
+
+
+for _tag, _alias in _MATRIX_MODELS:
+    for _ctag, _chars in _CHAR_BUDGETS:
+        for _guided in (False, True):
+            _n, _c = _mk_matrix_arm(_tag, _alias, _ctag, _chars, _guided)
+            globals()[_n] = _c

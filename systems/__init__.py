@@ -33,8 +33,6 @@ from .dataflow_system import (
     DataflowSystemGPT52LatestStats3kD2SmallTableControl,
     DataflowSystemGPT52LatestStats5kD2,
     DataflowSystemGPT52LatestStats7kD2,
-    DataflowSystemGPT54DeltaSchemaConverge,
-    DataflowSystemGPT54LatestSchemaConverge,
     DataflowSystemGPT5Mini,
     DataflowSystemGPT5MiniA0ControlReplicate1,
     DataflowSystemGPT5MiniA0ControlReplicate10,
@@ -259,7 +257,7 @@ from .dataflow_system_old import (
     # OLD STACK (fe917396a) via the era-matched client — the true A/B arm
     DataflowSystemOldStackGPT52NoActionDetail,
 )
-from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemSonnet, CodeAgentSystemGPT, CodeAgentSystemGptO3, CodeAgentSystemSonnet4, CodeAgentSystemHaiku45, CodeAgentSystemO4Mini, CodeAgentSystemGemini25Pro, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52Chars2kGuided, CodeAgentSystemGpt52Chars3kGuided, CodeAgentSystemGpt52Chars3kGuidedExplore, CodeAgentSystemGpt52Chars5kGuided, CodeAgentSystemGpt52Chars7kGuided, CodeAgentSystemGpt52Chars10kGuided, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt5MiniProxyChars3kGuided, CodeAgentSystemGpt5MiniProxyChars1kPitfalls, CodeAgentSystemGpt5MiniProxyChars5kPitfalls, CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate1, CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate2, CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate1, CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate2, CodeAgentSystemGpt5MiniProxyChars1kGuided, CodeAgentSystemGpt5MiniProxyChars5kGuided, CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1, CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2, CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1, CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2, CodeAgentSystemGpt54Proxy
+from .code_agent_system import CodeAgentSystem, CodeAgentSystemHaiku, CodeAgentSystemGPT, CodeAgentSystemHaiku45, CodeAgentSystemGpt52, CodeAgentSystemGpt52Chars2k, CodeAgentSystemGpt52Chars5k, CodeAgentSystemGpt52Chars2kGuided, CodeAgentSystemGpt52Chars3kGuided, CodeAgentSystemGpt52Chars3kGuidedExplore, CodeAgentSystemGpt52Chars5kGuided, CodeAgentSystemGpt52Chars7kGuided, CodeAgentSystemGpt52Chars10kGuided, CodeAgentSystemGpt52FineGrained, CodeAgentSystemGpt52FullInput, CodeAgentSystemGpt5MiniHigh, CodeAgentSystemGpt5MiniMedium, CodeAgentSystemGpt5MiniLow, CodeAgentSystemGpt5MiniProxy, CodeAgentSystemGpt5MiniProxyChars3kGuided, CodeAgentSystemGpt5MiniProxyChars1kPitfalls, CodeAgentSystemGpt5MiniProxyChars5kPitfalls, CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate1, CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate2, CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate1, CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate2, CodeAgentSystemGpt5MiniProxyChars1kGuided, CodeAgentSystemGpt5MiniProxyChars5kGuided, CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1, CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2, CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1, CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2
 from .code_agent_system import (
     CodeAgentSystemGpt5MiniProxyChars1kGuided,
     CodeAgentSystemGpt5MiniProxyChars5kGuided,
@@ -279,4 +277,43 @@ from .claude_code_system import (
     ClaudeCodeSystemHaiku45Stateless,
     ClaudeCodeSystemHaiku45Persistent,
     ClaudeCodeSystemHaiku45PersistentChars2k,
+)
+
+# Model-grouped char-budget x prompt matrix (medium reasoning on every GPT arm)
+from .code_agent_system import (
+    CodeAgentSystemMiniMedChars1k,
+    CodeAgentSystemMiniMedChars1kGuided,
+    CodeAgentSystemMiniMedChars2k,
+    CodeAgentSystemMiniMedChars2kGuided,
+    CodeAgentSystemMiniMedChars5k,
+    CodeAgentSystemMiniMedChars5kGuided,
+    CodeAgentSystemGpt52MedChars1k,
+    CodeAgentSystemGpt52MedChars1kGuided,
+    CodeAgentSystemGpt52MedChars2k,
+    CodeAgentSystemGpt52MedChars2kGuided,
+    CodeAgentSystemGpt52MedChars5k,
+    CodeAgentSystemGpt52MedChars5kGuided,
+    CodeAgentSystemLunaChars1k,
+    CodeAgentSystemLunaChars1kGuided,
+    CodeAgentSystemLunaChars2k,
+    CodeAgentSystemLunaChars2kGuided,
+    CodeAgentSystemLunaChars5k,
+    CodeAgentSystemLunaChars5kGuided,
+    CodeAgentSystemHaiku45Chars1k,
+    CodeAgentSystemHaiku45Chars1kGuided,
+    CodeAgentSystemHaiku45Chars2k,
+    CodeAgentSystemHaiku45Chars2kGuided,
+    CodeAgentSystemHaiku45Chars5k,
+    CodeAgentSystemHaiku45Chars5kGuided,
+)
+
+# gpt-5.2 @ medium reasoning (the -medium litellm alias). Defined but never
+# exported before, so kb.py's getattr(systems, name) could not resolve them.
+from .dataflow_system import (
+    DataflowSystemGPT52MediumSmokeE2E,
+    DataflowSystemGPT52MediumC4Sample2kReplicate0,
+    DataflowSystemGPT52MediumC4Sample2kReplicate1,
+    DataflowSystemGPT52MediumC4Sample2kReplicate2,
+    DataflowSystemGPT52MediumC4Sample2kReplicate3,
+    DataflowSystemGPT52MediumC4Sample2kReplicate4,
 )
