@@ -205,8 +205,14 @@ def run_groups(sut, groups, oracle=True, parallel=False, watchdog_min=8,
     # Build the unit list. isolate -> one job per task; else one job per workload.
     units = []  # (name, workload, task_ids)
     for w, tids in groups.items():
-        if isolate and tids:
-            for t in tids:
+        if isolate:
+            # A full `run` passes tids=[] meaning "every task in the workload".
+            # Guarding on `tids` therefore made --isolate a silent no-op on the
+            # one command whose blast radius it exists to contain: the stall
+            # watchdog kills a whole group, so a single hang cost every
+            # unfinished sibling (observed: legal 0/30, environment 9/20).
+            # Expand the empty list to the workload's ids so one job == one task.
+            for t in (tids or workload_task_ids(w)):
                 units.append((t, w, [t]))
         else:
             units.append((w, w, tids))
