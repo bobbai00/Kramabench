@@ -27,6 +27,22 @@ _FALLBACK = {
     "claude-haiku-4-5": (1.0e-6, 5.0e-6, 1.0e-7, 1.25e-6),
     "claude-haiku-4-5-20251001": (1.0e-6, 5.0e-6, 1.0e-7, 1.25e-6),
     "claude-sonnet-4.6": (3.0e-6, 15.0e-6, 3.0e-7, 3.75e-6),
+    # OpenAI models. litellm is not installed in this venv (and would not know
+    # these ids anyway), so without these entries every gpt arm recorded
+    # cost_usd = 0 — which is why the gpt-5.2 scratch dirs carry no cost at all.
+    # input/output are the repo's own published rates: compare_tokens.py
+    # MODEL_PRICING and result-analysis/.../analyze_result.py COST_CONFIG both
+    # give gpt-5.2 $1.75/$14.00 and gpt-5-mini $0.25/$2.00 per M tokens.
+    # The cache legs are this module's standard ratios (read = 10% of input,
+    # creation = 1.25x input), the same defaults _prices() applies when a
+    # litellm entry omits them — only input/output are externally sourced.
+    "gpt-5.2": (1.75e-6, 14.0e-6, 0.175e-6, 2.1875e-6),
+    "gpt-5-mini": (0.25e-6, 2.0e-6, 0.025e-6, 0.3125e-6),
+    # luna/terra publish an explicit cached rate in
+    # judgment_runs/mini_star/LUNA_TERRA_FINAL_TABLE.md ("$0.20 / $0.02 / $1.20
+    # per M tok" = input / cached / output), so no ratio guessing here.
+    "gpt-5.6-luna": (0.20e-6, 1.20e-6, 0.02e-6, 0.25e-6),
+    "gpt-5.6-terra": (2.00e-6, 12.0e-6, 0.20e-6, 2.50e-6),
 }
 
 _REASONING_EFFORT_SUFFIXES = ("-high", "-medium", "-low")
