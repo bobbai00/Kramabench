@@ -140,6 +140,30 @@ def read_failed(sut, zero_only=False, workload=None):
     return rows
 
 
+def missing_task_ids(sut, workload=None):
+    """Task ids that produced NO answer at all under `sut`.
+
+    These are invisible to list_failed_tasks.py, which cross-references the
+    measures CSV and therefore only ever reports tasks that were scored. A task
+    the stall watchdog killed before it wrote answer.json has no row anywhere,
+    so `failed` and `rerun-failed` both skip it forever — the run silently ends
+    up short and every score is divided by the full task count regardless.
+
+    Observed: one hang took a whole workload group down with it, and 39 of one
+    arm's 104 tasks had simply never executed while `failed` listed 29 ordinary
+    wrong answers and nothing else.
+
+    A task that ran and errored DOES have an answer.json (holding the error
+    string), so it is a real result and is deliberately NOT reported here.
+    """
+    out = []
+    for w in ([workload] if workload else WORKLOADS):
+        for tid in workload_task_ids(w):
+            if not (KB_ROOT / "system_scratch" / sut / tid / "answer.json").exists():
+                out.append((w, tid))
+    return out
+
+
 def scores_per_workload(logtext):
     return [float(x) for x in re.findall(r"Total score is: *([0-9.]+)", logtext)]
 
@@ -179,8 +203,20 @@ def _watch_and_wait(jobs, watchdog_min, poll=15):
             except OSError:
                 stale = 0
             if stale >= watchdog_min:
+                # Name the collateral. Killing a workload-sized job also kills
+                # every task in it that had not started yet, and those tasks
+                # leave no artifact anywhere — `failed` cannot see them, so the
+                # loss is otherwise invisible until someone counts scratch dirs.
+                lost = ""
+                if j.get("sut") and j.get("task_ids") is not None:
+                    pending = [t for t in (j["task_ids"] or workload_task_ids(j["workload"]))
+                               if not (KB_ROOT / "system_scratch" / j["sut"] / t / "answer.json").exists()]
+                    if len(pending) > 1:
+                        lost = (f"; {len(pending)} task(s) in this group have no answer yet and are "
+                                f"LOST — recover with: kb.py rerun-failed --sut {j['sut']} "
+                                f"--missing --parallel --isolate")
                 print(f"[kb][watchdog] {j['name']} stalled {stale:.0f}min "
-                      f"(no progress, gpt-5.x hang) -> killing; it keeps its prior score")
+                      f"(no progress, gpt-5.x hang) -> killing; it keeps its prior score{lost}")
                 p.terminate()
                 try:
                     p.wait(5)
@@ -222,7 +258,9 @@ def run_groups(sut, groups, oracle=True, parallel=False, watchdog_min=8,
         n = len(tids) if tids else "all"
         print(f"[kb] start {name} ({n} task(s))")
         return {"name": name, "proc": _spawn(sut, w, tids, oracle, lp),
-                "log": str(lp), "start": time.time()}
+                "log": str(lp), "start": time.time(),
+                # carried so the watchdog can report which tasks a kill destroys
+                "sut": sut, "workload": w, "task_ids": tids}
 
     if parallel:
         max_parallel = int(os.environ.get("KB_MAX_PARALLEL", "6") or "0")
@@ -368,16 +406,50 @@ def cmd_failed(a):
     print(f"\n{len(rows)} {'score-0' if a.zero_only else 'failed'} tasks: {dict(by)}")
 
 
+def cmd_missing(a):
+    """list tasks that produced NO answer at all (never ran, or killed mid-flight).
+
+    Distinct from `failed`, which only ever sees tasks that were scored. A task
+    the watchdog killed before it wrote answer.json is absent from every report,
+    so it never gets rerun and silently costs the arm a task.
+
+    example:
+      kb.py missing --sut <S>
+      kb.py rerun-failed --sut <S> --missing --parallel --isolate
+    """
+    rows = missing_task_ids(a.sut, workload=a.workload)
+    if a.ids_only:
+        print(" ".join(t for _, t in rows))
+        return
+    for w, t in rows:
+        print(f"  {t:<30} workload={w}")
+    from collections import Counter
+    print(f"\n{len(rows)} task(s) with no answer.json: "
+          f"{dict(Counter(w for w, _ in rows))}")
+
+
 def cmd_rerun_failed(a):
     load_env()
-    rows = read_failed(a.sut, zero_only=not a.all_failed)
-    ids = [t["task_id"] for t in rows]
+    if a.missing:
+        rows = missing_task_ids(a.sut)
+        ids = [t for _, t in rows]
+        kind = "never-ran"
+    else:
+        rows = read_failed(a.sut, zero_only=not a.all_failed)
+        ids = [t["task_id"] for t in rows]
+        kind = "failed" if a.all_failed else "score-0"
+        if a.include_missing:
+            extra = [t for _, t in missing_task_ids(a.sut) if t not in ids]
+            if extra:
+                print(f"[kb] + {len(extra)} never-ran task(s) that `failed` cannot see")
+                ids += extra
+                kind += "+never-ran"
     if a.limit:
         ids = ids[:a.limit]
     if not ids:
         print("[kb] nothing to rerun")
         return
-    print(f"[kb] rerunning {len(ids)} {'failed' if a.all_failed else 'score-0'} tasks")
+    print(f"[kb] rerunning {len(ids)} {kind} tasks")
     groups = group_by_workload(ids)
     run_groups(a.sut, groups, oracle=not a.no_oracle, parallel=a.parallel,
                watchdog_min=a.watchdog_min, isolate=a.isolate, label="rerunfail")
@@ -1571,6 +1643,12 @@ def main():
     p.add_argument("--ids-only", action="store_true", help="print space-separated ids (for piping)")
     p.set_defaults(fn=cmd_failed)
 
+    p = P("missing", cmd_missing.__doc__)
+    p.add_argument("--sut", required=True, help="SUT class name")
+    p.add_argument("--workload", help="filter to one workload")
+    p.add_argument("--ids-only", action="store_true", help="print space-separated ids (for piping)")
+    p.set_defaults(fn=cmd_missing)
+
     p = P("rerun-failed",
           "composite recovery: detect score-0 tasks -> rerun them (watchdogged) -> reeval ->\n"
           "print scores. monotonic: a 0 task can only improve, and a killed/hung rerun keeps\n"
@@ -1578,6 +1656,12 @@ def main():
           "example:\n  kb.py rerun-failed --sut <S> --parallel")
     p.add_argument("--sut", required=True, help="SUT class name")
     p.add_argument("--all-failed", action="store_true", help="rerun ALL failed (score<1), not just score==0")
+    p.add_argument("--missing", action="store_true",
+                   help="rerun ONLY tasks with no answer.json (never ran / killed mid-flight); "
+                        "leaves wrong answers and execution errors untouched")
+    p.add_argument("--include-missing", action="store_true",
+                   help="also rerun never-ran tasks alongside the score-0 set "
+                        "(`failed` cannot see them, so they are otherwise skipped forever)")
     p.add_argument("--isolate", action="store_true", help="one process per task")
     p.add_argument("--limit", type=int, default=0, metavar="N", help="rerun at most N tasks (0=all; handy for smokes)")
     add_run_opts(p); p.set_defaults(fn=cmd_rerun_failed)
