@@ -3249,3 +3249,39 @@ class DataflowSystemHaikuDeltaRich(_HaikuContextMatrix):
     """DELTA × flow_level=1, data_level=2 + column stats — the shipped shape."""
     _CONTEXT_MODE = "delta"; _FLOW = 1; _DATA = 2; _STATS = True
     _NAME = "DataflowSystemHaikuDeltaRich"
+
+
+# ===========================================================================
+#  GPT-5.2-MEDIUM — C4 and C5 with reasoning actually ON.
+#
+#  Same render knobs as the corresponding gpt-5.2 cells; only the model alias
+#  changes, so each is a clean one-variable read of what medium reasoning buys.
+#  The bare `gpt-5.2` alias sends no reasoning_effort — probed through the proxy
+#  it returns 0 reasoning tokens against gpt-5.2-medium's 2302 — so the existing
+#  C4 cell is the no-reasoning control for C4 here.
+#
+#    MediumC4   5K, LATEST, stats + hints, +code   (all three knobs)
+#    MediumC5   5K, DELTA,  stats + hints          (sampling + stats, no mode flip)
+#
+#  C5 is a NEW cell for gpt-5.2: its factorial stops at C4. The definition
+#  follows luna/terra's C5 (5K DELTA w stats, LUNA_TERRA_FINAL_TABLE.md), which
+#  also makes it the direct peer of gpt-5-mini's C4 (DeltaStats5kD2) — so the
+#  same config is readable across all three models.
+# ===========================================================================
+class _GPT52MediumC4(_GPT52C4):
+    """gpt-5.2 @ medium, LATEST, 5k, stats + hints, code in snapshot."""
+    _MODEL = "gpt-5.2-medium"
+    _NAME = "_GPT52MediumC4"
+
+
+class _GPT52MediumC5(_GPT52FactorialBase):
+    """gpt-5.2 @ medium, DELTA, 5k, stats + hints. New cell — see block above."""
+    _MODEL = "gpt-5.2-medium"
+    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
+    _NAME = "_GPT52MediumC5"
+
+
+for _i in (0,):
+    for _cls, _tag in ((_GPT52MediumC4, "MediumC4"), (_GPT52MediumC5, "MediumC5")):
+        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
+        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})

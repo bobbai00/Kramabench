@@ -317,3 +317,9 @@ from .dataflow_system import (
     DataflowSystemGPT52MediumC4Sample2kReplicate3,
     DataflowSystemGPT52MediumC4Sample2kReplicate4,
 )
+
+# gpt-5.2 @ medium reasoning: C4 (existing cell) and C5 (new, = luna/terra C5)
+from .dataflow_system import (
+    DataflowSystemGPT52MediumC4Replicate0,
+    DataflowSystemGPT52MediumC5Replicate0,
+)

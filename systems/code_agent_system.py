@@ -660,7 +660,10 @@ def _mk_matrix_arm(model_tag, model_alias, chars_tag, chars, guided):
         raise RuntimeError(f"refusing to overwrite existing SUT {name}")
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
-        kw = {"max_print_outputs_length": chars}
+        # max_steps=25 matches every dataflow arm in the factorial; the
+        # CodeAgentSystem default is 50, which would make a code-agent vs
+        # dataflow read differ on the step budget as well as the substrate.
+        kw = {"max_print_outputs_length": chars, "max_steps": 25}
         if guided:
             kw["use_custom_prompt"] = True
         kw.update(kwargs)
