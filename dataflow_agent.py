@@ -640,6 +640,7 @@ def send_message(
         usage_total = {
             "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
             "reasoning_tokens": 0, "cached_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
         }
         step_count = 0
         stopped = False
@@ -706,6 +707,10 @@ def send_message(
                 usage_total["total_tokens"] += int(u.get("totalTokens") or 0)
                 usage_total["reasoning_tokens"] += int(u.get("reasoningTokens") or 0)
                 usage_total["cached_input_tokens"] += int(u.get("cachedInputTokens") or 0)
+                # Anthropic cache WRITES (1.25x input) — surfaced per step by
+                # agent-service's driver from litellm's raw usage extension.
+                usage_total["cache_creation_input_tokens"] += int(
+                    u.get("cacheCreationInputTokens") or 0)
             elif ev_type == "complete":
                 complete = True
             elif ev_type == "error":
