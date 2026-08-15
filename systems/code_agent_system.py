@@ -178,6 +178,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "total_tokens": result.total_tokens,
             "reasoning_tokens": result.reasoning_tokens,
             "cached_tokens": result.cached_tokens,
+            "cache_creation_tokens": result.cache_creation_tokens,
             "cost_usd": result.cost_usd,
             "num_steps": result.num_steps,
             "elapsed_seconds": round(result.elapsed_seconds, 2),

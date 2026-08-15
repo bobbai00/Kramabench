@@ -696,6 +696,15 @@ Your last line MUST BE: **Final Answer: <value>**"""
             usage.get("cached_input_tokens", 0) or usage.get("cachedInputTokens", 0)
             or usage.get("cache_read_input_tokens", 0)
         )
+        # Anthropic bills cache WRITES at 1.25x input. The @ai-sdk/openai usage
+        # object does not expose litellm's cache_creation_tokens extension today,
+        # so this stays 0 on the dataflow path until agent-service surfaces it —
+        # the read is here so stats and cost pick it up the moment that lands.
+        token_usage_cache_creation = (
+            usage.get("cache_creation_input_tokens", 0)
+            or usage.get("cacheCreationInputTokens", 0)
+            or usage.get("cache_creation_tokens", 0)
+        )
         cost_usd = 0.0
         try:
             from systems.cost_utils import compute_cost
@@ -704,6 +713,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 input_tokens=token_usage_input,
                 output_tokens=token_usage_output,
                 cached_tokens=token_usage_cached,
+                cache_creation_tokens=token_usage_cache_creation,
             )
             cost_usd = c if c is not None else 0.0
         except Exception:
@@ -727,6 +737,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "total_tokens": token_usage,
             "reasoning_tokens": token_usage_reasoning,
             "cached_tokens": token_usage_cached,
+            "cache_creation_tokens": token_usage_cache_creation,
             "cost_usd": cost_usd,
             "num_steps": num_steps,
             "elapsed_seconds": round(elapsed_seconds, 2),

@@ -95,6 +95,36 @@ def group_by_workload(task_ids):
     return g
 
 
+def validate_task_ids(ids):
+    """Die early on ids that exist in no workload.
+
+    evaluate.py only prints `Warning: task IDs not found in workload` for an
+    unknown id, then runs the empty selection and crashes aggregating it
+    (KeyError: 'workload' on an empty frame) — an agent still gets created and
+    torn down first, so a typo costs a workflow round-trip and ends in a
+    traceback that says nothing about the actual mistake.
+    """
+    import difflib
+    every = None
+    bad = []
+    for t in ids:
+        if t not in workload_task_ids(workload_of(t)):
+            bad.append(t)
+    if not bad:
+        return
+    lines = []
+    for t in bad:
+        pool = workload_task_ids(workload_of(t))
+        if not pool:
+            if every is None:
+                every = [i for w in WORKLOADS for i in workload_task_ids(w)]
+            pool = every
+        close = difflib.get_close_matches(t, pool, n=3, cutoff=0.5)
+        hint = f"   (closest: {', '.join(close)})" if close else ""
+        lines.append(f"  {t}{hint}")
+    sys.exit("[kb] unknown task id(s) — nothing was run:\n" + "\n".join(lines))
+
+
 def workload_task_ids(w):
     p = KB_ROOT / "workload" / f"{w}.json"
     return [t["id"] for t in json.load(open(p))] if p.exists() else []
@@ -377,6 +407,7 @@ def cmd_tasks(a):
     ids = a.ids.split() if a.ids else []
     if not ids:
         sys.exit("provide --ids \"task-1 task-2 ...\"")
+    validate_task_ids(ids)
     groups = group_by_workload(ids)
     run_groups(a.sut, groups, oracle=not a.no_oracle, parallel=a.parallel,
                watchdog_min=a.watchdog_min, isolate=a.isolate, label="tasks")

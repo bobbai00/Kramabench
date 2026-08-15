@@ -79,7 +79,8 @@ class UsageTrackingOpenAIModel(OpenAIServerModel):
 
     def reset_usage(self):
         self.usage_acc = {
-            "input": 0, "output": 0, "cached": 0, "reasoning": 0, "calls": 0,
+            "input": 0, "output": 0, "cached": 0, "cache_creation": 0,
+            "reasoning": 0, "calls": 0,
         }
 
     def _track(self, msg):
@@ -93,6 +94,10 @@ class UsageTrackingOpenAIModel(OpenAIServerModel):
             ptd = getattr(usage, "prompt_tokens_details", None)
             if ptd is not None:
                 self.usage_acc["cached"] += int(getattr(ptd, "cached_tokens", 0) or 0)
+                # litellm extension; Anthropic bills cache WRITES at 1.25x input,
+                # so dropping this undercounts every cache-enabled claude run
+                self.usage_acc["cache_creation"] += int(
+                    getattr(ptd, "cache_creation_tokens", 0) or 0)
             ctd = getattr(usage, "completion_tokens_details", None)
             if ctd is not None:
                 self.usage_acc["reasoning"] += int(getattr(ctd, "reasoning_tokens", 0) or 0)
@@ -224,6 +229,7 @@ class CodeAgentResult:
     total_tokens: int = 0
     reasoning_tokens: int = 0
     cached_tokens: int = 0
+    cache_creation_tokens: int = 0
     cost_usd: float = 0.0
     num_steps: int = 0
 
@@ -400,6 +406,7 @@ class CodeAgentWrapper:
         acc = getattr(self._model, "usage_acc", {}) or {}
         reasoning_tokens = int(acc.get("reasoning", 0) or 0)
         cached_tokens = int(acc.get("cached", 0) or 0)
+        cache_creation_tokens = int(acc.get("cache_creation", 0) or 0)
         if not input_tokens and acc.get("input"):
             input_tokens = int(acc["input"])
         if not output_tokens and acc.get("output"):
@@ -415,6 +422,7 @@ class CodeAgentWrapper:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
+                cache_creation_tokens=cache_creation_tokens,
             )
             cost_usd = c if c is not None else 0.0
         except Exception:
@@ -430,6 +438,7 @@ class CodeAgentWrapper:
             total_tokens=total_tokens,
             reasoning_tokens=reasoning_tokens,
             cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
             num_steps=num_steps,
         )

@@ -1,4 +1,5 @@
 import argparse
+import sys
 import datetime
 from email import parser
 import json
@@ -205,6 +206,14 @@ def main():
 
         if args.task_id:
             results_df = results_df[results_df['task_id'].isin(args.task_id)]
+
+    # An empty frame here means nothing was scored — usually a --task_id that
+    # exists in no workload. groupby(["workload","metric"]) on an empty frame
+    # raises a bare `KeyError: 'workload'`, which says nothing about the cause.
+    if results_df.empty:
+        sys.exit(f"[evaluate] no results to aggregate for {system_name} / {workload}"
+                 + (f" with --task_id {args.task_id}" if args.task_id else "")
+                 + " — the task id(s) likely don't exist in this workload.")
 
     aggregated_df = aggregate_results(system_name, results_df)
     # Update aggregated results file
