@@ -123,6 +123,11 @@ class AgentSettings:
     # coerce-to-NaN dataloss diagnostics, and the rows-in/rows-out Lineage fact.
     coercion_facts: bool = False
     row_lineage: bool = False
+    #: Position-aware gating for the data-facet channels — WHERE each enabled
+    #: channel renders, keyed by the operator's place in the DAG. Values per
+    #: channel: "all" | "source" | "nonsource" | "off". None = legacy (render
+    #: every enabled channel on every operator).
+    stat_scopes: Optional[dict] = None
     # Versioned mode: one catalog over an immutable version DAG; strict
     # (operatorId, turn) refs on writes. See agent-service versionedMode.
     versioned_mode: bool = False
@@ -253,6 +258,8 @@ class AgentSettings:
             payload["coercionTelemetry"] = True
         if self.row_lineage:
             payload["rowLineage"] = True
+        if self.stat_scopes:
+            payload["statScopes"] = self.stat_scopes
         if self.versioned_mode:
             payload["versionedMode"] = True
         if self.versioned_heads is not None:
@@ -924,6 +931,7 @@ class DataflowAgent:
             enable_answer_grounding: bool = False,
             coercion_facts: bool = False,
             row_lineage: bool = False,
+            stat_scopes: Optional[dict] = None,
             versioned_mode: bool = False,
             versioned_heads: bool | None = None,
             session_turns: bool = False,
@@ -1027,6 +1035,7 @@ class DataflowAgent:
             enable_answer_grounding=enable_answer_grounding,
             coercion_facts=coercion_facts,
             row_lineage=row_lineage,
+            stat_scopes=stat_scopes,
             versioned_mode=versioned_mode,
             versioned_heads=versioned_heads,
             session_turns=session_turns,

@@ -71,6 +71,7 @@ class DataflowSystem(System):
         # telemetry lines, so an arm can carry them without inheriting stats.
         coercion_facts: bool = False,
         row_lineage: bool = False,
+        stat_scopes: Optional[Dict[str, str]] = None,
         versioned_mode: bool = False,
         session_turns: bool = False,
         recall_max_result_chars: Optional[int] = None,
@@ -198,6 +199,8 @@ class DataflowSystem(System):
         self.enable_answer_grounding = enable_answer_grounding
         self.coercion_facts = coercion_facts
         self.row_lineage = row_lineage
+        # WHERE each data channel renders (source / nonsource / all / off).
+        self.stat_scopes = stat_scopes
         self.versioned_mode = versioned_mode
         self.session_turns = session_turns
         self.recall_max_result_chars = recall_max_result_chars
@@ -398,6 +401,7 @@ class DataflowSystem(System):
             enable_answer_grounding=self.enable_answer_grounding,
             coercion_facts=self.coercion_facts,
             row_lineage=self.row_lineage,
+            stat_scopes=self.stat_scopes,
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
             recall_max_result_chars=self.recall_max_result_chars,
@@ -3296,3 +3300,94 @@ for _i in (0,):
     for _cls, _tag in ((_GPT52MediumC4, "MediumC4"), (_GPT52MediumC5, "MediumC5")):
         _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
         globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
+
+
+# ===========================================================================
+#  SCOPED-STATS MATRIX (claude-haiku-4.5) — Idea 1.
+#
+#  `data_level` says WHICH channels are on; `stat_scopes` says WHERE each one
+#  renders. The asymmetry being tested: a SOURCE operator can only lose data at
+#  parse time (coercion NaNs, dropped values, partial file reads); a CONSUMER
+#  can only lose it inside its own transform (a join dropping keys). A channel
+#  aimed at one is noise on the other.
+#
+#  All arms share the same channel set (data_level=2 + column_stats + coercion +
+#  lineage + file-IO); ONLY the scoping differs, so any delta is attributable to
+#  placement rather than to how much evidence exists.
+#
+#    ScopedControl    everything everywhere (the v8 "rich" shape) — the control
+#    ScopedSplit      coercion+fileIO at sources, lineage+colstats downstream
+#    ScopedLean       as Split, but column stats OFF entirely (v8 measured
+#                     full-column stats changing join decomposition on passnyc)
+#    ScopedSrcStats   column stats ONLY at sources (schema discovery at the lake
+#                     edge, silence downstream)
+# ===========================================================================
+class _HaikuScopedBase(DataflowSystem):
+    _SCOPES: Optional[Dict[str, str]] = None
+    _NAME = "_HaikuScopedBase"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            coercion_facts=True,
+            row_lineage=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            stat_scopes=self._SCOPES,
+            name=self._NAME,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+class DataflowSystemHaikuScopedControl(_HaikuScopedBase):
+    """Every channel on every operator — the unscoped control."""
+    _SCOPES = None
+    _NAME = "DataflowSystemHaikuScopedControl"
+
+
+class DataflowSystemHaikuScopedSplit(_HaikuScopedBase):
+    """Parse-time evidence at sources, transform evidence downstream."""
+    _SCOPES = {
+        "coercion": "source",
+        "fileIo": "source",
+        "valueFormat": "source",
+        "lineage": "nonsource",
+        "columnStats": "nonsource",
+        "structural": "all",
+    }
+    _NAME = "DataflowSystemHaikuScopedSplit"
+
+
+class DataflowSystemHaikuScopedLean(_HaikuScopedBase):
+    """Split, minus column stats entirely — tests whether the stats flood (not
+    the stats themselves) is what hurt the v8 passnyc arms."""
+    _SCOPES = {
+        "coercion": "source",
+        "fileIo": "source",
+        "valueFormat": "source",
+        "lineage": "nonsource",
+        "columnStats": "off",
+        "structural": "all",
+    }
+    _NAME = "DataflowSystemHaikuScopedLean"
+
+
+class DataflowSystemHaikuScopedSrcStats(_HaikuScopedBase):
+    """Column stats only where the data enters — schema discovery at the lake
+    edge, silence once the shape is known."""
+    _SCOPES = {
+        "coercion": "source",
+        "fileIo": "source",
+        "columnStats": "source",
+        "lineage": "nonsource",
+        "structural": "all",
+    }
+    _NAME = "DataflowSystemHaikuScopedSrcStats"

@@ -323,3 +323,11 @@ from .dataflow_system import (
     DataflowSystemGPT52MediumC4Replicate0,
     DataflowSystemGPT52MediumC5Replicate0,
 )
+
+# Scoped-stats matrix (Idea 1): same channels, different placement
+from .dataflow_system import (
+    DataflowSystemHaikuScopedControl,
+    DataflowSystemHaikuScopedSplit,
+    DataflowSystemHaikuScopedLean,
+    DataflowSystemHaikuScopedSrcStats,
+)
