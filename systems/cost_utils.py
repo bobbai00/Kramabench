@@ -27,6 +27,10 @@ _FALLBACK = {
     "claude-haiku-4-5": (1.0e-6, 5.0e-6, 1.0e-7, 1.25e-6),
     "claude-haiku-4-5-20251001": (1.0e-6, 5.0e-6, 1.0e-7, 1.25e-6),
     "claude-sonnet-4.6": (3.0e-6, 15.0e-6, 3.0e-7, 3.75e-6),
+    # sonnet-5 at the standard sonnet tier ($3/$15 per M). Without this entry
+    # every sonnet arm recorded cost_usd = 0 while still reporting real token
+    # counts, so a run looked free rather than unpriced.
+    "claude-sonnet-5": (3.0e-6, 15.0e-6, 3.0e-7, 3.75e-6),
     # OpenAI models. litellm is not installed in this venv (and would not know
     # these ids anyway), so without these entries every gpt arm recorded
     # cost_usd = 0 — which is why the gpt-5.2 scratch dirs carry no cost at all.
