@@ -72,6 +72,7 @@ class DataflowSystem(System):
         coercion_facts: bool = False,
         row_lineage: bool = False,
         stat_scopes: Optional[Dict[str, str]] = None,
+        message_layout: Optional[str] = None,
         versioned_mode: bool = False,
         session_turns: bool = False,
         recall_max_result_chars: Optional[int] = None,
@@ -201,6 +202,8 @@ class DataflowSystem(System):
         self.row_lineage = row_lineage
         # WHERE each data channel renders (source / nonsource / all / off).
         self.stat_scopes = stat_scopes
+        # block (legacy) | native (real tool-calling transcript)
+        self.message_layout = message_layout
         self.versioned_mode = versioned_mode
         self.session_turns = session_turns
         self.recall_max_result_chars = recall_max_result_chars
@@ -402,6 +405,7 @@ class DataflowSystem(System):
             coercion_facts=self.coercion_facts,
             row_lineage=self.row_lineage,
             stat_scopes=self.stat_scopes,
+            message_layout=self.message_layout,
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
             recall_max_result_chars=self.recall_max_result_chars,
@@ -825,34 +829,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
         self.cleanup()
 
 
-class DataflowSystemHaiku45(DataflowSystem):
-    """DataflowSystem using Claude Haiku 4.5 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-haiku-4.5",
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemHaiku45",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
 
 
-class DataflowSystemGPT5Mini(DataflowSystem):
-    """DataflowSystem using GPT-5 Mini model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5Mini",
-            verbose=verbose,
-            *args,
-            **kwargs
-        )
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -864,208 +842,31 @@ class DataflowSystemGPT5Mini(DataflowSystem):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-class DataflowSystemGPT52LatestSchemaConverge(DataflowSystem):
-    """gpt-5.2 converge stack (flow_level=1, data_level=1). Thesis arm."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode="latest",
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT52LatestSchemaConverge",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniLatestSchemaConverge(DataflowSystem):
-    """gpt-5-mini converge stack (flow_level=1, data_level=1). Thesis arm
-    (the gpt-5-mini peer for the symmetric DataFlow-vs-Script comparison)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConverge",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct(DataflowSystem):
-    """Converge + data_level=2 — the structural-profile rung (#25/26/27), the
-    campaign's one accuracy win (+8 single / +4 best-of-2)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            flow_level=1,
-            data_level=2,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeTableStruct",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniLatestSchemaConvergeFewShot(DataflowSystem):
-    """Converge + few-shot worked-examples prior (W2, the −5.9% cost win)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            few_shot_prompt=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeFewShot",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniLatestSchemaConvergeCap20(DataflowSystem):
-    """Converge + a hard 20-step budget (#31, ACT-side cost lever)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            max_steps=20,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeCap20",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniLatestSchemaConvergeLevels(DataflowSystem):
-    """Reference level-config SUT — converge plus flow_level=2 / data_level=2
-    set explicitly, demonstrating the ordinal DECORATE knobs."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            flow_level=2,
-            data_level=2,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeLevels",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniLatestSchemaConvergeThoughtReplay(DataflowSystem):
-    """Converge + thought-replay reinjection (SELECT-side). Re-injects the last
-    K=10 agent reasoning events as a `# Reasoning` block (thought + compressed
-    actions) plus per-operator `Last edited: step N` back-pointers. Only fires
-    under LATEST context — built on the converge base so the knob actually takes
-    effect rather than silently no-op'ing."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode="latest",
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            thought_replay=True,
-            thought_replay_k=10,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemGPT5MiniLatestSchemaConvergeThoughtReplay",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
 # Schema-only twins of the 5k stats arms: column stats OFF, only the Schema line
 # (output column names + types, data_level=1) kept. Isolates "just the schema" vs
 # "schema + full per-column stats" at the 5k operating point, for latest & delta.
-class _GPT52SchemaOnlySweep(DataflowSystem):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "_GPT52SchemaOnlySweep"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=1,
-            data_level=1,          # Schema line only
-            column_stats=False,    # stats block OFF
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT52Latest3kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, LATEST, 3k, schema line ON, column stats OFF."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52Latest3kSchemaOnly"
 
 
-class DataflowSystemGPT52Delta3kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, DELTA, 3k, schema line ON, column stats OFF."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52Delta3kSchemaOnly"
 
 
-class DataflowSystemGPT52Delta1kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, DELTA, 1k, schema line ON, column stats OFF — the starvation
-    end of the sampling axis (pairs with DataflowSystemGPT52DeltaStats1kD2)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT52Delta1kSchemaOnly"
 
 
-class DataflowSystemGPT52Latest1kCodeInSnap(_GPT52SchemaOnlySweep):
-    """gpt-5.2, LATEST, 1k, schema-only + code shown in snapshot (short summaries).
-    C3 (versions) ray of the gpt-5.2 mini-mirror star — delta->latest + code ON,
-    vs anchor DataflowSystemGPT52Delta1kSchemaOnly."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT52Latest1kCodeInSnap"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -1077,56 +878,18 @@ class DataflowSystemGPT52Latest1kCodeInSnap(_GPT52SchemaOnlySweep):
 # these classes carries them. Rerun set: the probing-issue tasks from the
 # deep dives (format-blinded loads, dirty headers, key traps) + controls.
 # ---------------------------------------------------------------------------
-class DataflowSystemGPT52Delta5kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
-    """Delta5kSchemaOnly config under the raw-probe prompt vintage."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52Delta5kSchemaOnlyProbePrompt"
 
 
-class DataflowSystemGPT52Delta1kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
-    """Delta1kSchemaOnly config under the raw-probe prompt vintage — the
-    shared anchor of the probe-star (C1' sampling ray → 5k; C2' profiling
-    ray → DeltaStats1kD2ProbePrompt)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT52Delta1kSchemaOnlyProbePrompt"
 
 
-class DataflowSystemGPT52Latest5kSchemaOnlyProbePrompt(_GPT52SchemaOnlySweep):
-    """Latest5kSchemaOnly config under the raw-probe prompt vintage (C3'
-    history pair partner of Delta5kSchemaOnlyProbePrompt)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52Latest5kSchemaOnlyProbePrompt"
 
 
-class DataflowSystemGPT52Latest5kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, LATEST, 5k, schema line ON, column stats OFF."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52Latest5kSchemaOnly"
 
 
-class DataflowSystemGPT52Delta5kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, DELTA, 5k, schema line ON, column stats OFF."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52Delta5kSchemaOnly"
 
 
-class DataflowSystemGPT52Latest7kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, LATEST, 7k, schema line ON, column stats OFF."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 7000
-    _NAME = "DataflowSystemGPT52Latest7kSchemaOnly"
 
 
-class DataflowSystemGPT52Delta7kSchemaOnly(_GPT52SchemaOnlySweep):
-    """gpt-5.2, DELTA, 7k, schema line ON, column stats OFF."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 7000
-    _NAME = "DataflowSystemGPT52Delta7kSchemaOnly"
 
 
 # ---------------------------------------------------------------------------
@@ -1137,320 +900,70 @@ class DataflowSystemGPT52Delta7kSchemaOnly(_GPT52SchemaOnlySweep):
 # (recovery test vs the data_level=1 5k arms) and 10k (full runs). Optional
 # static_compaction demonstrates the DELTA-only auto-fold flag in isolation.
 # ---------------------------------------------------------------------------
-class _GPT52SweepD2(DataflowSystem):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _STATIC_COMPACTION = False
-    _NAME = "_GPT52SweepD2"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=1,
-            data_level=2,
-            column_stats=True,
-            static_compaction=self._STATIC_COMPACTION,
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT52LatestStats3kD2(_GPT52SweepD2):
-    """gpt-5.2, LATEST, 3k, column stats ON + data_level=2."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52LatestStats3kD2"
 
 
-class DataflowSystemGPT52DeltaStats2kD2(_GPT52SweepD2):
-    """gpt-5.2, DELTA, 2k, column stats ON + data_level=2 (C5 — sampling 2k + stats)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 2000
-    _NAME = "DataflowSystemGPT52DeltaStats2kD2"
 
 
-class DataflowSystemGPT52LatestStats1kD2(_GPT52SweepD2):
-    """gpt-5.2, LATEST, 1k, column stats ON + data_level=2 (C6 — latest + stats,
-    latest-twin of C2 DeltaStats1kD2)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT52LatestStats1kD2"
 
 
-class DataflowSystemGPT52LatestStats3kD2SmallTableControl(_GPT52SweepD2):
-    """Current-code control: Latest 3k D2 with frontier decay disabled."""
-
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52LatestStats3kD2SmallTableControl"
 
 
-class DataflowSystemGPT52LatestStats3kD2FrontierDecay(_GPT52SweepD2):
-    """Latest 3k D2 with only the conservative settled-result overlay enabled."""
-
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52LatestStats3kD2FrontierDecay"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            frontier_decay_config={
-                "sampleRows": 3,
-                "minStepsSinceEdit": 1,
-                "minConsumerStepsSinceEdit": 1,
-                "minConsumerStepsSinceHealthy": 1,
-            },
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT52DeltaStats3kD2(_GPT52SweepD2):
-    """gpt-5.2, DELTA, 3k, column stats ON + data_level=2."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52DeltaStats3kD2"
 
 
-class DataflowSystemGPT52DeltaStats1kD2ProbePrompt(_GPT52SweepD2):
-    """DeltaStats1kD2 config under the raw-probe prompt vintage (C2'
-    profiling ray of the probe-star, vs Delta1kSchemaOnlyProbePrompt)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT52DeltaStats1kD2ProbePrompt"
 
 
-class DataflowSystemGPT52DeltaStats1kD2(_GPT52SweepD2):
-    """gpt-5.2, DELTA, 1k, column stats ON + data_level=2 — does the profile
-    substitute for sample rows when the render budget is starved? (pairs with
-    DataflowSystemGPT52Delta1kSchemaOnly)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT52DeltaStats1kD2"
 
 
-class DataflowSystemGPT52DeltaStats3kD2FoldControl(_GPT52SweepD2):
-    """Current-code DELTA control: Delta 3k D2 with every experimental overlay off.
-
-    Fresh control for the rank-3 fold-resolved-revisions A/B — the historical
-    DataflowSystemGPT52DeltaStats3kD2 run predates the permanent renderer rules
-    (small-table stats suppression), so it is not code-matched."""
-
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52DeltaStats3kD2FoldControl"
 
 
-class DataflowSystemGPT52DeltaStats3kD2FoldResolved(_GPT52SweepD2):
-    """Delta 3k D2 + rank-3 fold-resolved-revisions rule (audit Rank 3).
-
-    Once a later revision of an operator has executed successfully and been
-    consumed healthily (+1 grace event), prior revisions' code/result payloads
-    render as one-line resolution facts."""
-
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52DeltaStats3kD2FoldResolved"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            fold_resolved_revisions_config={"graceEvents": 1},
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT52LatestStats3kD2ProbeRetire(_GPT52SweepD2):
-    """Latest 3k D2 + rank-4 probe-retirement rule (audit Rank 4).
-
-    A settled orphan probe whose discovery is provably encoded downstream
-    (probe output value inside a quoted literal of a later healthy connected
-    operator's code) renders as a compact extracted fact instead of its table.
-    Control arm: DataflowSystemGPT52LatestStats3kD2SmallTableControl (same
-    code, overlay off)."""
-
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "DataflowSystemGPT52LatestStats3kD2ProbeRetire"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            probe_retirement_config={"minStepsSinceEdit": 2, "minValueLength": 4},
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT52DeltaStats5kD2FreshControl(_GPT52SweepD2):
-    """Current-code control for the render-prefs A/B: Delta 5k D2, all flags
-    off. The historical DataflowSystemGPT52DeltaStats5kD2 predates the
-    permanent small-table renderer rule, so it is not code-matched."""
-
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52DeltaStats5kD2FreshControl"
 
 
-class DataflowSystemGPT52LatestStats5kD2(_GPT52SweepD2):
-    """gpt-5.2, LATEST, 5k, column stats ON + data_level=2 (Output Table profile)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52LatestStats5kD2"
 
 
-class DataflowSystemGPT52DeltaStats5kD2(_GPT52SweepD2):
-    """gpt-5.2, DELTA, 5k, column stats ON + data_level=2 (Output Table profile)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT52DeltaStats5kD2"
 
 
-class DataflowSystemGPT52LatestStats7kD2(_GPT52SweepD2):
-    """gpt-5.2, LATEST, 7k, column stats ON + data_level=2."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 7000
-    _NAME = "DataflowSystemGPT52LatestStats7kD2"
 
 
-class DataflowSystemGPT52DeltaStats7kD2(_GPT52SweepD2):
-    """gpt-5.2, DELTA, 7k, column stats ON + data_level=2."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 7000
-    _NAME = "DataflowSystemGPT52DeltaStats7kD2"
 
 
 # ---------------------------------------------------------------------------
 # gpt-5-mini 3k replica of the gpt-5.2 data-context sweep. These hold the
 # DataflowAgent knobs constant with the gpt-5.2 arms and only change model_type.
 # ---------------------------------------------------------------------------
-class _GPT5MiniSchemaOnlySweep(DataflowSystem):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "_GPT5MiniSchemaOnlySweep"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=1,
-            data_level=1,
-            column_stats=False,
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class _GPT5MiniSweepD2(DataflowSystem):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "_GPT5MiniSweepD2"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=1,
-            data_level=2,
-            column_stats=True,
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemGPT5MiniDeltaStats5kD2(_GPT5MiniSweepD2):
-    """gpt-5-mini, DELTA, 5k, column stats ON + data_level=2 (C4 — sampling 5k + stats)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2"
 
 
-class DataflowSystemGPT5MiniDeltaStats2kD2(_GPT5MiniSweepD2):
-    """gpt-5-mini, DELTA, 2k, column stats ON + data_level=2 (C5 — sampling 2k + stats)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 2000
-    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2"
 
 
-class DataflowSystemGPT5MiniLatestStats1kD2(_GPT5MiniSweepD2):
-    """gpt-5-mini, LATEST, 1k, column stats ON + data_level=2 (C6 — latest + stats,
-    latest-twin of C2 DeltaStats1kD2)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2"
 
 
 # --- gpt-5-mini C1/C2 knob arms (subtask-eval study) ---
 # C1 char cap: Delta1k vs Delta5k (schema-only). C2 profile: Delta1k schema vs
 # DeltaStats1kD2 (both 1k). Matched one-knob pairs on the mini substrate.
-class DataflowSystemGPT5MiniDelta1kSchemaOnly(_GPT5MiniSchemaOnlySweep):
-    """gpt-5-mini, DELTA, 1k, schema-only (C1 anchor / C2 anchor)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnly"
 
 
-class DataflowSystemGPT5MiniDelta5kSchemaOnly(_GPT5MiniSchemaOnlySweep):
-    """gpt-5-mini, DELTA, 5k, schema-only (C1 ray — the rows knob)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnly"
 
 
-class DataflowSystemGPT5MiniDelta2kSchemaOnly(_GPT5MiniSchemaOnlySweep):
-    """gpt-5-mini, DELTA, 2k, schema-only (C7 — mid sampling point of the rows
-    knob, schema-only twin of C5 DeltaStats2kD2)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 2000
-    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnly"
 
 
-class DataflowSystemGPT5MiniDeltaStats1kD2(_GPT5MiniSweepD2):
-    """gpt-5-mini, DELTA, 1k, column stats ON + data_level=2 (C2 ray — the stats knob)."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2"
 
 
 # --- code-in-snapshot experiment (LATEST, 1k, gpt-5-mini) ---
 # Does showing the agent its OWN code in the snapshot (with short summaries) help?
 # Baseline = plain LATEST-1k schema-only; ray = same + enableCodeInSnapshot.
-class DataflowSystemGPT5MiniLatest1kSchemaOnly(_GPT5MiniSchemaOnlySweep):
-    """gpt-5-mini, LATEST, 1k, schema-only (code-in-snapshot BASELINE, flag off)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT5MiniLatest1kSchemaOnly"
 
 
-class DataflowSystemGPT5MiniLatest1kCodeInSnap(_GPT5MiniSchemaOnlySweep):
-    """gpt-5-mini, LATEST, 1k, schema-only + code shown in snapshot (short summaries)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnap"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
 # --- Variance replicates (gpt-5-mini): config-identical to anchor + C1..C6,
@@ -1458,132 +971,33 @@ class DataflowSystemGPT5MiniLatest1kCodeInSnap(_GPT5MiniSchemaOnlySweep):
 # Two per base arm -> with the original, 3 independent samples per knob to
 # estimate the run-to-run randomness floor. Placed AFTER all base arms so the
 # subclass references resolve. (No recovery rounds when run — raw single-shot.)
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate1(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate1"
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate2(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate2"
 
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate1(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate1"
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate2(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate2"
 
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate1(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate1"
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate2(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate2"
 
-class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate1(DataflowSystemGPT5MiniLatest1kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate1"
-class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate2(DataflowSystemGPT5MiniLatest1kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate2"
 
-class DataflowSystemGPT5MiniDeltaStats5kD2Replicate1(DataflowSystemGPT5MiniDeltaStats5kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate1"
-class DataflowSystemGPT5MiniDeltaStats5kD2Replicate2(DataflowSystemGPT5MiniDeltaStats5kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate2"
 
-class DataflowSystemGPT5MiniDeltaStats2kD2Replicate1(DataflowSystemGPT5MiniDeltaStats2kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate1"
-class DataflowSystemGPT5MiniDeltaStats2kD2Replicate2(DataflowSystemGPT5MiniDeltaStats2kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate2"
 
-class DataflowSystemGPT5MiniLatestStats1kD2Replicate1(DataflowSystemGPT5MiniLatestStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate1"
-class DataflowSystemGPT5MiniLatestStats1kD2Replicate2(DataflowSystemGPT5MiniLatestStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate2"
 
 
 # --- Replicate0: clean single-shot re-run of the 7 base arms (anchor+C1-C6),
 # because the base arms' round0 traces were overwritten in-place by their 2
 # recovery rounds. Config-identical, new names, NO retries when run -> a 3rd
 # clean single-shot trace set per knob (variance triple = Rep0/Rep1/Rep2).
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate0(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate0"
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate0(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate0"
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate0(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate0"
-class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate0(DataflowSystemGPT5MiniLatest1kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate0"
-class DataflowSystemGPT5MiniDeltaStats5kD2Replicate0(DataflowSystemGPT5MiniDeltaStats5kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate0"
-class DataflowSystemGPT5MiniDeltaStats2kD2Replicate0(DataflowSystemGPT5MiniDeltaStats2kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate0"
-class DataflowSystemGPT5MiniLatestStats1kD2Replicate0(DataflowSystemGPT5MiniLatestStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate0"
 
 
 # --- Replicate3/Replicate4: extend every knob to 5 clean single-shot reps.
 # --- C7 (Delta2kSchemaOnly) Replicate0-4: new knob, 5 reps from scratch.
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate3(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate3"
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate4(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate4"
 
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate3(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate3"
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate4(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate4"
 
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate3(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate3"
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate4(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate4"
 
-class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate3(DataflowSystemGPT5MiniLatest1kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate3"
-class DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate4(DataflowSystemGPT5MiniLatest1kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest1kCodeInSnapReplicate4"
 
-class DataflowSystemGPT5MiniDeltaStats5kD2Replicate3(DataflowSystemGPT5MiniDeltaStats5kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate3"
-class DataflowSystemGPT5MiniDeltaStats5kD2Replicate4(DataflowSystemGPT5MiniDeltaStats5kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats5kD2Replicate4"
 
-class DataflowSystemGPT5MiniDeltaStats2kD2Replicate3(DataflowSystemGPT5MiniDeltaStats2kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate3"
-class DataflowSystemGPT5MiniDeltaStats2kD2Replicate4(DataflowSystemGPT5MiniDeltaStats2kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats2kD2Replicate4"
 
-class DataflowSystemGPT5MiniLatestStats1kD2Replicate3(DataflowSystemGPT5MiniLatestStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate3"
-class DataflowSystemGPT5MiniLatestStats1kD2Replicate4(DataflowSystemGPT5MiniLatestStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniLatestStats1kD2Replicate4"
 
-class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate0(DataflowSystemGPT5MiniDelta2kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate0"
-class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate1(DataflowSystemGPT5MiniDelta2kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate1"
-class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate2(DataflowSystemGPT5MiniDelta2kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate2"
-class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate3(DataflowSystemGPT5MiniDelta2kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate3"
-class DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate4(DataflowSystemGPT5MiniDelta2kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta2kSchemaOnlyReplicate4"
 
 
 # --- C8: LATEST 5k + code-in-snapshot (wide-sampling twin of C3), 5 reps.
-class DataflowSystemGPT5MiniLatest5kCodeInSnap(_GPT5MiniSchemaOnlySweep):
-    """gpt-5-mini, LATEST, 5k, schema-only + code shown in snapshot (C8 —
-    5k twin of C3 Latest1kCodeInSnap)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnap"
 
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
-
-class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate0(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate0"
-class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate1(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate1"
-class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate2(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate2"
-class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate3(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate3"
-class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate4(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    _NAME = "DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate4"
 
 
 # ===========================================================================
@@ -1598,41 +1012,9 @@ class DataflowSystemGPT5MiniLatest5kCodeInSnapReplicate4(DataflowSystemGPT5MiniL
 ROLE_POLICY_ENDPOINT = "http://localhost:3002"
 
 
-class _A1RolePolicy(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """Rule A: sources rich (12 rows + stats + structural hints), interior lean (3 rows, no stats)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(
-            role_policy_config={
-                "sourceSampleRows": 12,
-                "sourceStats": True,
-                "sourceStructuralHints": True,
-                "interiorSampleRows": 3,
-                "interiorStats": False,
-                "leanTerminal": True,
-            },
-            verbose=verbose, *args, **kwargs)
 
 
-class _A0Control(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """Rule A control: same :3002 service, policy OFF — isolates the policy from
-    any service/vintage difference between :3001 and :3002."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
-class DataflowSystemGPT5MiniA1RolePolicyReplicate1(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate1"
-class DataflowSystemGPT5MiniA1RolePolicyReplicate2(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate2"
-class DataflowSystemGPT5MiniA1RolePolicyReplicate3(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate3"
-class DataflowSystemGPT5MiniA0ControlReplicate1(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate1"
-class DataflowSystemGPT5MiniA0ControlReplicate2(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate2"
-class DataflowSystemGPT5MiniA0ControlReplicate3(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate3"
 
 
 # ---------------------------------------------------------------------------
@@ -1646,39 +1028,13 @@ class DataflowSystemGPT5MiniA0ControlReplicate3(_A0Control):
 #  Everything else identical to A1, same :3002 service, so A1/A0 stay the
 #  reference pair (default density is "full" and golden parity is unchanged).
 # ---------------------------------------------------------------------------
-class _A2AnomalyStats(_A1RolePolicy):
-    """A2: source stats rendered anomaly-only."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(verbose=verbose, *args, **kwargs)
-        self.role_policy_config = dict(self.role_policy_config or {})
-        self.role_policy_config["sourceStatsDensity"] = "anomaly"
 
 
-class _A3NoSourceStats(_A1RolePolicy):
-    """A3: row capping kept, source stats block removed entirely."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(verbose=verbose, *args, **kwargs)
-        self.role_policy_config = dict(self.role_policy_config or {})
-        self.role_policy_config["sourceStats"] = False
 
 
-class DataflowSystemGPT5MiniA2AnomalyStatsReplicate1(_A2AnomalyStats):
-    _NAME = "DataflowSystemGPT5MiniA2AnomalyStatsReplicate1"
-class DataflowSystemGPT5MiniA2AnomalyStatsReplicate2(_A2AnomalyStats):
-    _NAME = "DataflowSystemGPT5MiniA2AnomalyStatsReplicate2"
-class DataflowSystemGPT5MiniA2AnomalyStatsReplicate3(_A2AnomalyStats):
-    _NAME = "DataflowSystemGPT5MiniA2AnomalyStatsReplicate3"
-class DataflowSystemGPT5MiniA3NoSourceStatsReplicate1(_A3NoSourceStats):
-    _NAME = "DataflowSystemGPT5MiniA3NoSourceStatsReplicate1"
-class DataflowSystemGPT5MiniA3NoSourceStatsReplicate2(_A3NoSourceStats):
-    _NAME = "DataflowSystemGPT5MiniA3NoSourceStatsReplicate2"
-class DataflowSystemGPT5MiniA3NoSourceStatsReplicate3(_A3NoSourceStats):
-    _NAME = "DataflowSystemGPT5MiniA3NoSourceStatsReplicate3"
 # Sentinel: a 4th A0 rep on the NEW sha. Golden parity proves the render is
 # byte-identical, but it does not measure the run-level offset (fresh stack vs
 # deep-in-pool) that dominates this benchmark's variance. This rep does.
-class DataflowSystemGPT5MiniA0ControlReplicate4(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate4"
 
 
 # Rep expansion: resolve A1-vs-A0 (+5.0 at 3 reps, inside the +-4-5pt floor).
@@ -1686,24 +1042,6 @@ class DataflowSystemGPT5MiniA0ControlReplicate4(_A0Control):
 # these run on 9d60d01dc; golden parity holds for both configs (default "full"
 # density renders byte-identical) and A0ControlReplicate4 is the cross-sha
 # sentinel that measures the run-level offset directly.
-class DataflowSystemGPT5MiniA1RolePolicyReplicate4(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate4"
-class DataflowSystemGPT5MiniA1RolePolicyReplicate5(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate5"
-class DataflowSystemGPT5MiniA1RolePolicyReplicate6(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate6"
-class DataflowSystemGPT5MiniA1RolePolicyReplicate7(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate7"
-class DataflowSystemGPT5MiniA1RolePolicyReplicate8(_A1RolePolicy):
-    _NAME = "DataflowSystemGPT5MiniA1RolePolicyReplicate8"
-class DataflowSystemGPT5MiniA0ControlReplicate5(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate5"
-class DataflowSystemGPT5MiniA0ControlReplicate6(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate6"
-class DataflowSystemGPT5MiniA0ControlReplicate7(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate7"
-class DataflowSystemGPT5MiniA0ControlReplicate8(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate8"
 
 
 # ---------------------------------------------------------------------------
@@ -1714,52 +1052,16 @@ class DataflowSystemGPT5MiniA0ControlReplicate8(_A0Control):
 #  loaders add a __source_file column. Byte-identical prompt when off.
 #  Falsifiable: must lift legal-hard-29 + legal-hard-16 specifically.
 # ---------------------------------------------------------------------------
-class _A4SourceProv(_A1RolePolicy):
-    """A4: A1 render policy + sourceProvenanceHint prompt principle."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("source_provenance_hint", True)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniA4SourceProvReplicate1(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate1"
-class DataflowSystemGPT5MiniA4SourceProvReplicate2(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate2"
-class DataflowSystemGPT5MiniA4SourceProvReplicate3(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate3"
 
 
-class _A5B2Combo(_A1RolePolicy):
-    """A5: A1 render policy + B2 data history (1 shape-rendered prior result/op).
-    B2 alone: -10.4% cost, rep std 1.9, -3.2 acc (inside noise). Disjoint fields
-    from A1 (A shapes the LATEST render per role; B2 appends history), so the
-    combo tests whether the savings stack without an accuracy tax."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("summarize_params", {"operators": {"defaults": {"result": {"history": {
-            "lastK": 1, "render": {"detail": "shape"}}}}}})
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniA5B2ComboReplicate1(_A5B2Combo):
-    _NAME = "DataflowSystemGPT5MiniA5B2ComboReplicate1"
-class DataflowSystemGPT5MiniA5B2ComboReplicate2(_A5B2Combo):
-    _NAME = "DataflowSystemGPT5MiniA5B2ComboReplicate2"
-class DataflowSystemGPT5MiniA5B2ComboReplicate3(_A5B2Combo):
-    _NAME = "DataflowSystemGPT5MiniA5B2ComboReplicate3"
 
 
 # A4 validation reps: 8-rep footing for the one arm that cleared 2x SEM at 3
 # reps (71.7 +-2.4 vs A0 59.1 +-12.3). Also watches the archeology-hard-7 flag.
-class DataflowSystemGPT5MiniA4SourceProvReplicate4(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate4"
-class DataflowSystemGPT5MiniA4SourceProvReplicate5(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate5"
-class DataflowSystemGPT5MiniA4SourceProvReplicate6(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate6"
-class DataflowSystemGPT5MiniA4SourceProvReplicate7(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate7"
-class DataflowSystemGPT5MiniA4SourceProvReplicate8(_A4SourceProv):
-    _NAME = "DataflowSystemGPT5MiniA4SourceProvReplicate8"
 
 
 # ---------------------------------------------------------------------------
@@ -1768,21 +1070,8 @@ class DataflowSystemGPT5MiniA4SourceProvReplicate8(_A4SourceProv):
 #  trim). Those facts render in 62-64% of every A arm and 0% of A0, so they are
 #  a confound in the whole A-series; this is the missing single-leg control.
 # ---------------------------------------------------------------------------
-class _A6HintsOnly(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """A6: A0 base + sourceStructuralHints only."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(role_policy_config={"hintsOnly": True}, verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniA6HintsOnlyReplicate1(_A6HintsOnly):
-    _NAME = "DataflowSystemGPT5MiniA6HintsOnlyReplicate1"
-class DataflowSystemGPT5MiniA6HintsOnlyReplicate2(_A6HintsOnly):
-    _NAME = "DataflowSystemGPT5MiniA6HintsOnlyReplicate2"
-class DataflowSystemGPT5MiniA6HintsOnlyReplicate3(_A6HintsOnly):
-    _NAME = "DataflowSystemGPT5MiniA6HintsOnlyReplicate3"
-class DataflowSystemGPT5MiniA6HintsOnlyReplicate4(_A6HintsOnly):
-    _NAME = "DataflowSystemGPT5MiniA6HintsOnlyReplicate4"
 
 
 # Fresh A0 control on the CURRENT sha. The stats-bound commit (81dc518be)
@@ -1790,14 +1079,6 @@ class DataflowSystemGPT5MiniA6HintsOnlyReplicate4(_A6HintsOnly):
 # flag — so A0 reps 1-8 (4af1e98da / 9d60d01dc) are a different vintage and
 # cannot serve as A6's control. Same config as _A0Control, new names so the runs
 # land in fresh scratch dirs.
-class DataflowSystemGPT5MiniA0ControlReplicate9(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate9"
-class DataflowSystemGPT5MiniA0ControlReplicate10(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate10"
-class DataflowSystemGPT5MiniA0ControlReplicate11(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate11"
-class DataflowSystemGPT5MiniA0ControlReplicate12(_A0Control):
-    _NAME = "DataflowSystemGPT5MiniA0ControlReplicate12"
 
 
 # ===========================================================================
@@ -1822,62 +1103,12 @@ _CHAR_SPLIT = {
 }
 
 
-class _C9SourceRichLatest(_GPT5MiniSweepD2):
-    """C9: LATEST + code, sources 5k + stats, downstream 1k no stats."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "_C9SourceRichLatest"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(
-            enable_code_in_snapshot=True,
-            role_policy_config=dict(_CHAR_SPLIT),
-            verbose=verbose, *args, **kwargs)
 
 
-class _C10SourceRichDelta(_GPT5MiniSweepD2):
-    """C10: DELTA, sources 5k + stats, downstream 1k no stats."""
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "_C10SourceRichDelta"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(
-            role_policy_config=dict(_CHAR_SPLIT),
-            verbose=verbose, *args, **kwargs)
 
 
-class _C11UniformRichLatest(_GPT5MiniSweepD2):
-    """C11: LATEST + code, 5k + stats for every operator (no per-op policy)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "_C11UniformRichLatest"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniC9SourceRichLatestReplicate1(_C9SourceRichLatest):
-    _NAME = "DataflowSystemGPT5MiniC9SourceRichLatestReplicate1"
-class DataflowSystemGPT5MiniC9SourceRichLatestReplicate2(_C9SourceRichLatest):
-    _NAME = "DataflowSystemGPT5MiniC9SourceRichLatestReplicate2"
-class DataflowSystemGPT5MiniC9SourceRichLatestReplicate3(_C9SourceRichLatest):
-    _NAME = "DataflowSystemGPT5MiniC9SourceRichLatestReplicate3"
-class DataflowSystemGPT5MiniC10SourceRichDeltaReplicate1(_C10SourceRichDelta):
-    _NAME = "DataflowSystemGPT5MiniC10SourceRichDeltaReplicate1"
-class DataflowSystemGPT5MiniC10SourceRichDeltaReplicate2(_C10SourceRichDelta):
-    _NAME = "DataflowSystemGPT5MiniC10SourceRichDeltaReplicate2"
-class DataflowSystemGPT5MiniC10SourceRichDeltaReplicate3(_C10SourceRichDelta):
-    _NAME = "DataflowSystemGPT5MiniC10SourceRichDeltaReplicate3"
-class DataflowSystemGPT5MiniC11UniformRichLatestReplicate1(_C11UniformRichLatest):
-    _NAME = "DataflowSystemGPT5MiniC11UniformRichLatestReplicate1"
-class DataflowSystemGPT5MiniC11UniformRichLatestReplicate2(_C11UniformRichLatest):
-    _NAME = "DataflowSystemGPT5MiniC11UniformRichLatestReplicate2"
-class DataflowSystemGPT5MiniC11UniformRichLatestReplicate3(_C11UniformRichLatest):
-    _NAME = "DataflowSystemGPT5MiniC11UniformRichLatestReplicate3"
 
 
 # ===========================================================================
@@ -1886,14 +1117,6 @@ class DataflowSystemGPT5MiniC11UniformRichLatestReplicate3(_C11UniformRichLatest
 #  on the board (63.1). C3 is LATEST 1k + code WITHOUT stats (68.7). This is the
 #  1k twin of C8s/C11.
 # ===========================================================================
-class _C12LatestStats1kCode(_GPT5MiniSweepD2):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "_C12LatestStats1kCode"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
 # ===========================================================================
@@ -1905,23 +1128,8 @@ class _C12LatestStats1kCode(_GPT5MiniSweepD2):
 #  Unlike A4 (a prompt principle the agent obeys 40% of the time) this is an
 #  observation, so coverage is 100% of multi-file loads.
 # ===========================================================================
-class _A7FileIOFact(_C11UniformRichLatest):
-    """A7: C11 + worker-published `files read:` fact."""
-    pass
 
 
-class DataflowSystemGPT5MiniC12LatestStats1kCodeReplicate1(_C12LatestStats1kCode):
-    _NAME = "DataflowSystemGPT5MiniC12LatestStats1kCodeReplicate1"
-class DataflowSystemGPT5MiniC12LatestStats1kCodeReplicate2(_C12LatestStats1kCode):
-    _NAME = "DataflowSystemGPT5MiniC12LatestStats1kCodeReplicate2"
-class DataflowSystemGPT5MiniC12LatestStats1kCodeReplicate3(_C12LatestStats1kCode):
-    _NAME = "DataflowSystemGPT5MiniC12LatestStats1kCodeReplicate3"
-class DataflowSystemGPT5MiniA7FileIOFactReplicate1(_A7FileIOFact):
-    _NAME = "DataflowSystemGPT5MiniA7FileIOFactReplicate1"
-class DataflowSystemGPT5MiniA7FileIOFactReplicate2(_A7FileIOFact):
-    _NAME = "DataflowSystemGPT5MiniA7FileIOFactReplicate2"
-class DataflowSystemGPT5MiniA7FileIOFactReplicate3(_A7FileIOFact):
-    _NAME = "DataflowSystemGPT5MiniA7FileIOFactReplicate3"
 
 
 # ===========================================================================
@@ -1943,62 +1151,14 @@ class DataflowSystemGPT5MiniA7FileIOFactReplicate3(_A7FileIOFact):
 _FILEIO_PATCH = {"operators": {"defaults": {"result": {"latest": {"column": {"fileIoFacts": True}}}}}}
 
 
-class _D8Latest5kCode(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """D8: same config as C8 (best arm), fresh engine era."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _D8FileIO(_D8Latest5kCode):
-    """D8F: D8 + the engine-side `Files read:` fact."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("summarize_params", dict(_FILEIO_PATCH))
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _D12LatestStats1kCode(_GPT5MiniSweepD2):
-    """D12: LATEST 1k + code + stats/D2 (the missing cell), fresh era."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 1000
-    _NAME = "_D12LatestStats1kCode"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class _D12FileIO(_D12LatestStats1kCode):
-    """D12F: D12 + the engine-side `Files read:` fact."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("summarize_params", dict(_FILEIO_PATCH))
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniD8Latest5kCodeReplicate1(_D8Latest5kCode):
-    _NAME = "DataflowSystemGPT5MiniD8Latest5kCodeReplicate1"
-class DataflowSystemGPT5MiniD8Latest5kCodeReplicate2(_D8Latest5kCode):
-    _NAME = "DataflowSystemGPT5MiniD8Latest5kCodeReplicate2"
-class DataflowSystemGPT5MiniD8Latest5kCodeReplicate3(_D8Latest5kCode):
-    _NAME = "DataflowSystemGPT5MiniD8Latest5kCodeReplicate3"
-class DataflowSystemGPT5MiniD8FileIOReplicate1(_D8FileIO):
-    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate1"
-class DataflowSystemGPT5MiniD8FileIOReplicate2(_D8FileIO):
-    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate2"
-class DataflowSystemGPT5MiniD8FileIOReplicate3(_D8FileIO):
-    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate3"
-class DataflowSystemGPT5MiniD12LatestStats1kCodeReplicate1(_D12LatestStats1kCode):
-    _NAME = "DataflowSystemGPT5MiniD12LatestStats1kCodeReplicate1"
-class DataflowSystemGPT5MiniD12LatestStats1kCodeReplicate2(_D12LatestStats1kCode):
-    _NAME = "DataflowSystemGPT5MiniD12LatestStats1kCodeReplicate2"
-class DataflowSystemGPT5MiniD12LatestStats1kCodeReplicate3(_D12LatestStats1kCode):
-    _NAME = "DataflowSystemGPT5MiniD12LatestStats1kCodeReplicate3"
-class DataflowSystemGPT5MiniD12FileIOReplicate1(_D12FileIO):
-    _NAME = "DataflowSystemGPT5MiniD12FileIOReplicate1"
-class DataflowSystemGPT5MiniD12FileIOReplicate2(_D12FileIO):
-    _NAME = "DataflowSystemGPT5MiniD12FileIOReplicate2"
-class DataflowSystemGPT5MiniD12FileIOReplicate3(_D12FileIO):
-    _NAME = "DataflowSystemGPT5MiniD12FileIOReplicate3"
 
 
 # ===========================================================================
@@ -2011,64 +1171,12 @@ class DataflowSystemGPT5MiniD12FileIOReplicate3(_D12FileIO):
 #  3 reps each. Era 1 arms are NOT comparable (identical config scored 69.0 vs
 #  71.3 across the engine restart).
 # ===========================================================================
-class _N1Latest5kStats(_GPT5MiniSweepD2):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "_N1Latest5kStats"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class _N2Delta5kStats(_GPT5MiniSweepD2):
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 5000
-    _NAME = "_N2Delta5kStats"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _N3SrcRich5k2k(_GPT5MiniSweepD2):
-    """N3: sources 5k, every downstream op 2k, stats ON BOTH SIDES."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "_N3SrcRich5k2k"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(
-            enable_code_in_snapshot=True,
-            role_policy_config={
-                "sourceMaxChars": 5000,
-                "sourceStats": True,
-                "sourceStructuralHints": True,
-                "nonSourceMaxChars": 2000,
-                "nonSourceStats": True,
-            },
-            verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniN1Latest5kStatsReplicate1(_N1Latest5kStats):
-    _NAME = "DataflowSystemGPT5MiniN1Latest5kStatsReplicate1"
-class DataflowSystemGPT5MiniN1Latest5kStatsReplicate2(_N1Latest5kStats):
-    _NAME = "DataflowSystemGPT5MiniN1Latest5kStatsReplicate2"
-class DataflowSystemGPT5MiniN1Latest5kStatsReplicate3(_N1Latest5kStats):
-    _NAME = "DataflowSystemGPT5MiniN1Latest5kStatsReplicate3"
-class DataflowSystemGPT5MiniN2Delta5kStatsReplicate1(_N2Delta5kStats):
-    _NAME = "DataflowSystemGPT5MiniN2Delta5kStatsReplicate1"
-class DataflowSystemGPT5MiniN2Delta5kStatsReplicate2(_N2Delta5kStats):
-    _NAME = "DataflowSystemGPT5MiniN2Delta5kStatsReplicate2"
-class DataflowSystemGPT5MiniN2Delta5kStatsReplicate3(_N2Delta5kStats):
-    _NAME = "DataflowSystemGPT5MiniN2Delta5kStatsReplicate3"
-class DataflowSystemGPT5MiniN3SrcRich5k2kReplicate1(_N3SrcRich5k2k):
-    _NAME = "DataflowSystemGPT5MiniN3SrcRich5k2kReplicate1"
-class DataflowSystemGPT5MiniN3SrcRich5k2kReplicate2(_N3SrcRich5k2k):
-    _NAME = "DataflowSystemGPT5MiniN3SrcRich5k2kReplicate2"
-class DataflowSystemGPT5MiniN3SrcRich5k2kReplicate3(_N3SrcRich5k2k):
-    _NAME = "DataflowSystemGPT5MiniN3SrcRich5k2kReplicate3"
 
 
 # ===========================================================================
@@ -2080,48 +1188,10 @@ class DataflowSystemGPT5MiniN3SrcRich5k2kReplicate3(_N3SrcRich5k2k):
 #    N5  LATEST src 2k / downstream 1k + code + stats, stats BOTH sides
 #  Both era 2, 3 reps.
 # ===========================================================================
-class _N4Latest2kStats(_GPT5MiniSweepD2):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 2000
-    _NAME = "_N4Latest2kStats"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class _N5SrcRich2k1k(_GPT5MiniSweepD2):
-    """N5: sources 2k, every downstream op 1k, stats ON BOTH SIDES."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 2000
-    _NAME = "_N5SrcRich2k1k"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(
-            enable_code_in_snapshot=True,
-            role_policy_config={
-                "sourceMaxChars": 2000,
-                "sourceStats": True,
-                "sourceStructuralHints": True,
-                "nonSourceMaxChars": 1000,
-                "nonSourceStats": True,
-            },
-            verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniN4Latest2kStatsReplicate1(_N4Latest2kStats):
-    _NAME = "DataflowSystemGPT5MiniN4Latest2kStatsReplicate1"
-class DataflowSystemGPT5MiniN4Latest2kStatsReplicate2(_N4Latest2kStats):
-    _NAME = "DataflowSystemGPT5MiniN4Latest2kStatsReplicate2"
-class DataflowSystemGPT5MiniN4Latest2kStatsReplicate3(_N4Latest2kStats):
-    _NAME = "DataflowSystemGPT5MiniN4Latest2kStatsReplicate3"
-class DataflowSystemGPT5MiniN5SrcRich2k1kReplicate1(_N5SrcRich2k1k):
-    _NAME = "DataflowSystemGPT5MiniN5SrcRich2k1kReplicate1"
-class DataflowSystemGPT5MiniN5SrcRich2k1kReplicate2(_N5SrcRich2k1k):
-    _NAME = "DataflowSystemGPT5MiniN5SrcRich2k1kReplicate2"
-class DataflowSystemGPT5MiniN5SrcRich2k1kReplicate3(_N5SrcRich2k1k):
-    _NAME = "DataflowSystemGPT5MiniN5SrcRich2k1kReplicate3"
 
 
 # ===========================================================================
@@ -2134,26 +1204,8 @@ class DataflowSystemGPT5MiniN5SrcRich2k1kReplicate3(_N5SrcRich2k1k):
 #  `Files read:` line moved from inside `Result:` to above `Code:` (commit
 #  23a5325fc / f31a017cc). Report reps 4-5 separately before pooling with 1-3.
 # ===========================================================================
-class _N6Latest3kStats(_GPT5MiniSweepD2):
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 3000
-    _NAME = "_N6Latest3kStats"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", ROLE_POLICY_ENDPOINT)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniN6Latest3kStatsReplicate1(_N6Latest3kStats):
-    _NAME = "DataflowSystemGPT5MiniN6Latest3kStatsReplicate1"
-class DataflowSystemGPT5MiniN6Latest3kStatsReplicate2(_N6Latest3kStats):
-    _NAME = "DataflowSystemGPT5MiniN6Latest3kStatsReplicate2"
-class DataflowSystemGPT5MiniN6Latest3kStatsReplicate3(_N6Latest3kStats):
-    _NAME = "DataflowSystemGPT5MiniN6Latest3kStatsReplicate3"
-class DataflowSystemGPT5MiniD8FileIOReplicate4(_D8FileIO):
-    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate4"
-class DataflowSystemGPT5MiniD8FileIOReplicate5(_D8FileIO):
-    _NAME = "DataflowSystemGPT5MiniD8FileIOReplicate5"
 
 
 # ===========================================================================
@@ -2181,30 +1233,10 @@ class DataflowSystemGPT5MiniD8FileIOReplicate5(_D8FileIO):
 LAYOUT_OLD_ENDPOINT = "http://localhost:3003"
 
 
-class _LayoutOld(_D8FileIO):
-    """`Files read:` inside `Result:` — the render D8F reps 1-3 ran on."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        # assignment, not setdefault: must beat _D8Latest5kCode's :3002 default
-        kwargs["agent_service_endpoint"] = LAYOUT_OLD_ENDPOINT
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _LayoutNew(_D8FileIO):
-    """`Files read:` above `Code:`, grouped with `Inputs:` — current main."""
 
 
-class DataflowSystemGPT5MiniLayoutOldReplicate1(_LayoutOld):
-    _NAME = "DataflowSystemGPT5MiniLayoutOldReplicate1"
-class DataflowSystemGPT5MiniLayoutOldReplicate2(_LayoutOld):
-    _NAME = "DataflowSystemGPT5MiniLayoutOldReplicate2"
-class DataflowSystemGPT5MiniLayoutOldReplicate3(_LayoutOld):
-    _NAME = "DataflowSystemGPT5MiniLayoutOldReplicate3"
-class DataflowSystemGPT5MiniLayoutNewReplicate1(_LayoutNew):
-    _NAME = "DataflowSystemGPT5MiniLayoutNewReplicate1"
-class DataflowSystemGPT5MiniLayoutNewReplicate2(_LayoutNew):
-    _NAME = "DataflowSystemGPT5MiniLayoutNewReplicate2"
-class DataflowSystemGPT5MiniLayoutNewReplicate3(_LayoutNew):
-    _NAME = "DataflowSystemGPT5MiniLayoutNewReplicate3"
 
 
 # ===========================================================================
@@ -2216,46 +1248,9 @@ class DataflowSystemGPT5MiniLayoutNewReplicate3(_LayoutNew):
 #    B3 reasoningReplayK -> last-3 thoughts (`# Reasoning`), no per-op history
 #  3 reps each; run on the 20-task discriminating hard subset.
 # ===========================================================================
-class _B1CodeHist(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """Rule B1: latest5k+code + 1 prior code version per operator."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            summarize_params={"operators": {"defaults": {"property": {"codeHistory": 1}}}},
-            verbose=verbose, *args, **kwargs)
 
-class _B2ResultHist(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """Rule B2: latest5k+code + 1 prior result version per operator (shape only)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            summarize_params={"operators": {"defaults": {"result": {"history": {
-                "lastK": 1, "render": {"detail": "shape"}}}}}},
-            verbose=verbose, *args, **kwargs)
 
-class _B3Replay(DataflowSystemGPT5MiniLatest5kCodeInSnap):
-    """Rule B3: latest5k+code + last-3 thought replay (targets reasoning tax)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            summarize_params={"trajectory": {"reasoningReplayK": 3}},
-            verbose=verbose, *args, **kwargs)
 
-class DataflowSystemGPT5MiniB1CodeHistReplicate1(_B1CodeHist):
-    _NAME = "DataflowSystemGPT5MiniB1CodeHistReplicate1"
-class DataflowSystemGPT5MiniB1CodeHistReplicate2(_B1CodeHist):
-    _NAME = "DataflowSystemGPT5MiniB1CodeHistReplicate2"
-class DataflowSystemGPT5MiniB1CodeHistReplicate3(_B1CodeHist):
-    _NAME = "DataflowSystemGPT5MiniB1CodeHistReplicate3"
-class DataflowSystemGPT5MiniB2ResultHistReplicate1(_B2ResultHist):
-    _NAME = "DataflowSystemGPT5MiniB2ResultHistReplicate1"
-class DataflowSystemGPT5MiniB2ResultHistReplicate2(_B2ResultHist):
-    _NAME = "DataflowSystemGPT5MiniB2ResultHistReplicate2"
-class DataflowSystemGPT5MiniB2ResultHistReplicate3(_B2ResultHist):
-    _NAME = "DataflowSystemGPT5MiniB2ResultHistReplicate3"
-class DataflowSystemGPT5MiniB3ReplayReplicate1(_B3Replay):
-    _NAME = "DataflowSystemGPT5MiniB3ReplayReplicate1"
-class DataflowSystemGPT5MiniB3ReplayReplicate2(_B3Replay):
-    _NAME = "DataflowSystemGPT5MiniB3ReplayReplicate2"
-class DataflowSystemGPT5MiniB3ReplayReplicate3(_B3Replay):
-    _NAME = "DataflowSystemGPT5MiniB3ReplayReplicate3"
 
 
 # --- Rep5-7: post-prompt-change replicates (2026-07-28) --------------------
@@ -2265,51 +1260,14 @@ class DataflowSystemGPT5MiniB3ReplayReplicate3(_B3Replay):
 # these three arms were produced under the OLD wording and Rep5-7 under the NEW
 # one, so the two blocks are a paired before/after on the same configs. Keep
 # both; never pool them.
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate5(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate5"
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate6(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate6"
-class DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate7(DataflowSystemGPT5MiniDelta1kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta1kSchemaOnlyReplicate7"
 
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate5(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate5"
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate6(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate6"
-class DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate7(DataflowSystemGPT5MiniDelta5kSchemaOnly):
-    _NAME = "DataflowSystemGPT5MiniDelta5kSchemaOnlyReplicate7"
 
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate5(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate5"
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate6(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate6"
-class DataflowSystemGPT5MiniDeltaStats1kD2Replicate7(DataflowSystemGPT5MiniDeltaStats1kD2):
-    _NAME = "DataflowSystemGPT5MiniDeltaStats1kD2Replicate7"
 
 # --- C9: latest + 5k + code-in-snapshot + column stats ---------------------
 # The missing cell of the knob star: C8 (latest 5k + code) with stats turned on,
 # i.e. the latest-mode twin of C4 that also shows the agent its own code.
-class DataflowSystemGPT5MiniLatestStats5kD2Code(_GPT5MiniSweepD2):
-    """gpt-5-mini, LATEST, 5k, column stats ON + data_level=2 + code in snapshot
-    (C9 — C8 plus stats / C4's latest+code twin)."""
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "DataflowSystemGPT5MiniLatestStats5kD2Code"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate0(DataflowSystemGPT5MiniLatestStats5kD2Code):
-    _NAME = "DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate0"
-class DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate1(DataflowSystemGPT5MiniLatestStats5kD2Code):
-    _NAME = "DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate1"
-class DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate2(DataflowSystemGPT5MiniLatestStats5kD2Code):
-    _NAME = "DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate2"
-class DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate3(DataflowSystemGPT5MiniLatestStats5kD2Code):
-    _NAME = "DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate3"
-class DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate4(DataflowSystemGPT5MiniLatestStats5kD2Code):
-    _NAME = "DataflowSystemGPT5MiniLatestStats5kD2CodeReplicate4"
 
 
 # ===========================================================================
@@ -2365,47 +1323,14 @@ def _code_cap_patch(n):
     }
 
 
-class _PBase(_D8FileIO):
-    """D8F config, pointed at the :3004 build carrying the codeMaxChars param."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["agent_service_endpoint"] = CODE_LEAN_ENDPOINT
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _P0CodeControl(_PBase):
-    """Control: no code cap, so this is byte-parity D8F on the :3004 build."""
 
 
-class _P1Code800(_PBase):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["summarize_params"] = _code_cap_patch(800)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _P2Code400(_PBase):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["summarize_params"] = _code_cap_patch(400)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniP0CodeControlReplicate1(_P0CodeControl):
-    _NAME = "DataflowSystemGPT5MiniP0CodeControlReplicate1"
-class DataflowSystemGPT5MiniP0CodeControlReplicate2(_P0CodeControl):
-    _NAME = "DataflowSystemGPT5MiniP0CodeControlReplicate2"
-class DataflowSystemGPT5MiniP0CodeControlReplicate3(_P0CodeControl):
-    _NAME = "DataflowSystemGPT5MiniP0CodeControlReplicate3"
-class DataflowSystemGPT5MiniP1Code800Replicate1(_P1Code800):
-    _NAME = "DataflowSystemGPT5MiniP1Code800Replicate1"
-class DataflowSystemGPT5MiniP1Code800Replicate2(_P1Code800):
-    _NAME = "DataflowSystemGPT5MiniP1Code800Replicate2"
-class DataflowSystemGPT5MiniP1Code800Replicate3(_P1Code800):
-    _NAME = "DataflowSystemGPT5MiniP1Code800Replicate3"
-class DataflowSystemGPT5MiniP2Code400Replicate1(_P2Code400):
-    _NAME = "DataflowSystemGPT5MiniP2Code400Replicate1"
-class DataflowSystemGPT5MiniP2Code400Replicate2(_P2Code400):
-    _NAME = "DataflowSystemGPT5MiniP2Code400Replicate2"
-class DataflowSystemGPT5MiniP2Code400Replicate3(_P2Code400):
-    _NAME = "DataflowSystemGPT5MiniP2Code400Replicate3"
 
 
 # ===========================================================================
@@ -2430,41 +1355,10 @@ _Q_STATS_PATCH = {
 }
 
 
-class _Q0Control(_PBase):
-    """= P0 exactly: 5k, code, fact, NO stats. Co-run control on :3004."""
 
 
-class _Q1Stats(_GPT5MiniSweepD2):
-    """5k + code + fact + per-column STATS, on the CURRENT render (:3004).
-
-    Derived from _GPT5MiniSweepD2 (which is where data_level=2 / column_stats=True
-    are set) rather than from _PBase — the D8F chain hardcodes stats OFF, so passing
-    column_stats as a kwarg collided with it. Same parent N1 uses; the differences
-    from N1 are the endpoint (current render vintage) and an EXPLICIT fileIoFacts
-    patch instead of relying on the old stats-coupling.
-    """
-    _CONTEXT_MODE = "latest"
-    _RESULT_CHARS = 5000
-    _NAME = "_Q1Stats"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["agent_service_endpoint"] = CODE_LEAN_ENDPOINT
-        kwargs["summarize_params"] = dict(_Q_STATS_PATCH)
-        super().__init__(enable_code_in_snapshot=True, verbose=verbose, *args, **kwargs)
 
 
-class DataflowSystemGPT5MiniQ0ControlReplicate1(_Q0Control):
-    _NAME = "DataflowSystemGPT5MiniQ0ControlReplicate1"
-class DataflowSystemGPT5MiniQ0ControlReplicate2(_Q0Control):
-    _NAME = "DataflowSystemGPT5MiniQ0ControlReplicate2"
-class DataflowSystemGPT5MiniQ0ControlReplicate3(_Q0Control):
-    _NAME = "DataflowSystemGPT5MiniQ0ControlReplicate3"
-class DataflowSystemGPT5MiniQ1StatsReplicate1(_Q1Stats):
-    _NAME = "DataflowSystemGPT5MiniQ1StatsReplicate1"
-class DataflowSystemGPT5MiniQ1StatsReplicate2(_Q1Stats):
-    _NAME = "DataflowSystemGPT5MiniQ1StatsReplicate2"
-class DataflowSystemGPT5MiniQ1StatsReplicate3(_Q1Stats):
-    _NAME = "DataflowSystemGPT5MiniQ1StatsReplicate3"
 
 
 # ===========================================================================
@@ -2540,38 +1434,14 @@ def _split_5k_2k(hints):
     }
 
 
-class _S0Control(_PBase):
-    """Uniform 5k, no stats, no hints, +fact. Byte-parity with D8F/P0."""
 
 
-class _S1Hints(_PBase):
-    """Uniform 5k, no stats, +hints, +fact — the first stats-free hints arm."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["summarize_params"] = _sp(fact=True, hints=True)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _S2Split(_PBase):
-    """src 5k / down 2k, no stats, no hints, +fact."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["role_policy_config"] = _split_5k_2k(False)
-        kwargs["summarize_params"] = _sp(fact=True, hints=False)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _S3SplitHints(_PBase):
-    """src 5k / down 2k, no stats, +hints, +fact."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs["role_policy_config"] = _split_5k_2k(True)
-        kwargs["summarize_params"] = _sp(fact=True, hints=True)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-for _i in (1, 2, 3):
-    for _cls, _tag in ((_S0Control, "S0Control"), (_S1Hints, "S1Hints"),
-                       (_S2Split, "S2Split"), (_S3SplitHints, "S3SplitHints")):
-        _n = f"DataflowSystemGPT5Mini{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -2601,64 +1471,18 @@ for _i in (1, 2, 3):
 #  LATEST arms carry code-in-snapshot, matching gpt-5-mini's C3/C8s and the current
 #  default (64f5ea4dc).
 # ===========================================================================
-class _LunaBase(DataflowSystem):
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _STATS = False
-    _CODE = False
-    _NAME = "_LunaBase"
-    _MODEL = "gpt-5.6-luna"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", CODE_LEAN_ENDPOINT)
-        super().__init__(
-            model_type=self._MODEL,
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=1,
-            data_level=2 if self._STATS else 1,
-            column_stats=self._STATS,
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            enable_code_in_snapshot=self._CODE,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class _LunaAnchor(_LunaBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
-    _NAME = "_LunaAnchor"
 
 
-class _LunaC1(_LunaBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
-    _NAME = "_LunaC1"
 
 
-class _LunaC2(_LunaBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
-    _NAME = "_LunaC2"
 
 
-class _LunaC3(_LunaBase):
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
-    _NAME = "_LunaC3"
 
 
-class _LunaC4(_LunaBase):
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
-    _NAME = "_LunaC4"
 
 
-for _i in (1, 2, 3):
-    for _cls, _tag in ((_LunaAnchor, "LunaAnchor"), (_LunaC1, "LunaC1"), (_LunaC2, "LunaC2"),
-                       (_LunaC3, "LunaC3"), (_LunaC4, "LunaC4")):
-        _n = f"DataflowSystem{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -2668,41 +1492,18 @@ for _i in (1, 2, 3):
 #  tools on /v1/chat/completions with any effort other than "none", exactly as luna
 #  does — verified directly against the API).
 # ===========================================================================
-class _TerraBase(_LunaBase):
-    _MODEL = "gpt-5.6-terra"
-    _NAME = "_TerraBase"
 
 
-class _TerraAnchor(_TerraBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
-    _NAME = "_TerraAnchor"
 
 
-class _TerraC1(_TerraBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
-    _NAME = "_TerraC1"
 
 
-class _TerraC2(_TerraBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
-    _NAME = "_TerraC2"
 
 
-class _TerraC3(_TerraBase):
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
-    _NAME = "_TerraC3"
 
 
-class _TerraC4(_TerraBase):
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
-    _NAME = "_TerraC4"
 
 
-for _i in (1, 2, 3):
-    for _cls, _tag in ((_TerraAnchor, "TerraAnchor"), (_TerraC1, "TerraC1"), (_TerraC2, "TerraC2"),
-                       (_TerraC3, "TerraC3"), (_TerraC4, "TerraC4")):
-        _n = f"DataflowSystem{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -2722,25 +1523,12 @@ for _i in (1, 2, 3):
 #          where sampling clearly pays; every earlier model saturated by 5K.
 #          10K tests whether 76.0 is sampling-limited.
 # ===========================================================================
-class _T0Control(_TerraC4):
-    _NAME = "_T0Control"
 
 
-class _T1Delta5kStats(_TerraBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
-    _NAME = "_T1Delta5kStats"
 
 
-class _T2Latest10k(_TerraBase):
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 10000; _STATS = True; _CODE = True
-    _NAME = "_T2Latest10k"
 
 
-for _i in (1, 2, 3):
-    for _cls, _tag in ((_T0Control, "T0Control"), (_T1Delta5kStats, "T1Delta5kStats"),
-                       (_T2Latest10k, "T2Latest10k")):
-        _n = f"DataflowSystem{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -2758,19 +1546,10 @@ for _i in (1, 2, 3):
 #
 #  T1's config is the base because it was round 2's numerically best arm (72.8).
 # ===========================================================================
-class _E0Medium(_T1Delta5kStats):
-    _NAME = "_E0Medium"
 
 
-class _E1High(_T1Delta5kStats):
-    _MODEL = "gpt-5.6-terra-high"
-    _NAME = "_E1High"
 
 
-for _i in (1, 2, 3):
-    for _cls, _tag in ((_E0Medium, "E0Medium"), (_E1High, "E1High")):
-        _n = f"DataflowSystem{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -2813,38 +1592,14 @@ def _mk56(base, tag, hints, split):
     return _A
 
 
-for _model_base, _pref in ((_LunaBase, "LS"), (_TerraBase, "TS")):
-    for _suffix, _hints, _split in (("0Control", False, False), ("1Hints", True, False),
-                                    ("2Split", False, True), ("3SplitHints", True, True)):
-        _tag = f"{_pref}{_suffix}"
-        _cls = _mk56(_model_base, _tag, _hints, _split)
-        globals()[f"_{_tag}"] = _cls
-        for _i in (1, 2, 3, 4, 5):
-            _n = f"DataflowSystem{_tag}Replicate{_i}"
-            globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # LS/TS reps 6-7 (user extended the pool to 7 reps per arm).
-for _pref in ("LS", "TS"):
-    for _suffix in ("0Control", "1Hints", "2Split", "3SplitHints"):
-        _tag = f"{_pref}{_suffix}"
-        _cls = globals()[f"_{_tag}"]
-        for _i in (6, 7):
-            _n = f"DataflowSystem{_tag}Replicate{_i}"
-            globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # Round-1 factorial reps 4-5 (both models). Run co-run in ONE pool; do NOT blindly
 # pool with reps 1-3 — different engine era (measured drift -4.5 pt on identical
 # config). Pool across eras only if per-arm levels match; else report separately.
-for _pref, _arms in (("Luna", ("_LunaAnchor", "_LunaC1", "_LunaC2", "_LunaC3", "_LunaC4")),
-                     ("Terra", ("_TerraAnchor", "_TerraC1", "_TerraC2", "_TerraC3", "_TerraC4"))):
-    for _cn in _arms:
-        _cls = globals()[_cn]
-        _tag = _cn[1:]
-        for _i in (4, 5):
-            _n = f"DataflowSystem{_tag}Replicate{_i}"
-            globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -2856,17 +1611,8 @@ for _pref, _arms in (("Luna", ("_LunaAnchor", "_LunaC1", "_LunaC2", "_LunaC3", "
 #  Co-run control: fresh LunaC1 reps 6-8 (5K DELTA no-stats), so C5-C1 = the
 #  stats effect measured within-pool rather than against last era's C1.
 # ===========================================================================
-class _LunaC5(_LunaBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
-    _NAME = "_LunaC5"
 
 
-for _i in (1, 2, 3, 4, 5):
-    _n = f"DataflowSystemLunaC5Replicate{_i}"
-    globals()[_n] = type(_n, (_LunaC5,), {"_NAME": _n})
-for _i in (6, 7, 8):
-    _n = f"DataflowSystemLunaC1Replicate{_i}"
-    globals()[_n] = type(_n, (_LunaC1,), {"_NAME": _n})
 
 
 # TERRA C5 — same cell as luna C5 (5K DELTA + stats/hints; config identical to
@@ -2875,23 +1621,11 @@ for _i in (6, 7, 8):
 # interaction (stats needs the 5K sample; each half alone was noise). Terra's T1 at
 # 3v3 showed +1.3 at 0.93x; this rerun at 5v3 with a co-run C1 control tests whether
 # the interaction generalizes across the 5.6 pair.
-class _TerraC5(_TerraBase):
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
-    _NAME = "_TerraC5"
 
 
-for _i in (1, 2, 3, 4, 5):
-    _n = f"DataflowSystemTerraC5Replicate{_i}"
-    globals()[_n] = type(_n, (_TerraC5,), {"_NAME": _n})
-for _i in (6, 7, 8):
-    _n = f"DataflowSystemTerraC1Replicate{_i}"
-    globals()[_n] = type(_n, (_TerraC1,), {"_NAME": _n})
 
 
 # Terra C5 pool: control extended to 5 reps (5v5).
-for _i in (9, 10):
-    _n = f"DataflowSystemTerraC1Replicate{_i}"
-    globals()[_n] = type(_n, (_TerraC1,), {"_NAME": _n})
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -2900,110 +1634,24 @@ for _i in (9, 10):
 # smoke runs; parameters mirror DataflowSystemGPT54LatestSchemaConverge with
 # only the model swapped.
 # ─────────────────────────────────────────────────────────────────────────
-class DataflowSystemStableHaiku(DataflowSystem):
-    """claude-haiku-4.5 converge stack (LATEST, flow_level=1, data_level=1)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-haiku-4.5",
-            context_mode="latest",
-            max_steps=25,
-            flow_level=1,
-            data_level=1,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name="DataflowSystemStableHaiku",
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class _GPT52FactorialBase(DataflowSystem):
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 1000
-    _STATS = False
-    _CODE = False
-    _NAME = "_GPT52FactorialBase"
-    _MODEL = "gpt-5.2"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        # `enable_code_in_snapshot` is passed ONLY by the arms that want it on,
-        # which is what the mini classes do (C3/C4 pass True; the DELTA arms
-        # never mention it and inherit the True default). It is a no-op on
-        # DELTA either way — `isCodeShownToAgent()` is
-        # `contextMode === DELTA || enableCodeInSnapshot`, so DELTA short-
-        # circuits it in the tool schema, the prompt fragment and the renderer
-        # alike — but passing `False` there would leave the recorded config
-        # differing from mini's for no behavioral reason, and someone would
-        # eventually have to re-derive that it did not matter.
-        # NOTE: a future LATEST-without-code arm must pass False EXPLICITLY;
-        # the default is True and this base will not infer it from `_CODE`.
-        if self._CODE:
-            kwargs.setdefault("enable_code_in_snapshot", True)
-        super().__init__(
-            model_type=self._MODEL,
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=1,
-            data_level=2 if self._STATS else 1,
-            column_stats=self._STATS,
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class _GPT52Anchor(_GPT52FactorialBase):
-    """gpt-5.2, DELTA, 1k, schema-only. Mimics DataflowSystemGPT5MiniDelta1kSchemaOnly."""
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = False; _CODE = False
-    _NAME = "_GPT52Anchor"
 
 
-class _GPT52C1(_GPT52FactorialBase):
-    """+sampling. gpt-5.2, DELTA, 5k, schema-only. Mimics DataflowSystemGPT5MiniDelta5kSchemaOnly."""
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = False; _CODE = False
-    _NAME = "_GPT52C1"
 
 
-class _GPT52C2(_GPT52FactorialBase):
-    """+stats. gpt-5.2, DELTA, 1k, stats + hints. Mimics DataflowSystemGPT5MiniDeltaStats1kD2."""
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 1000; _STATS = True; _CODE = False
-    _NAME = "_GPT52C2"
 
 
-class _GPT52C3(_GPT52FactorialBase):
-    """+latest. gpt-5.2, LATEST, 1k, schema-only, code in snapshot.
-    Mimics DataflowSystemGPT5MiniLatest1kCodeInSnap.
-
-    `_CODE = True` is not an extra knob: DELTA carries operator code inline per
-    event, so a code-blind LATEST cell would confound the mode axis with a code
-    axis. Same reasoning the luna/terra C3 cells use."""
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 1000; _STATS = False; _CODE = True
-    _NAME = "_GPT52C3"
 
 
-class _GPT52C4(_GPT52FactorialBase):
-    """All three. gpt-5.2, LATEST, 5k, stats + hints, code in snapshot.
-    Mimics DataflowSystemGPT5MiniLatestStats5kD2Code."""
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 5000; _STATS = True; _CODE = True
-    _NAME = "_GPT52C4"
 
 
 # Five replicates, numbered from 0. Each name gets its own scratch dir, so a
 # replicate is an independent single-shot run, not a re-score of the same one;
 # 5 is what the post-repair luna/terra table used and what the +-across-reps
 # std in that table is computed over.
-for _i in (0, 1, 2, 3, 4):
-    for _cls, _tag in ((_GPT52Anchor, "Anchor"), (_GPT52C1, "C1"), (_GPT52C2, "C2"),
-                       (_GPT52C3, "C3"), (_GPT52C4, "C4")):
-        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -3027,23 +1675,10 @@ for _i in (0, 1, 2, 3, 4):
 #  (`_LongDS2kD2` in longds/arms.py), so a 2k point here is directly readable
 #  against the LongDS layout results instead of needing a knob translation.
 # ===========================================================================
-class _GPT52C1Sample2k(_GPT52FactorialBase):
-    """C1 at 2k. gpt-5.2, DELTA, 2k, schema-only. Mimics DataflowSystemGPT5MiniDelta2kSchemaOnly."""
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 2000; _STATS = False; _CODE = False
-    _NAME = "_GPT52C1Sample2k"
 
 
-class _GPT52C4Sample2k(_GPT52FactorialBase):
-    """C4 at 2k. gpt-5.2, LATEST, 2k, stats + hints, code in snapshot.
-    No gpt-5-mini twin — see the block comment above."""
-    _CONTEXT_MODE = "latest"; _RESULT_CHARS = 2000; _STATS = True; _CODE = True
-    _NAME = "_GPT52C4Sample2k"
 
 
-for _i in (0, 1, 2, 3, 4):
-    for _cls, _tag in ((_GPT52C1Sample2k, "C1Sample2k"), (_GPT52C4Sample2k, "C4Sample2k")):
-        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -3064,38 +1699,17 @@ for _i in (0, 1, 2, 3, 4):
 #
 #  Throwaway: delete once the fix lands. Not part of any factorial.
 # ===========================================================================
-class _GPT52FileIOOld(_GPT52Anchor):
-    _NAME = "_GPT52FileIOOld"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", CODE_LEAN_ENDPOINT)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-class _GPT52FileIONew(_GPT52Anchor):
-    _NAME = "_GPT52FileIONew"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT)
-        super().__init__(verbose=verbose, *args, **kwargs)
 
 
-for _cls, _tag in ((_GPT52FileIOOld, "FileIOOld"), (_GPT52FileIONew, "FileIONew")):
-    _n = f"DataflowSystemGPT52{_tag}E2E"
-    globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # Throwaway smoke: the gpt-5.2-medium litellm alias (reasoning_effort pinned to
 # medium; the bare gpt-5.2 alias defaults to NO reasoning on chat/completions).
 # One task, checks reasoning_tokens lands in stats.json. Delete after use.
-class _GPT52MediumSmoke(_GPT52Anchor):
-    _MODEL = "gpt-5.2-medium"
-    _NAME = "_GPT52MediumSmoke"
 
 
-DataflowSystemGPT52MediumSmokeE2E = type(
-    "DataflowSystemGPT52MediumSmokeE2E", (_GPT52MediumSmoke,), {"_NAME": "DataflowSystemGPT52MediumSmokeE2E"}
-)
 
 
 # ===========================================================================
@@ -3114,14 +1728,8 @@ DataflowSystemGPT52MediumSmokeE2E = type(
 #  corresponding cell, so `GPT52MediumC4Sample2k` vs `GPT52C4Sample2k` is a
 #  clean one-variable test of what reasoning buys.
 # ===========================================================================
-class _GPT52MediumC4Sample2k(_GPT52C4Sample2k):
-    _MODEL = "gpt-5.2-medium"
-    _NAME = "_GPT52MediumC4Sample2k"
 
 
-for _i in (0, 1, 2, 3, 4):
-    _n = f"DataflowSystemGPT52MediumC4Sample2kReplicate{_i}"
-    globals()[_n] = type(_n, (_GPT52MediumC4Sample2k,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -3155,59 +1763,12 @@ for _i in (0, 1, 2, 3, 4):
 PROMPT_FIX_ENDPOINT_HAIKU = "http://localhost:3005"
 
 
-class _Haiku2kD2Base(DataflowSystem):
-    _CONTEXT_MODE = "delta"
-    _RESULT_CHARS = 2000
-    _CODE = False
-    _NAME = "_Haiku2kD2Base"
-    _MODEL = "claude-haiku-4.5"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", PROMPT_FIX_ENDPOINT_HAIKU)
-        if self._CODE:
-            kwargs.setdefault("enable_code_in_snapshot", True)
-        super().__init__(
-            model_type=self._MODEL,
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            # flow_level=0: NO `# Operators needing attention` section. Raw
-            # errors are unaffected — formatOperatorResult renders
-            # `[ERROR] <engine message>` + the failing operator's code purely on
-            # `opInfo.error`, with no flow gate. What is given up is the triage
-            # layer: topological (root-cause-first) ordering, the
-            # `blocked — upstream X errored; fix those first` line for operators
-            # that never ran (those render nothing per-operator, so that link is
-            # stated nowhere else), and the exception-keyed loader remediation
-            # hints. Measured incidence of the section on comparable arms: ~30%
-            # of tasks (33/104, 23/102, 32/104).
-            flow_level=0,
-            data_level=2,
-            column_stats=True,
-            attempt_reflection=True,
-            max_operator_result_char_limit=self._RESULT_CHARS,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class _Haiku2kDeltaStatsD2(_Haiku2kD2Base):
-    """2K, DELTA, stats + hints, d=2. The arm the `Files read:` fix unblocks."""
-    _CONTEXT_MODE = "delta"; _CODE = False
-    _NAME = "_Haiku2kDeltaStatsD2"
 
 
-class _Haiku2kLatestStatsD2(_Haiku2kD2Base):
-    """2K, LATEST, stats + hints, d=2, code in snapshot."""
-    _CONTEXT_MODE = "latest"; _CODE = True
-    _NAME = "_Haiku2kLatestStatsD2"
 
 
-for _cls, _tag in ((_Haiku2kDeltaStatsD2, "Haiku2kDeltaStatsD2"), (_Haiku2kLatestStatsD2, "Haiku2kLatestStatsD2")):
-    _n = f"DataflowSystem{_tag}Rep0"
-    globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -3221,49 +1782,14 @@ for _cls, _tag in ((_Haiku2kDeltaStatsD2, "Haiku2kDeltaStatsD2"), (_Haiku2kLates
 #               column_stats (`Column Schema and stats:` per result)
 # Everything else mirrors DataflowSystemStableHaiku.
 # ─────────────────────────────────────────────────────────────────────────
-class _HaikuContextMatrix(DataflowSystem):
-    _CONTEXT_MODE = "latest"; _FLOW = 0; _DATA = 0; _STATS = False
-    _NAME = "_HaikuContextMatrix"
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="claude-haiku-4.5",
-            context_mode=self._CONTEXT_MODE,
-            max_steps=25,
-            flow_level=self._FLOW,
-            data_level=self._DATA,
-            column_stats=self._STATS,
-            attempt_reflection=True,
-            max_operator_result_char_limit=1000,
-            max_operator_result_cell_char_limit=3000,
-            name=self._NAME,
-            verbose=verbose,
-            *args,
-            **kwargs,
-        )
 
 
-class DataflowSystemHaikuLatestBare(_HaikuContextMatrix):
-    """LATEST × flow_level=0, data_level=0 — leaf snapshot, no decoration."""
-    _NAME = "DataflowSystemHaikuLatestBare"
 
 
-class DataflowSystemHaikuLatestRich(_HaikuContextMatrix):
-    """LATEST × flow_level=1, data_level=2 + column stats."""
-    _FLOW = 1; _DATA = 2; _STATS = True
-    _NAME = "DataflowSystemHaikuLatestRich"
 
 
-class DataflowSystemHaikuDeltaBare(_HaikuContextMatrix):
-    """DELTA × flow_level=0, data_level=0 — event trajectory, no decoration."""
-    _CONTEXT_MODE = "delta"
-    _NAME = "DataflowSystemHaikuDeltaBare"
 
 
-class DataflowSystemHaikuDeltaRich(_HaikuContextMatrix):
-    """DELTA × flow_level=1, data_level=2 + column stats — the shipped shape."""
-    _CONTEXT_MODE = "delta"; _FLOW = 1; _DATA = 2; _STATS = True
-    _NAME = "DataflowSystemHaikuDeltaRich"
 
 
 # ===========================================================================
@@ -3283,23 +1809,10 @@ class DataflowSystemHaikuDeltaRich(_HaikuContextMatrix):
 #  also makes it the direct peer of gpt-5-mini's C4 (DeltaStats5kD2) — so the
 #  same config is readable across all three models.
 # ===========================================================================
-class _GPT52MediumC4(_GPT52C4):
-    """gpt-5.2 @ medium, LATEST, 5k, stats + hints, code in snapshot."""
-    _MODEL = "gpt-5.2-medium"
-    _NAME = "_GPT52MediumC4"
 
 
-class _GPT52MediumC5(_GPT52FactorialBase):
-    """gpt-5.2 @ medium, DELTA, 5k, stats + hints. New cell — see block above."""
-    _MODEL = "gpt-5.2-medium"
-    _CONTEXT_MODE = "delta"; _RESULT_CHARS = 5000; _STATS = True; _CODE = False
-    _NAME = "_GPT52MediumC5"
 
 
-for _i in (0,):
-    for _cls, _tag in ((_GPT52MediumC4, "MediumC4"), (_GPT52MediumC5, "MediumC5")):
-        _n = f"DataflowSystemGPT52{_tag}Replicate{_i}"
-        globals()[_n] = type(_n, (_cls,), {"_NAME": _n})
 
 
 # ===========================================================================
@@ -3391,3 +1904,182 @@ class DataflowSystemHaikuScopedSrcStats(_HaikuScopedBase):
         "structural": "all",
     }
     _NAME = "DataflowSystemHaikuScopedSrcStats"
+
+
+# ===========================================================================
+#  MESSAGE-FRAMING PAIR (claude-haiku-4.5) — Idea 2.
+#
+#  Identical rendering and knobs; ONLY the wire framing differs.
+#    LayoutBlock   the whole rendered trajectory as one user message per step
+#    LayoutNative  the same render as a real tool-calling transcript: assistant
+#                  turns carry actual tool_calls, each tool result carries OUR
+#                  rendered execution evidence (schema/stats/lineage/coercion)
+#
+#  Motivation: block re-renders every step so nothing prefix-matches — measured
+#  56.6% of 2.93M input tokens spent as cache WRITES (1.25x) instead of READS
+#  (0.10x) on `environment`. Native makes the prefix append-only.
+#
+#  NOTE the earlier prose variant (rendered `Action:` text in assistant turns)
+#  scored 5.0% vs 55.3%: the model narrated calls instead of making them. Native
+#  frames exist precisely to remove that ambiguity.
+# ===========================================================================
+class _HaikuLayoutBase(DataflowSystem):
+    _LAYOUT = "block"
+    _NAME = "_HaikuLayoutBase"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="claude-haiku-4.5", context_mode="delta", max_steps=25,
+            flow_level=1, data_level=2, column_stats=True, attempt_reflection=True,
+            max_operator_result_char_limit=2000, max_operator_result_cell_char_limit=3000,
+            message_layout=self._LAYOUT,
+            name=self._NAME, verbose=verbose, *args, **kwargs,
+        )
+
+
+class DataflowSystemHaikuLayoutBlock(_HaikuLayoutBase):
+    """One user block per step — the legacy framing."""
+    _LAYOUT = "block"
+    _NAME = "DataflowSystemHaikuLayoutBlock"
+
+
+class DataflowSystemHaikuLayoutBlockSplit(_HaikuLayoutBase):
+    """Block bytes, cut into [history][current state] so the history can cache.
+
+    Isolates framing from cost: this and LayoutNative are both cacheable, so a
+    score gap between them is the framing alone, not one arm paying 1.25x cache
+    writes while the other pays 0.10x reads.
+    """
+    _LAYOUT = "blockSplit"
+    _NAME = "DataflowSystemHaikuLayoutBlockSplit"
+
+
+class DataflowSystemHaikuLayoutNative(_HaikuLayoutBase):
+    """Same render, framed as a real tool-calling transcript."""
+    _LAYOUT = "native"
+    _NAME = "DataflowSystemHaikuLayoutNative"
+
+
+# ===========================================================================
+# CANONICAL CONFIG GRID  (Anchor + C1..C5) x model x replicate
+# ===========================================================================
+# One generated family replacing the ad-hoc hand-written `*Replicate*` classes.
+# Every arm carries `message_layout="blockSplit"`: the rendered context is
+# byte-identical to the legacy single block, but it is sent as
+# [history][current state] so the history is a stable prefix that prompt
+# caching can actually reuse. This is a wire-framing change only — the agent
+# sees the same text it always did (summarize.ts verifies the two halves
+# reconstruct the render before using them).
+#
+# Axes, matching the original campaign:
+#   Anchor  delta  1k  schema-only     C3  latest 1k  schema-only
+#   C1      delta  5k  schema-only     C4  latest 5k  stats
+#   C2      delta  1k  stats           C5  latest 5k  schema-only
+_GRID_CONFIGS = {
+    "Anchor": ("delta", 1000, False),
+    "C1": ("delta", 5000, False),
+    "C2": ("delta", 1000, True),
+    "C3": ("latest", 1000, False),
+    "C4": ("latest", 5000, True),
+    "C5": ("latest", 5000, False),
+}
+_GRID_MODELS = {"Haiku": "claude-haiku-4.5", "Sonnet": "claude-sonnet-5",
+                "GPT5Mini": "gpt-5-mini-medium"}
+_GRID_REPS = (1, 2, 3)
+
+
+def _make_grid_system(model_tag, model_type, cfg_tag, mode, chars, stats, rep):
+    name = f"DataflowSystem{model_tag}{cfg_tag}Rep{rep}"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        DataflowSystem.__init__(
+            self,
+            model_type=model_type,
+            context_mode=mode,
+            max_steps=25,
+            flow_level=1,
+            data_level=2 if stats else 1,
+            column_stats=stats,
+            stats_enabled=stats,
+            attempt_reflection=True,
+            max_operator_result_char_limit=chars,
+            max_operator_result_cell_char_limit=3000,
+            message_layout="blockSplit",
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+    doc = (f"{model_type}, {mode.upper()}, {chars // 1000}k result chars, "
+           f"{'stats' if stats else 'schema-only'} (rep {rep}). Cached via blockSplit.")
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
+
+
+_GRID_SYSTEMS = {}
+for _mtag, _mtype in _GRID_MODELS.items():
+    for _ctag, (_mode, _chars, _stats) in _GRID_CONFIGS.items():
+        for _rep in _GRID_REPS:
+            _cls = _make_grid_system(_mtag, _mtype, _ctag, _mode, _chars, _stats, _rep)
+            _GRID_SYSTEMS[_cls.__name__] = _cls
+            globals()[_cls.__name__] = _cls
+
+GRID_SYSTEM_NAMES = sorted(_GRID_SYSTEMS)
+
+
+# ===========================================================================
+# BEST-KNOWN CONFIG  (delta, 5k, stats)  x model x replicate
+# ===========================================================================
+# Reconstructed from the gpt-5.2-medium campaign (104 tasks x 6 workloads):
+#   DataflowSystemGPT52MediumC5Replicate0  delta 5k stats  79.1%   <- winner
+#   DataflowSystemGPT52MediumC4Replicate0  latest 5k stats 76.2%
+# Registered under `Best` rather than `C5` on purpose: the campaign's C5 and
+# the Anchor/C1..C5 grid's C5 (latest 5k, schema-only) are DIFFERENT configs
+# that happened to share a number, and collapsing them would silently redefine
+# the grid axis.
+#
+# gpt-5-mini carries this config as a PROXY: its own campaign results are not
+# in this checkout (scratch dirs are empty, no measures CSVs), so its true best
+# config is unverified here and inherited from gpt-5.2-medium.
+_BEST_MODELS = {
+    "GPT5Mini": "gpt-5-mini-medium",
+    "GPT52Medium": "gpt-5.2-medium",
+    "Luna": "gpt-5.6-luna",
+    "Terra": "gpt-5.6-terra",
+}
+
+
+def _make_best_system(model_tag, model_type, rep):
+    name = f"DataflowSystem{model_tag}BestRep{rep}"
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        DataflowSystem.__init__(
+            self,
+            model_type=model_type,
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            stats_enabled=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=5000,
+            max_operator_result_cell_char_limit=3000,
+            message_layout="blockSplit",
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+    doc = f"{model_type}, DELTA, 5k, stats — best-known config (rep {rep}). Cached via blockSplit."
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
+
+
+for _btag, _btype in _BEST_MODELS.items():
+    for _rep in _GRID_REPS:
+        _cls = _make_best_system(_btag, _btype, _rep)
+        _GRID_SYSTEMS[_cls.__name__] = _cls
+        globals()[_cls.__name__] = _cls
+
+GRID_SYSTEM_NAMES = sorted(_GRID_SYSTEMS)

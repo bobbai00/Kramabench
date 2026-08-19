@@ -211,6 +211,16 @@ def _spawn(sut, workload, task_ids, oracle, logpath):
     p = subprocess.Popen(cmd, cwd=KB_ROOT, stdout=open(logpath, "w"),
                          stderr=subprocess.STDOUT, env=env)
     _PROCS.append(p)
+    # Stagger concurrent launches. Each task creates an agent over REST and then
+    # immediately opens the ReAct WebSocket; when several start in the same
+    # millisecond the socket can be accepted and closed before the agent is
+    # registered, and the task returns 0 steps / 0 tokens / "No response from
+    # agent" with no error recorded (dataflow_agent's `if not raw: break`).
+    # Observed at 3/10 tasks with 6-wide parallelism. A short gap between
+    # spawns removes the overlap; it costs seconds per run, not minutes.
+    stagger = float(os.environ.get("KB_LAUNCH_STAGGER", "3") or 0)
+    if stagger > 0:
+        time.sleep(stagger)
     return p
 
 

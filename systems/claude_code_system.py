@@ -552,3 +552,45 @@ class ClaudeCodeSystemHaiku45PersistentChars2k(ClaudeCodeSystem):
             verbose=verbose,
             *args, **kwargs
         )
+
+
+# ===========================================================================
+# SONNET-5 ARMS  (1k / 5k output cap) x replicate
+# ===========================================================================
+# Persistent exec_mode, matching ClaudeCodeSystemHaiku45Persistent* so a
+# haiku-vs-sonnet read differs on the model alone. The 1k/5k pair mirrors the
+# code-agent Chars1k/Chars5k arms at the same knob (run_python output cap), so
+# the two SUT substrates stay comparable at equal budgets.
+_SONNET_CC_BUDGETS = (("1k", 1000), ("5k", 5000))
+_SONNET_CC_REPS = (0, 1, 2)
+
+
+def _mk_sonnet_cc(chars_tag, chars, rep):
+    name = f"ClaudeCodeSystemSonnetChars{chars_tag}Rep{rep}"
+    if name in globals():
+        raise RuntimeError(f"refusing to overwrite existing SUT {name}")
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super(cls, self).__init__(
+            model="claude-sonnet-5",
+            exec_mode="persistent",
+            max_output_chars=chars,
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+    cls = type(name, (ClaudeCodeSystem,), {
+        "__init__": __init__,
+        "__doc__": f"claude-sonnet-5 Claude Code agent, {chars_tag} output cap, persistent (rep {rep}).",
+    })
+    return name, cls
+
+
+CLAUDE_CODE_SONNET_NAMES = []
+for _ctag, _chars in _SONNET_CC_BUDGETS:
+    for _rep in _SONNET_CC_REPS:
+        _n, _c = _mk_sonnet_cc(_ctag, _chars, _rep)
+        globals()[_n] = _c
+        CLAUDE_CODE_SONNET_NAMES.append(_n)

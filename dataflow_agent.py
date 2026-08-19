@@ -128,6 +128,9 @@ class AgentSettings:
     #: channel: "all" | "source" | "nonsource" | "off". None = legacy (render
     #: every enabled channel on every operator).
     stat_scopes: Optional[dict] = None
+    #: Wire framing: "block" (one user message per step) or "native" (real
+    #: tool-calling transcript; our rendered evidence rides the tool results).
+    message_layout: Optional[str] = None
     # Versioned mode: one catalog over an immutable version DAG; strict
     # (operatorId, turn) refs on writes. See agent-service versionedMode.
     versioned_mode: bool = False
@@ -260,6 +263,8 @@ class AgentSettings:
             payload["rowLineage"] = True
         if self.stat_scopes:
             payload["statScopes"] = self.stat_scopes
+        if self.message_layout:
+            payload["messageLayout"] = self.message_layout
         if self.versioned_mode:
             payload["versionedMode"] = True
         if self.versioned_heads is not None:
@@ -615,6 +620,39 @@ def send_message(
         receive_timeout: int = 600,
         max_turn_seconds: Optional[float] = None,
 ) -> MessageResult:
+    """Run one turn, retrying a silent no-op start.
+
+    The agent-service sometimes accepts the ReAct WebSocket and closes it again
+    before the agent is ready to run. The recv loop below then falls out of
+    `if not raw: break` with 0 steps, 0 tokens and NO error, which the harness
+    scores as a wrong answer ("No response from agent") rather than an
+    infrastructure failure. It is silent and it is random: observed at 3/10
+    tasks under 6-wide parallelism and again on the first task after a service
+    restart. Retrying an empty turn costs nothing when the run was genuinely
+    empty and recovers the task when it was not.
+    """
+    attempts = int(os.environ.get("KB_EMPTY_TURN_RETRIES", "2") or 0) + 1
+    result = None
+    for attempt in range(attempts):
+        result = _send_message_once(
+            agent_id, message, agent_endpoint, receive_timeout, max_turn_seconds
+        )
+        if result.error or (result.stats or {}).get("steps"):
+            return result
+        if attempt + 1 < attempts:
+            print(f"[DataflowAgent] empty turn (0 steps, no error) — "
+                  f"retry {attempt + 1}/{attempts - 1}")
+            time.sleep(5)
+    return result
+
+
+def _send_message_once(
+        agent_id: str,
+        message: str,
+        agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
+        receive_timeout: int = 600,
+        max_turn_seconds: Optional[float] = None,
+) -> MessageResult:
     """
     Send a message to an agent via the WebSocket protocol and collect the response.
 
@@ -932,6 +970,7 @@ class DataflowAgent:
             coercion_facts: bool = False,
             row_lineage: bool = False,
             stat_scopes: Optional[dict] = None,
+            message_layout: Optional[str] = None,
             versioned_mode: bool = False,
             versioned_heads: bool | None = None,
             session_turns: bool = False,
@@ -1036,6 +1075,7 @@ class DataflowAgent:
             coercion_facts=coercion_facts,
             row_lineage=row_lineage,
             stat_scopes=stat_scopes,
+            message_layout=message_layout,
             versioned_mode=versioned_mode,
             versioned_heads=versioned_heads,
             session_turns=session_turns,

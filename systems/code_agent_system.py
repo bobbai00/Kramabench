@@ -213,160 +213,38 @@ Your last line MUST BE: **Final Answer: <value>**"""
 
 
 # Pre-configured variants
-class CodeAgentSystemHaiku(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="claude-haiku-4.5", name="CodeAgentSystemHaiku", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGPT(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="gpt-5-mini", name="CodeAgentSystemGPT", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemHaiku45(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="claude-haiku-4.5", name="CodeAgentSystemHaiku45", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt52(CodeAgentSystem):
-    """CodeAgentSystem using GPT-5.2 model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="gpt-5.2", name="CodeAgentSystemGpt52", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt52Chars2k(CodeAgentSystem):
-    """gpt-5.2 code agent, 2k stdout-preview cap (analog of dataflow 2k result char limit)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars2k",
-            max_print_outputs_length=2000, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars5k(CodeAgentSystem):
-    """gpt-5.2 code agent, 5k stdout-preview cap (analog of dataflow 5k result char limit)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars5k",
-            max_print_outputs_length=5000, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars2kGuided(CodeAgentSystem):
-    """Chars2k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active; prompt-parity
-    twin of the dataflow agent's always-on code-mode principles)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars2kGuided",
-            max_print_outputs_length=2000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars3kGuided(CodeAgentSystem):
-    """Chars3k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars3kGuided",
-            max_print_outputs_length=3000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars3kGuidedExplore(CodeAgentSystem):
-    """Exploration-mode twin of Chars3kGuided: identical settings; run with
-    kb.py --no-oracle so the prompt carries the domain-lake glob instead of
-    gold files. Separate name keeps scratch disjoint from oracle runs."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="CodeAgentSystemGpt52Chars3kGuidedExplore",
-            max_print_outputs_length=3000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars5kGuided(CodeAgentSystem):
-    """Chars5k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars5kGuided",
-            max_print_outputs_length=5000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars7kGuided(CodeAgentSystem):
-    """Chars7k + CUSTOM_INSTRUCTIONS ON (data-pitfalls guidance active)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars7kGuided",
-            max_print_outputs_length=7000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52Chars10kGuided(CodeAgentSystem):
-    """Chars10k + CUSTOM_INSTRUCTIONS ON (10k stdout-preview cap, data-pitfalls guidance)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2", name="CodeAgentSystemGpt52Chars10kGuided",
-            max_print_outputs_length=10000, use_custom_prompt=True, verbose=verbose, *args, **kwargs,
-        )
 
 
-class CodeAgentSystemGpt52FineGrained(CodeAgentSystem):
-    """CodeAgentSystem using GPT-5.2 model with fine-grained (one-line-per-action) prompt."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="CodeAgentSystemGpt52FineGrained",
-            use_fine_grained_prompt=True,
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
-class CodeAgentSystemGpt5MiniHigh(CodeAgentSystem):
-    """CodeAgentSystem using GPT-5-mini-high model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="gpt-5-mini-high", name="CodeAgentSystemGpt5MiniHigh", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniMedium(CodeAgentSystem):
-    """CodeAgentSystem using GPT-5-mini-medium model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="gpt-5-mini-medium", name="CodeAgentSystemGpt5MiniMedium", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniLow(CodeAgentSystem):
-    """CodeAgentSystem using GPT-5-mini-low model."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(model_type="gpt-5-mini-low", name="CodeAgentSystemGpt5MiniLow", verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt52FullInput(CodeAgentSystem):
-    """CodeAgentSystem using GPT-5.2 model with full input mode (all dataset files via wildcard)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5.2",
-            name="CodeAgentSystemGpt52FullInput",
-            verbose=verbose,
-            *args, **kwargs
-        )
-
-    def serve_query(self, query, query_id="default-0", subset_files=None):
-        """Override to always use full input (ignore subset_files)."""
-        return super().serve_query(query, query_id, subset_files=None)
 
 
 # Model-routing proxy (claude->Anthropic, gpt/o->OpenAI). Code-agent peers that
@@ -374,141 +252,24 @@ class CodeAgentSystemGpt52FullInput(CodeAgentSystem):
 PROXY_API_BASE = "http://localhost:8099/v1"
 
 
-class CodeAgentSystemGpt5MiniProxy(CodeAgentSystem):
-    """Code agent on gpt-5-mini via the routing proxy (-> OpenAI). Peer of the
-    DataflowSystem gpt-5-mini latest+replay config."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            api_base=PROXY_API_BASE,
-            name="CodeAgentSystemGpt5MiniProxy",
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
-class CodeAgentSystemGpt5MiniProxyChars3kGuided(CodeAgentSystem):
-    """gpt-5-mini proxy code agent, 3k stdout-preview cap, custom data guidance."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars3kGuided",
-            max_print_outputs_length=3000,
-            use_custom_prompt=True,
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kPitfalls(CodeAgentSystem):
-    """gpt-5-mini proxy code agent, 1k stdout-preview cap, data-pitfalls guidance
-    (no one-op-per-step mandate). C1-anchor analog for the code-agent side —
-    twin of DataflowSystemGPT5MiniDelta1kSchemaOnly at the stdout-cap knob."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kPitfalls",
-            max_print_outputs_length=1000,
-            use_pitfalls_prompt=True,
-            use_custom_prompt=False,
-            use_fine_grained_prompt=False,
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kPitfalls(CodeAgentSystem):
-    """gpt-5-mini proxy code agent, 5k stdout-preview cap, data-pitfalls guidance
-    (no one-op-per-step mandate). C1-ray analog for the code-agent side."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kPitfalls",
-            max_print_outputs_length=5000,
-            use_pitfalls_prompt=True,
-            use_custom_prompt=False,
-            use_fine_grained_prompt=False,
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate1(CodeAgentSystemGpt5MiniProxyChars1kPitfalls):
-    """Replicate 2/3 of the 1k pitfalls arm (variance estimate)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(verbose=verbose, *args, **kwargs)
-        self.name = "CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate1"
-        self.output_dir = f"./system_scratch/{self.name}"
-        os.makedirs(self.output_dir, exist_ok=True)
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate2(CodeAgentSystemGpt5MiniProxyChars1kPitfalls):
-    """Replicate 3/3 of the 1k pitfalls arm (variance estimate)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(verbose=verbose, *args, **kwargs)
-        self.name = "CodeAgentSystemGpt5MiniProxyChars1kPitfallsReplicate2"
-        self.output_dir = f"./system_scratch/{self.name}"
-        os.makedirs(self.output_dir, exist_ok=True)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate1(CodeAgentSystemGpt5MiniProxyChars5kPitfalls):
-    """Replicate 2/3 of the 5k pitfalls arm (variance estimate)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(verbose=verbose, *args, **kwargs)
-        self.name = "CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate1"
-        self.output_dir = f"./system_scratch/{self.name}"
-        os.makedirs(self.output_dir, exist_ok=True)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate2(CodeAgentSystemGpt5MiniProxyChars5kPitfalls):
-    """Replicate 3/3 of the 5k pitfalls arm (variance estimate)."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(verbose=verbose, *args, **kwargs)
-        self.name = "CodeAgentSystemGpt5MiniProxyChars5kPitfallsReplicate2"
-        self.output_dir = f"./system_scratch/{self.name}"
-        os.makedirs(self.output_dir, exist_ok=True)
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kGuided(CodeAgentSystem):
-    """gpt-5-mini, 1k stdout cap, ORIGINAL CUSTOM_INSTRUCTIONS (one step = one
-    operation per code block + data-pitfalls checklist)."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kGuided",
-            max_print_outputs_length=1000,
-            use_custom_prompt=True,
-            use_fine_grained_prompt=False,
-            use_pitfalls_prompt=False,
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kGuided(CodeAgentSystem):
-    """gpt-5-mini, 5k stdout cap, ORIGINAL CUSTOM_INSTRUCTIONS."""
-
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini",
-            api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kGuided",
-            max_print_outputs_length=5000,
-            use_custom_prompt=True,
-            use_fine_grained_prompt=False,
-            use_pitfalls_prompt=False,
-            verbose=verbose,
-            *args, **kwargs
-        )
 
 
 def _mk_replicate(base_cls, n):
@@ -523,106 +284,30 @@ def _mk_replicate(base_cls, n):
     return _Rep
 
 
-CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars1kGuided, 1)
-CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars1kGuided, 2)
-CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars5kGuided, 1)
-CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2 = _mk_replicate(CodeAgentSystemGpt5MiniProxyChars5kGuided, 2)
 
 
 # --- CA-guided replicate study (gpt-5-mini via litellm :4000): guided code agent
 # at 1k and 5k stdout-preview caps, 5 single-shot samples each (base = rep0,
 # + Replicate1-4). Code-agent runs never touch the Texera engine, so these pools
 # can run concurrently with dataflow pools.
-class CodeAgentSystemGpt5MiniProxyChars1kGuided(CodeAgentSystem):
-    """gpt-5-mini proxy code agent, 1k stdout cap, custom data guidance."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kGuided",
-            max_print_outputs_length=1000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kGuided(CodeAgentSystem):
-    """gpt-5-mini proxy code agent, 5k stdout cap, custom data guidance."""
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kGuided",
-            max_print_outputs_length=5000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate1",
-            max_print_outputs_length=1000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate2",
-            max_print_outputs_length=1000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate3(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate3",
-            max_print_outputs_length=1000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate4(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars1kGuidedReplicate4",
-            max_print_outputs_length=1000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate1",
-            max_print_outputs_length=5000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate2",
-            max_print_outputs_length=5000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate3(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate3",
-            max_print_outputs_length=5000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
-class CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate4(CodeAgentSystem):
-    def __init__(self, verbose: bool = False, *args, **kwargs):
-        super().__init__(
-            model_type="gpt-5-mini", api_base="http://localhost:4000",
-            name="CodeAgentSystemGpt5MiniProxyChars5kGuidedReplicate4",
-            max_print_outputs_length=5000, use_custom_prompt=True,
-            verbose=verbose, *args, **kwargs)
 
 
 # ===========================================================================
@@ -649,12 +334,18 @@ _MATRIX_MODELS = (
     ("MiniMed",  "gpt-5-mini-medium"),  # gpt-5-mini @ medium
     ("Gpt52Med", "gpt-5.2-medium"),     # gpt-5.2    @ medium
     ("Luna",     "gpt-5.6-luna"),       # pinned medium at the proxy
-    ("Haiku45",  "claude-haiku-4.5"),   # no reasoning-effort knob
+    ("Sonnet",   "claude-sonnet-5"),    # 1k/5k only, see _MODEL_BUDGETS
 )
 
+#: Replicates per cell. The matrix is guided-only (CUSTOM_INSTRUCTIONS ON):
+#: the unguided arms were a prompt A/B that is finished, and keeping them
+#: doubles the grid for a comparison nobody runs any more.
+_MATRIX_REPS = (0, 1, 2)
 
-def _mk_matrix_arm(model_tag, model_alias, chars_tag, chars, guided):
-    name = f"CodeAgentSystem{model_tag}Chars{chars_tag}{'Guided' if guided else ''}"
+
+def _mk_matrix_arm(model_tag, model_alias, chars_tag, chars, guided, rep=None):
+    name = (f"CodeAgentSystem{model_tag}Chars{chars_tag}"
+            f"{'Guided' if guided else ''}{'' if rep is None else f'Rep{rep}'}")
     # Never shadow an existing arm: rebinding a name that already has recorded
     # results would silently change what that SUT means.
     if name in globals():
@@ -678,8 +369,15 @@ def _mk_matrix_arm(model_tag, model_alias, chars_tag, chars, guided):
     return name, cls
 
 
+#: Per-model budget override. Models absent here take the full _CHAR_BUDGETS
+#: sweep; sonnet-5 is registered at the two ends only (1k / 5k).
+_MODEL_BUDGETS = {"Sonnet": (("1k", 1000), ("5k", 5000))}
+
+CODE_AGENT_MATRIX_NAMES = []
 for _tag, _alias in _MATRIX_MODELS:
-    for _ctag, _chars in _CHAR_BUDGETS:
-        for _guided in (False, True):
-            _n, _c = _mk_matrix_arm(_tag, _alias, _ctag, _chars, _guided)
+    for _ctag, _chars in _MODEL_BUDGETS.get(_tag, _CHAR_BUDGETS):
+        for _rep in _MATRIX_REPS:
+            _n, _c = _mk_matrix_arm(_tag, _alias, _ctag, _chars, True, _rep)
             globals()[_n] = _c
+            CODE_AGENT_MATRIX_NAMES.append(_n)
+CODE_AGENT_MATRIX_NAMES = sorted(CODE_AGENT_MATRIX_NAMES)
