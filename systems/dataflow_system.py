@@ -2229,3 +2229,61 @@ def _mk_luna_latest_1k(name, layout):
 
 DataflowSystemLunaLatest1kRep1 = _mk_luna_latest_1k("DataflowSystemLunaLatest1kRep1", None)
 DataflowSystemLunaLatest1kOpSplitRep1 = _mk_luna_latest_1k("DataflowSystemLunaLatest1kOpSplitRep1", "opSplit")
+
+
+# ===========================================================================
+# LUNA 2K + STATS/HINTS — code-visibility x context-mode, 2026-09-02 batch
+# ===========================================================================
+# All three: gpt-5.6-luna, 2k result chars, data_level=2 + column_stats (which
+# is what produces BOTH the per-column stats block and the `Output Table
+# profile` hints — they ride together), max_steps=25, flow_level=1.
+#
+#   Delta2kStatsRep2            DELTA,  code inline per Action (unavoidable)
+#   Latest2kStatsCodeRep1       LATEST, `Code:` block per operator
+#   Latest2kStatsNoCodeRep1     LATEST, code-blind snapshot
+#
+# NOTE ON THE MISSING 4th CELL: "DELTA without code" is NOT expressible.
+# `enable_code_in_snapshot` is gated on LATEST at the service (server.ts
+# ~325/336), and `renderToolCall` (context-utils.ts:3045) unconditionally emits
+# the full `code:` block under each DELTA `Action:` unless a superseded-revision
+# fold fact is supplied; `codeMaxChars` only clamps the LATEST snapshot path.
+# So DELTA is inherently code-visible and the 2x2 is a 3-cell design. Adding the
+# cell would need a new render knob, not a flag flip.
+#
+# The code-visibility axis also swings the PROMPT, which is the point of the
+# pair: code-visible arms get principles.code-visible.md + the brief-summary
+# tool description ("do NOT restate the detailed logic"), code-blind arms get
+# principles.code-blind.md + the detailed-summary description ("include the
+# significant logic: columns, keys, filters, aggregations"). So
+# Latest2kStatsCode vs NoCode is a joint render+prompt contrast, not render-only.
+# ===========================================================================
+def _mk_luna_2k_stats(name, mode, code):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        DataflowSystem.__init__(
+            self,
+            model_type="gpt-5.6-luna",
+            context_mode=mode,
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=code,
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+    doc = (f"gpt-5.6-luna, {mode.upper()}, 2k chars, stats + hints, "
+           f"code-in-snapshot {'ON' if code else 'OFF'}.")
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
+
+
+DataflowSystemLunaDelta2kStatsRep2 = _mk_luna_2k_stats(
+    "DataflowSystemLunaDelta2kStatsRep2", "delta", False)
+DataflowSystemLunaLatest2kStatsCodeRep1 = _mk_luna_2k_stats(
+    "DataflowSystemLunaLatest2kStatsCodeRep1", "latest", True)
+DataflowSystemLunaLatest2kStatsNoCodeRep1 = _mk_luna_2k_stats(
+    "DataflowSystemLunaLatest2kStatsNoCodeRep1", "latest", False)

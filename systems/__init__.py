@@ -45,6 +45,11 @@ from .dataflow_system import (
     DataflowSystemLunaLatest1kRep1,
     DataflowSystemLunaLatest1kOpSplitRep1,
 )
+from .dataflow_system import (
+    DataflowSystemLunaDelta2kStatsRep2,
+    DataflowSystemLunaLatest2kStatsCodeRep1,
+    DataflowSystemLunaLatest2kStatsNoCodeRep1,
+)
 
 
 # Canonical Anchor/C1..C5 grid (model x config x replicate). Generated in
