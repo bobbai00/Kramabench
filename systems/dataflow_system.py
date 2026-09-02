@@ -83,6 +83,7 @@ class DataflowSystem(System):
         index_rich_tables: Optional[int] = None,
         index_detailed_operators: Optional[int] = None,
         index_thin_observations: Optional[bool] = None,
+        cache_aligned_context: Optional[bool] = None,
         agent_service_endpoint: Optional[str] = None,
         fold_resolved_revisions_config: Optional[Dict[str, object]] = None,
         probe_retirement_config: Optional[Dict[str, object]] = None,
@@ -213,6 +214,7 @@ class DataflowSystem(System):
         self.index_rich_tables = index_rich_tables
         self.index_detailed_operators = index_detailed_operators
         self.index_thin_observations = index_thin_observations
+        self.cache_aligned_context = cache_aligned_context
         self.agent_service_endpoint = agent_service_endpoint
         self.fold_resolved_revisions_config = fold_resolved_revisions_config
         self.probe_retirement_config = probe_retirement_config
@@ -415,6 +417,7 @@ class DataflowSystem(System):
             index_rich_tables=self.index_rich_tables,
             index_detailed_operators=self.index_detailed_operators,
             index_thin_observations=self.index_thin_observations,
+            cache_aligned_context=self.cache_aligned_context,
             **({"agent_service_endpoint": self.agent_service_endpoint} if self.agent_service_endpoint else {}),
             fold_resolved_revisions_config=self.fold_resolved_revisions_config,
             probe_retirement_config=self.probe_retirement_config,
@@ -2083,3 +2086,146 @@ for _btag, _btype in _BEST_MODELS.items():
         globals()[_cls.__name__] = _cls
 
 GRID_SYSTEM_NAMES = sorted(_GRID_SYSTEMS)
+
+
+# ===========================================================================
+# LUNA DELTA 2K + STATS — the missing rows-axis midpoint on the stats ray
+# ===========================================================================
+# The luna factorial (bobflow campaign, 104 tasks x 6 workloads) sampled the
+# stats ray at only two char budgets:
+#
+#   LunaC2   delta 1k stats+hints   72.4   <- this arm sits between them
+#   LunaC5   delta 5k stats+hints   74.0
+#
+# so the 1.6 pt C2->C5 gap cannot be attributed to the rows budget without a
+# midpoint. This arm is that midpoint.
+#
+# Constructed to match bobflow's `_LunaBase` argument-for-argument, NOT the
+# Anchor/C1..C5 `_GRID_CONFIGS` family: the grid pins
+# `message_layout="blockSplit"` and the historical luna arms left it unset
+# (None), so inheriting the grid would add a wire-framing change on top of the
+# char-budget change and make the comparison two-variable.
+#
+# `enable_code_in_snapshot=False` is explicit for self-documentation only —
+# server.ts:325/336 gate code-in-snapshot on `contextMode === LATEST`, so it is
+# already a no-op in DELTA. `stats_enabled` is likewise omitted to match
+# `_LunaBase`: it only lifts data_level to >=1 and data_level=2 is set here.
+#
+# CAVEAT for whoever reads the number: this runs on a LATER agent-service build
+# than the luna factorial (which ran at sha 1075905b5 from the bobflow
+# code-lean worktree). No co-run control was recorded, so a 2k-vs-C2/C5 read
+# carries the build delta as a confound.
+# ===========================================================================
+class DataflowSystemLunaDeltaStats2kRep1(DataflowSystem):
+    """gpt-5.6-luna, DELTA, 2k result chars, stats + hints, no code-in-snapshot."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.6-luna",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=False,
+            name="DataflowSystemLunaDeltaStats2kRep1",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ===========================================================================
+# LUNA DELTA 2K + STATS, CACHE-ALIGNED — same knobs as
+# DataflowSystemLunaDeltaStats2kRep1, plus append-only message packaging.
+# ===========================================================================
+# Byte-for-byte the 2k arm above with ONE difference: cache_aligned_context.
+# Measured motivation (24,775 task-runs, block layout): gpt-5.6-luna/terra and
+# claude-* keep cached-input PINNED (cv 0.007-0.011, cached last/first 0.98-1.00
+# while input grows 1.84-2.45x), because the legacy loop re-renders the whole
+# trajectory into one fresh user message per step. gpt-5.2 / gpt-5-mini instead
+# GROW (cv 0.23, cached tracks input, 100% 128-token aligned) — they do true
+# intra-message prefix caching, which the 5.6 deployment does not:
+# gpt-5.6-luna returns 0 cache for "text appended inside a message" where
+# gpt-5.2 serves a 124.8k prefix hit (gateway probe, BUSINESS_CAMPAIGN.md).
+#
+# cacheAlignedContext renders once at step 1 and lets the SDK append
+# assistant/tool messages for steps 2..N, so earlier messages stay
+# byte-untouched — the one shape luna DOES credit.
+#
+# WATCH ITEM: putting rendered `Action:` prose in an assistant turn makes the
+# model imitate it and narrate tool calls instead of calling them (measured
+# 5.0% vs 55.3% tool-call rate, types/agent.ts:448-452). cacheAlignedContext
+# carries real tool-call/tool-result parts rather than prose, so it should not
+# trip that — but the tool-call rate is the primary guard on this arm, not cost.
+# ===========================================================================
+class DataflowSystemLunaDeltaStats2kCacheRep1(DataflowSystem):
+    """gpt-5.6-luna, DELTA, 2k chars, stats + hints, append-only message packaging."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.6-luna",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=False,
+            cache_aligned_context=True,
+            name="DataflowSystemLunaDeltaStats2kCacheRep1",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+
+
+# ===========================================================================
+# LUNA LATEST 1K — opSplit experiment pair (C3 config: latest, 1k, no stats, +code)
+# ===========================================================================
+# Single-knob pair. Both are the bobflow LunaC3 config; they differ only in
+# message framing, which is a wire change guarded by a byte-parity check
+# (summarize.ts) — the model sees the same render either way.
+#
+#   ...Latest1kRep1          message_layout unset -> "block": one user message
+#   ...Latest1kOpSplitRep1   message_layout="opSplit": one message per operator
+#
+# Why: LATEST snapshots are already 85% mean / 100% median byte-stable
+# step-to-step (measured, luna C3 578 step-pairs / C4 495), but shipping them as
+# one message earns luna nothing (cached pinned at ~5.3k = system+tools only).
+# opSplit localises invalidation to the revised operator and those after it.
+# Order is left as the renderer produced it — last-modified reordering would
+# cache better but breaks dataflow reading order, a separate experiment.
+# ===========================================================================
+def _mk_luna_latest_1k(name, layout):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        DataflowSystem.__init__(
+            self,
+            model_type="gpt-5.6-luna",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=1,
+            column_stats=False,
+            attempt_reflection=True,
+            max_operator_result_char_limit=1000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=True,
+            message_layout=layout,
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+    doc = (f"gpt-5.6-luna, LATEST, 1k chars, schema-only, code-in-snapshot; "
+           f"message framing = {layout or 'block'}.")
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
+
+
+DataflowSystemLunaLatest1kRep1 = _mk_luna_latest_1k("DataflowSystemLunaLatest1kRep1", None)
+DataflowSystemLunaLatest1kOpSplitRep1 = _mk_luna_latest_1k("DataflowSystemLunaLatest1kOpSplitRep1", "opSplit")

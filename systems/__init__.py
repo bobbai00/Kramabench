@@ -38,6 +38,14 @@ from .dataflow_system import (
     DataflowSystemHaikuLayoutNative,
 )
 
+# Luna rows-axis midpoint on the stats ray (delta 2k + stats, no code).
+from .dataflow_system import DataflowSystemLunaDeltaStats2kRep1
+from .dataflow_system import DataflowSystemLunaDeltaStats2kCacheRep1
+from .dataflow_system import (
+    DataflowSystemLunaLatest1kRep1,
+    DataflowSystemLunaLatest1kOpSplitRep1,
+)
+
 
 # Canonical Anchor/C1..C5 grid (model x config x replicate). Generated in
 # dataflow_system.py; re-exported here so the harness's getattr lookup finds

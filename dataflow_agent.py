@@ -161,6 +161,7 @@ class AgentSettings:
     # 31-operator task and flooded a 381-operator one with the same constant.
     index_detailed_operators: Optional[int] = None
     index_thin_observations: Optional[bool] = None
+    cache_aligned_context: Optional[bool] = None
     # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
     # one-line resolution facts. None keeps the baseline byte-identical.
     fold_resolved_revisions_config: Optional[dict[str, Any]] = None
@@ -283,6 +284,13 @@ class AgentSettings:
             payload["indexDetailedOperators"] = self.index_detailed_operators
         if self.index_thin_observations is not None:
             payload["indexThinObservations"] = self.index_thin_observations
+        # Append-only message packaging: render once at step 1, let the SDK
+        # accumulate assistant/tool messages for steps 2..N so earlier messages
+        # stay byte-untouched. Required for gpt-5.6-* (whole-message cache match
+        # only) and for Anthropic (its injected breakpoints need a stable
+        # boundary). Ignored by the service under LATEST.
+        if self.cache_aligned_context is not None:
+            payload["cacheAlignedContext"] = self.cache_aligned_context
         if self.fold_resolved_revisions_config is not None:
             payload["foldResolvedRevisionsConfig"] = self.fold_resolved_revisions_config
         if self.probe_retirement_config is not None:
@@ -980,6 +988,7 @@ class DataflowAgent:
             index_rich_tables: Optional[int] = None,
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
+            cache_aligned_context: Optional[bool] = None,
             fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
@@ -1085,6 +1094,7 @@ class DataflowAgent:
             index_rich_tables=index_rich_tables,
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
+            cache_aligned_context=cache_aligned_context,
             fold_resolved_revisions_config=fold_resolved_revisions_config,
             probe_retirement_config=probe_retirement_config,
             enable_inspect_tool=enable_inspect_tool,
