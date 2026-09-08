@@ -84,6 +84,7 @@ class DataflowSystem(System):
         index_detailed_operators: Optional[int] = None,
         index_thin_observations: Optional[bool] = None,
         cache_aligned_context: Optional[bool] = None,
+        grain_split: Optional[bool] = None,
         agent_service_endpoint: Optional[str] = None,
         fold_resolved_revisions_config: Optional[Dict[str, object]] = None,
         probe_retirement_config: Optional[Dict[str, object]] = None,
@@ -215,6 +216,7 @@ class DataflowSystem(System):
         self.index_detailed_operators = index_detailed_operators
         self.index_thin_observations = index_thin_observations
         self.cache_aligned_context = cache_aligned_context
+        self.grain_split = grain_split
         self.agent_service_endpoint = agent_service_endpoint
         self.fold_resolved_revisions_config = fold_resolved_revisions_config
         self.probe_retirement_config = probe_retirement_config
@@ -418,6 +420,7 @@ class DataflowSystem(System):
             index_detailed_operators=self.index_detailed_operators,
             index_thin_observations=self.index_thin_observations,
             cache_aligned_context=self.cache_aligned_context,
+            grain_split=self.grain_split,
             **({"agent_service_endpoint": self.agent_service_endpoint} if self.agent_service_endpoint else {}),
             fold_resolved_revisions_config=self.fold_resolved_revisions_config,
             probe_retirement_config=self.probe_retirement_config,
@@ -2287,3 +2290,39 @@ DataflowSystemLunaLatest2kStatsCodeRep1 = _mk_luna_2k_stats(
     "DataflowSystemLunaLatest2kStatsCodeRep1", "latest", True)
 DataflowSystemLunaLatest2kStatsNoCodeRep1 = _mk_luna_2k_stats(
     "DataflowSystemLunaLatest2kStatsNoCodeRep1", "latest", False)
+
+
+# ===========================================================================
+# GRAIN SPLIT pilot — DataflowSystemLunaLatest2kStatsCodeRep1 + grain_split.
+# ===========================================================================
+# Byte-identical to the LATEST+code 2k stats arm with ONE difference: every
+# submitted operator is cut where row identity changes (filter / merge /
+# concat / dedup / groupby-aggregate) into a chain of operators, and each
+# row-changing stage checks the assumption it makes about its input on the
+# FULL input table (filter literal covers the domain; group key is one entity
+# per value; join keys overlap / non-null; no duplicate rows before an
+# aggregate; to_numeric parses). Findings render as `[check]` lines under the
+# stage's result — only when violated.
+# Same-vintage control: re-run DataflowSystemLunaLatest2kStatsCodeRep1.
+# ===========================================================================
+class DataflowSystemLunaLatest2kStatsCodeGrainRep1(DataflowSystem):
+    """gpt-5.6-luna, LATEST, 2k chars, stats + hints, code-in-snapshot, GRAIN SPLIT."""
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        super().__init__(
+            model_type="gpt-5.6-luna",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=True,
+            grain_split=True,
+            name="DataflowSystemLunaLatest2kStatsCodeGrainRep1",
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )

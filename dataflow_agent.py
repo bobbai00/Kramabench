@@ -162,6 +162,9 @@ class AgentSettings:
     index_detailed_operators: Optional[int] = None
     index_thin_observations: Optional[bool] = None
     cache_aligned_context: Optional[bool] = None
+    # Grain split: cut each submitted operator where row identity changes and
+    # check each row-changing step's input assumption on the full table.
+    grain_split: Optional[bool] = None
     # Rank-3 static rule (DELTA-only): fold resolved operator revisions into
     # one-line resolution facts. None keeps the baseline byte-identical.
     fold_resolved_revisions_config: Optional[dict[str, Any]] = None
@@ -291,6 +294,8 @@ class AgentSettings:
         # boundary). Ignored by the service under LATEST.
         if self.cache_aligned_context is not None:
             payload["cacheAlignedContext"] = self.cache_aligned_context
+        if self.grain_split is not None:
+            payload["grainSplit"] = self.grain_split
         if self.fold_resolved_revisions_config is not None:
             payload["foldResolvedRevisionsConfig"] = self.fold_resolved_revisions_config
         if self.probe_retirement_config is not None:
@@ -989,6 +994,7 @@ class DataflowAgent:
             index_detailed_operators: Optional[int] = None,
             index_thin_observations: Optional[bool] = None,
             cache_aligned_context: Optional[bool] = None,
+            grain_split: Optional[bool] = None,
             fold_resolved_revisions_config: Optional[dict[str, Any]] = None,
             probe_retirement_config: Optional[dict[str, Any]] = None,
             enable_inspect_tool: bool = False,
@@ -1095,6 +1101,7 @@ class DataflowAgent:
             index_detailed_operators=index_detailed_operators,
             index_thin_observations=index_thin_observations,
             cache_aligned_context=cache_aligned_context,
+            grain_split=grain_split,
             fold_resolved_revisions_config=fold_resolved_revisions_config,
             probe_retirement_config=probe_retirement_config,
             enable_inspect_tool=enable_inspect_tool,
