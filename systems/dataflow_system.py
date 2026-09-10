@@ -2322,6 +2322,12 @@ def _mk_luna_native(name, selection, inspect=False):
             enable_code_in_snapshot=True,
             result_selection=selection,
             enable_inspect_tool=inspect,
+            # The engine's sync-execution idle timeout. One typed chain adds
+            # several Python hops over the same table; on the 320k-row
+            # environment workload each hop costs ~120 s in this engine
+            # (measured: 22-file scan 74 s, scan + one filter 195 s), so the
+            # code-mode default of 4 min trips under 4-way parallelism.
+            execution_timeout_minutes=10,
             name=name,
             verbose=verbose,
             *args,
