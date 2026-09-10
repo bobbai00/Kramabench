@@ -43,6 +43,7 @@ class DataflowSystem(System):
         disabled_tools: Optional[List[str]] = None,
         stats_enabled: bool = False,
         include_operator_properties: bool = None,
+        result_selection: Optional[str] = None,
         schema_in_result: bool = False,
         loader_hint: bool = False,
         value_format_flags: bool = False,
@@ -157,6 +158,8 @@ class DataflowSystem(System):
         self.disabled_tools = disabled_tools
         # None -> server default (true).
         self.include_operator_properties = include_operator_properties
+        # NATIVE mode result selection ("all" | "rule"); None -> server default.
+        self.result_selection = result_selection
         # ---- DECORATE control: the two ordinal facet levels (CONTEXT-DESIGN §5) ----
         # Context decoration is controlled purely by flow_level / data_level (each
         # expands, agent-service side, into the per-rung render flags via the rung
@@ -391,6 +394,7 @@ class DataflowSystem(System):
             allowed_operator_types=self.allowed_operator_types,
             disabled_tools=self.disabled_tools,
             include_operator_properties=self.include_operator_properties,
+            result_selection=self.result_selection,
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
             agent_turns=self.agent_turns,
@@ -599,6 +603,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
                 "include_operator_properties": self.include_operator_properties,
+                "result_selection": self.result_selection,
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
                 "agent_turns": self.agent_turns,
@@ -2287,3 +2292,47 @@ DataflowSystemLunaLatest2kStatsCodeRep1 = _mk_luna_2k_stats(
     "DataflowSystemLunaLatest2kStatsCodeRep1", "latest", True)
 DataflowSystemLunaLatest2kStatsNoCodeRep1 = _mk_luna_2k_stats(
     "DataflowSystemLunaLatest2kStatsNoCodeRep1", "latest", False)
+
+
+# ===========================================================================
+# NATIVE mode (feat/op-granularity): fixed-grain typed operators (Scan /
+# Filter / Project / Compute / Aggregate / Join / Union / Distinct / Sort /
+# Limit + UDF) compiled to Python by the agent-service, on the same luna /
+# LATEST / 2k / stats configuration as Latest2kStatsCodeRep1 so the only
+# contrast is the operator grain and the result selection:
+#
+#   NativeAllRep1          every operator's full result block (naive)
+#   NativeRuleRep1         ship only what the data decided (full / count / header)
+#   NativeRuleInspectRep1  the rule + the read-only inspectResult pull tool
+# ===========================================================================
+def _mk_luna_native(name, selection, inspect=False):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        DataflowSystem.__init__(
+            self,
+            model_type="gpt-5.6-luna",
+            agent_mode="native",
+            context_mode="latest",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=True,
+            result_selection=selection,
+            enable_inspect_tool=inspect,
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+    doc = (f"gpt-5.6-luna, NATIVE typed operators, LATEST, 2k chars, stats + hints, "
+           f"result selection {selection}{', inspectResult on' if inspect else ''}.")
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
+
+
+DataflowSystemLunaNativeAllRep1 = _mk_luna_native("DataflowSystemLunaNativeAllRep1", "all")
+DataflowSystemLunaNativeRuleRep1 = _mk_luna_native("DataflowSystemLunaNativeRuleRep1", "rule")
+DataflowSystemLunaNativeRuleInspectRep1 = _mk_luna_native(
+    "DataflowSystemLunaNativeRuleInspectRep1", "rule", True)
