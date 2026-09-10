@@ -2342,3 +2342,38 @@ DataflowSystemLunaNativeAllRep1 = _mk_luna_native("DataflowSystemLunaNativeAllRe
 DataflowSystemLunaNativeRuleRep1 = _mk_luna_native("DataflowSystemLunaNativeRuleRep1", "rule")
 DataflowSystemLunaNativeRuleInspectRep1 = _mk_luna_native(
     "DataflowSystemLunaNativeRuleInspectRep1", "rule", True)
+
+
+# ---------------------------------------------------------------------------
+# opSplit variants. The LATEST-mode cache fix (`message_layout="opSplit"`, one
+# user message per `### Operator` block so gpt-5.6-* can credit unchanged
+# operators as whole-message matches) was NOT carried by the native arms above
+# nor by Latest2kStatsCodeRep1; the 2026-09-10 pilot ran both without it
+# (cache 48% native vs 68% code, both just the system-prompt prefix). These
+# three arms are byte-for-byte their parents plus the layout, so the pair
+# isolates the framing effect.
+# ---------------------------------------------------------------------------
+def _mk_luna_native_split(name, selection, inspect=False):
+    base = _mk_luna_native(name, selection, inspect)
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("message_layout", "opSplit")
+        base.__init__(self, verbose=verbose, *args, **kwargs)
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": base.__doc__ + " opSplit layout."})
+
+
+DataflowSystemLunaNativeRuleSplitRep1 = _mk_luna_native_split("DataflowSystemLunaNativeRuleSplitRep1", "rule")
+DataflowSystemLunaNativeAllSplitRep1 = _mk_luna_native_split("DataflowSystemLunaNativeAllSplitRep1", "all")
+
+
+def _mk_luna_2k_stats_split(name, mode, code):
+    base = _mk_luna_2k_stats(name, mode, code)
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("message_layout", "opSplit")
+        base.__init__(self, verbose=verbose, *args, **kwargs)
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": base.__doc__ + " opSplit layout."})
+
+
+DataflowSystemLunaLatest2kStatsCodeSplitRep1 = _mk_luna_2k_stats_split(
+    "DataflowSystemLunaLatest2kStatsCodeSplitRep1", "latest", True)
