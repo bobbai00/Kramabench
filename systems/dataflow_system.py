@@ -2377,3 +2377,40 @@ def _mk_luna_2k_stats_split(name, mode, code):
 
 DataflowSystemLunaLatest2kStatsCodeSplitRep1 = _mk_luna_2k_stats_split(
     "DataflowSystemLunaLatest2kStatsCodeSplitRep1", "latest", True)
+
+
+# ---------------------------------------------------------------------------
+# DELTA variants of the native arms: same luna / 2k / data_level=2 + stats
+# configuration, context_mode=delta (the code-mode counterpart is
+# DataflowSystemLunaDelta2kStatsRep2).
+# ---------------------------------------------------------------------------
+def _mk_luna_native_delta(name, selection, inspect=False):
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        DataflowSystem.__init__(
+            self,
+            model_type="gpt-5.6-luna",
+            agent_mode="native",
+            context_mode="delta",
+            max_steps=25,
+            flow_level=1,
+            data_level=2,
+            column_stats=True,
+            attempt_reflection=True,
+            max_operator_result_char_limit=2000,
+            max_operator_result_cell_char_limit=3000,
+            enable_code_in_snapshot=False,
+            result_selection=selection,
+            enable_inspect_tool=inspect,
+            execution_timeout_minutes=10,
+            name=name,
+            verbose=verbose,
+            *args,
+            **kwargs,
+        )
+    doc = (f"gpt-5.6-luna, NATIVE typed operators, DELTA, 2k chars, stats + hints, "
+           f"result selection {selection}{', inspectResult on' if inspect else ''}.")
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
+
+
+DataflowSystemLunaNativeRuleDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeRuleDeltaRep1", "rule")
+DataflowSystemLunaNativeAllDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeAllDeltaRep1", "all")
