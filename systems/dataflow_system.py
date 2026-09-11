@@ -2414,3 +2414,13 @@ def _mk_luna_native_delta(name, selection, inspect=False):
 
 DataflowSystemLunaNativeRuleDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeRuleDeltaRep1", "rule")
 DataflowSystemLunaNativeAllDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeAllDeltaRep1", "all")
+
+
+# ---------------------------------------------------------------------------
+# Per-operator tools (one tool per native type, upsert by id). Same service
+# settings as the native arms above; separate SUT names so the
+# addOperators-era runs stay comparable on disk.
+# ---------------------------------------------------------------------------
+DataflowSystemLunaNativeToolsRuleRep1 = _mk_luna_native("DataflowSystemLunaNativeToolsRuleRep1", "rule")
+DataflowSystemLunaNativeToolsAllRep1 = _mk_luna_native("DataflowSystemLunaNativeToolsAllRep1", "all")
+DataflowSystemLunaNativeToolsRuleDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeToolsRuleDeltaRep1", "rule")
