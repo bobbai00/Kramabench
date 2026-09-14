@@ -568,6 +568,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
             _WORKTREE_BY_PORT = {
                 "3002": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-role-policy",
                 "3005": "~/Desktop/bobflow/dataflow-agent-worktrees/prompt-fix",
+                "3007": "~/Desktop/dataflow-agent/.claude/worktrees/op-granularity",
             }
             _port = _endpoint.rsplit(":", 1)[-1].strip("/")
             _svc_dir = _os.path.expanduser(_WORKTREE_BY_PORT.get(_port, "~/Desktop/bobflow/dataflow-agent"))
@@ -2433,3 +2434,24 @@ DataflowSystemLunaNativeToolsRuleDeltaRep1 = _mk_luna_native_delta("DataflowSyst
 # same-day baseline for the A/B.
 DataflowSystemLunaNativeToolsRuleDeltaRep2 = _mk_luna_native_delta("DataflowSystemLunaNativeToolsRuleDeltaRep2", "rule")
 DataflowSystemLunaNativeToolsScopedDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeToolsScopedDeltaRep1", "scoped")
+
+# Reps 2-3 of the scoped arm run against THIS worktree's own service on :3007
+# (started from .claude/worktrees/op-granularity), so the :3001 service another
+# session uses for its long jobs is never touched. Rep1 ran on :3001 before that
+# service changed hands (20:42-22:05, 2026-09-13) with fixed per-type row caps;
+# reps 2-3 carry the per-type share-of-budget sample sizes and a single
+# `Inputs:` line per typed observation.
+SCOPED_ENDPOINT = "http://localhost:3007"
+
+
+def _mk_luna_native_delta_at(name, selection, endpoint):
+    base = _mk_luna_native_delta(name, selection)
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", endpoint)
+        base.__init__(self, verbose=verbose, *args, **kwargs)
+    return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": base.__doc__ + f" Service {endpoint}."})
+
+
+DataflowSystemLunaNativeToolsScopedDeltaRep2 = _mk_luna_native_delta_at("DataflowSystemLunaNativeToolsScopedDeltaRep2", "scoped", SCOPED_ENDPOINT)
+DataflowSystemLunaNativeToolsScopedDeltaRep3 = _mk_luna_native_delta_at("DataflowSystemLunaNativeToolsScopedDeltaRep3", "scoped", SCOPED_ENDPOINT)
