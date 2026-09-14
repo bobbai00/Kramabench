@@ -2458,13 +2458,14 @@ DataflowSystemLunaNativeToolsScopedDeltaRep3 = _mk_luna_native_delta_at("Dataflo
 
 
 # ---------------------------------------------------------------------------
-# NATIVE ANCHOR: native mode at exactly the campaign Anchor's context knobs
-# (`_GRID_CONFIGS["Anchor"]` = DELTA, 1k result chars, schema-only), so the
-# only differences from DataflowSystemLunaAnchorReplicateN are the operator
-# grain (typed operators, one tool per type) and native's own result selection
-# (scoped). blockSplit is the code-mode cache framing; native DELTA keeps its
-# own default framing (per-step tool-result messages), which is the same idea.
-# Runs on this worktree's :3007 service.
+# NATIVE ANCHOR: native mode with NONE of the result-selection machinery —
+# every operator result renders as-is (`resultSelection: "all"`), no stats
+# block (schema only), DELTA, 2k result chars, per-operator tools. The plain
+# native baseline that the scoped arm is measured against; it shares the
+# 2k / DELTA / stats-off shape of the campaign's code-mode arms except for the
+# stats channel, which is off here on purpose. Native DELTA keeps its default
+# cache framing (per-step tool-result messages). Runs on this worktree's :3007
+# service.
 # ---------------------------------------------------------------------------
 def _mk_luna_native_anchor(name):
     def __init__(self, verbose: bool = False, *args, **kwargs):
@@ -2480,19 +2481,19 @@ def _mk_luna_native_anchor(name):
             column_stats=False,
             stats_enabled=False,
             attempt_reflection=True,
-            max_operator_result_char_limit=1000,
+            max_operator_result_char_limit=2000,
             max_operator_result_cell_char_limit=3000,
             enable_code_in_snapshot=False,
-            result_selection="scoped",
+            result_selection="all",
             execution_timeout_minutes=10,
             name=name,
             verbose=verbose,
             *args,
             **kwargs,
         )
-    doc = ("gpt-5.6-luna, NATIVE typed operators (one tool per type), DELTA, 1k result chars, "
-           "schema-only (no stats block), result selection scoped — the Anchor cell of the grid "
-           "in native mode. Service :3007.")
+    doc = ("gpt-5.6-luna, NATIVE typed operators (one tool per type), DELTA, 2k result chars, "
+           "schema-only (no stats block), result selection all (no scoping) — the plain native "
+           "anchor. Service :3007.")
     return type(name, (DataflowSystem,), {"__init__": __init__, "__doc__": doc})
 
 
