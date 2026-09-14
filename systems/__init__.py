@@ -59,6 +59,8 @@ from .dataflow_system import (
     DataflowSystemLunaNativeToolsRuleRep1,
     DataflowSystemLunaNativeToolsAllRep1,
     DataflowSystemLunaNativeToolsRuleDeltaRep1,
+    DataflowSystemLunaNativeToolsRuleDeltaRep2,
+    DataflowSystemLunaNativeToolsScopedDeltaRep1,
     DataflowSystemLunaLatest2kStatsNoCodeRep1,
 )
 
