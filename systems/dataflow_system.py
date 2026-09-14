@@ -2424,3 +2424,12 @@ DataflowSystemLunaNativeAllDeltaRep1 = _mk_luna_native_delta("DataflowSystemLuna
 DataflowSystemLunaNativeToolsRuleRep1 = _mk_luna_native("DataflowSystemLunaNativeToolsRuleRep1", "rule")
 DataflowSystemLunaNativeToolsAllRep1 = _mk_luna_native("DataflowSystemLunaNativeToolsAllRep1", "all")
 DataflowSystemLunaNativeToolsRuleDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeToolsRuleDeltaRep1", "rule")
+
+# Scoped selection (feat/single-turn-optimization). The rule decides WHETHER a
+# table ships; scoped also decides HOW MUCH of it: statistics and sample values
+# only for the columns the operator's parameters (and its consumers') name,
+# sample rows per type, and upstream-caused re-executions rendered as one-line
+# diffs against the previous run. Rep2 of the rule arm is the same-code,
+# same-day baseline for the A/B.
+DataflowSystemLunaNativeToolsRuleDeltaRep2 = _mk_luna_native_delta("DataflowSystemLunaNativeToolsRuleDeltaRep2", "rule")
+DataflowSystemLunaNativeToolsScopedDeltaRep1 = _mk_luna_native_delta("DataflowSystemLunaNativeToolsScopedDeltaRep1", "scoped")
