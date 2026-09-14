@@ -2500,3 +2500,18 @@ def _mk_luna_native_anchor(name):
 DataflowSystemLunaNativeAnchorRep1 = _mk_luna_native_anchor("DataflowSystemLunaNativeAnchorRep1")
 DataflowSystemLunaNativeAnchorRep2 = _mk_luna_native_anchor("DataflowSystemLunaNativeAnchorRep2")
 DataflowSystemLunaNativeAnchorRep3 = _mk_luna_native_anchor("DataflowSystemLunaNativeAnchorRep3")
+
+# Post-fix rerun arm (2026-09-14): identical to the scoped DELTA arms above
+# (native typed operators, DELTA, 2k, stats, resultSelection "scoped") and
+# pointed at this worktree's :3007 service, which now carries the five
+# operator fixes (scan reads only; join keys by shared name; aggregate coerces
+# text; engine-native type vocabulary; refused deletes reported honestly).
+# A separate name so the three pre-fix scoped replicates stay intact on disk.
+DataflowSystemLunaNativeToolsScopedFixRep1 = _mk_luna_native_delta_at(
+    "DataflowSystemLunaNativeToolsScopedFixRep1", "scoped", SCOPED_ENDPOINT)
+
+# Fix2: as Fix1 but on the build where `scan.names` is accepted with a count
+# check instead of refused outright (928a1fde5). Fix1 measured that refusing it
+# turned ~22 refusals/run into 77 for no accuracy gain.
+DataflowSystemLunaNativeToolsScopedFix2Rep1 = _mk_luna_native_delta_at(
+    "DataflowSystemLunaNativeToolsScopedFix2Rep1", "scoped", SCOPED_ENDPOINT)

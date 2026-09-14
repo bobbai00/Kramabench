@@ -66,6 +66,8 @@ from .dataflow_system import (
     DataflowSystemLunaNativeAnchorRep1,
     DataflowSystemLunaNativeAnchorRep2,
     DataflowSystemLunaNativeAnchorRep3,
+    DataflowSystemLunaNativeToolsScopedFixRep1,
+    DataflowSystemLunaNativeToolsScopedFix2Rep1,
     DataflowSystemLunaLatest2kStatsNoCodeRep1,
 )
 
