@@ -111,8 +111,11 @@ class CampaignGuard:
             ["git", "-C", str(HARNESS_ROOT), *args], text=True, timeout=10
         ).strip()
         _require(git("rev-parse", "HEAD") == manifest["harness_sha"], "campaign_harness_revision_changed")
+        # Official scoring updates this cache during a run. Exclude only its
+        # exact path; all benchmark code and other fixture changes still fail.
         _require(not git("status", "--porcelain", "--untracked-files=all", "--", "systems", "utils",
-                         "dataflow_agent.py", "kb.py", "evaluate.py", "benchmark"), "campaign_harness_source_dirty")
+                         "dataflow_agent.py", "kb.py", "evaluate.py", "benchmark",
+                         ":(top,exclude)benchmark/fixtures/paraphrase_cache.json"), "campaign_harness_source_dirty")
         _require(system.computing_unit_id == manifest["computing_unit_id"], "campaign_computing_unit_mismatch")
         key = "BatchParent" if system.pilot_spec.key == "BatchParent" else "V2"
         service = manifest["services"][key]

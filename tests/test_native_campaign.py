@@ -17,6 +17,7 @@
 
 import json
 import os
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -296,6 +297,43 @@ class CampaignGuardTest(unittest.TestCase):
         result = guard(self.system, "before_dispatch", self.info)
         self.assertIs(result["qualified"], True)
         self.assertEqual(result["manifest_sha256"], file_binding(self.path)["sha256"])
+
+    def test_only_official_paraphrase_cache_may_change_during_scoring(self):
+        cache = self.root / "benchmark/fixtures/paraphrase_cache.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text("{}")
+        code = self.root / "benchmark/metrics.py"
+        code.write_text("# frozen benchmark code\n")
+
+        def git_output(arguments, **kwargs):
+            result = subprocess.run(arguments, capture_output=True, text=True, check=True)
+            return result.stdout
+
+        def git(*arguments):
+            return git_output(["git", "-C", str(self.root), *arguments]).strip()
+
+        git("init", "--quiet")
+        git("add", "benchmark")
+        git("-c", "user.name=Campaign Test", "-c", "user.email=campaign-test@example.invalid",
+            "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "--no-gpg-sign", "-m", "fixture")
+        self.manifest["harness_sha"] = git("rev-parse", "HEAD")
+        self.path.write_text(json.dumps(self.manifest))
+        guard = CampaignGuard()
+        cache.write_text('{"official-scorer-cache-key":true}')
+        with patch("utils.native_campaign.subprocess.check_output", side_effect=git_output):
+            self.assertTrue(guard(self.system, "before_setup", None)["qualified"])
+            for relative in ("benchmark/metrics.py", "benchmark/fixtures/other_cache.json",
+                             "benchmark/fixtures/paraphrase_cache.json.extra"):
+                with self.subTest(path=relative):
+                    changed = self.root / relative
+                    previous = changed.read_text() if changed.exists() else None
+                    changed.write_text("unexpected runtime modification")
+                    with self.assertRaisesRegex(ValueError, "campaign_harness_source_dirty"):
+                        guard(self.system, "before_setup", None)
+                    if previous is None:
+                        changed.unlink()
+                    else:
+                        changed.write_text(previous)
 
     def test_guard_rejects_manifest_route_settings_and_input_drift(self):
         guard = CampaignGuard()
