@@ -20,7 +20,7 @@
 This is the orchestration entry point, not a service launcher. The caller must
 supply the qualification/ownership/provenance guard; there is intentionally no
 default no-op guard or CLI bypass. See docs/native-python-pilot.md for the live
-gates, recorder persistence and cleanup still required before running models.
+gates, recorder binding and resource cleanup still required before running models.
 """
 
 import json
@@ -29,6 +29,7 @@ from pathlib import Path
 import kb
 from benchmark.benchmark import Evaluator, Executor
 from systems.native_pilot_system import NativePilotSystem, PILOT_TASK
+from utils.execution_journal import execution_report
 
 
 def _json_value(value):
@@ -41,7 +42,16 @@ def _json_value(value):
     return value
 
 
-def run_pilot_task(system, *, guard, workload_path, dataset_directory, fixture_directory=None):
+def run_pilot_task(
+    system,
+    *,
+    guard,
+    workload_path,
+    dataset_directory,
+    fixture_directory=None,
+    execution_journal_path=None,
+    recorder_id=None,
+):
     """Exactly one task, no cache reuse, replacement attempt, or recovery round.
 
     Raw answer scores survive failed qualification but are labeled ineligible
@@ -51,6 +61,8 @@ def run_pilot_task(system, *, guard, workload_path, dataset_directory, fixture_d
     """
     if not isinstance(system, NativePilotSystem):
         raise TypeError("run_pilot_task requires a registered native pilot SUT")
+    if (execution_journal_path is None) != (recorder_id is None):
+        raise ValueError("execution journal and bound recorder ID must be provided together")
     with Path(workload_path).open() as stream:
         tasks = [task for task in json.load(stream) if task.get("id") == PILOT_TASK]
     if len(tasks) != 1 or tasks[0].get("answer_type") != "numeric_exact":
@@ -116,6 +128,26 @@ def run_pilot_task(system, *, guard, workload_path, dataset_directory, fixture_d
         except Exception as error:
             verdict.update(reason="official_evaluation_failed", error_type=type(error).__name__)
     bundle.write("verdict.json", verdict)
+    execution_measurements = {
+        "journal_status": "missing",
+        "requests": None,
+        "compilation": {"pass_rate": None},
+        "runtime": {"pass_rate": None},
+        "backend_termination_verified": False,
+    }
+    if execution_journal_path is not None:
+        try:
+            resources = attempt["resources"]
+            execution_measurements = execution_report(
+                execution_journal_path,
+                workflow_id=resources.get("workflow_id"),
+                computing_unit_id=resources.get("computing_unit_id"),
+                expected_recorder_id=recorder_id,
+            )
+        except Exception as error:
+            # Missing setup identity or unreadable evidence cannot erase the
+            # official answer. Nor can it become a made-up compile pass rate.
+            execution_measurements.update(journal_status="unavailable", error_type=type(error).__name__)
     bundle.write(
         "pilot_metrics.json",
         {
@@ -123,7 +155,7 @@ def run_pilot_task(system, *, guard, workload_path, dataset_directory, fixture_d
             "step_tokens": kb.step_token_rows(bundle.path),
             "usage_status": stats["usage_status"],
             "input_trace_complete": stats["input_trace_complete"],
-            "execution_measurements": "attach recorder journal and report measured denominators separately",
+            "execution_measurements": execution_measurements,
             "collector_measurements": "deduplicate producing result versions before aggregation",
         },
     )

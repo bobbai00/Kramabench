@@ -104,10 +104,47 @@ Before spending a model call:
    of unrelated metrics. `kb.py compare`'s max-metric/strict-1.0 convention is
    different and must be labeled separately.
 
-The one-attempt execution/capture path and official numeric scoring are now
-implemented and locally tested. The production launch/qualification guard,
-persistent execution recording, verified resource cleanup, final report and
-real-input audit are **still pending**. This is not a launch-ready pilot.
+The one-attempt path, official numeric scoring, persistent recorder, scoped
+phase reporting and source-pinned agent-only launcher are implemented and
+locally tested. The production qualification/ownership guard, resource
+allocation journal, verified workflow/CU cleanup, collector aggregation,
+final report and real-input audit are **still pending**. An isolated agent
+launch/verification/empty-stop smoke passed; this is not a launch-ready pilot.
+
+## Isolated agent launch and shutdown
+
+`utils.pilot_launch.launch_agent_service` runs only
+`bin/local-dev.sh up agent-service --skip-build`, with an explicit non-default
+port and an exclusive private `TEXERA_LOCAL_DEV_DIR`. It never adopts an
+occupied port, installs packages, redirects an old deployment state directory,
+or starts/restarts shared JVM services. A full expected root SHA is required.
+The private `launch.json` binds clean runtime/launcher tree hashes before and
+after launch, boot identity, a newly started listener PID/start time, its actual
+entry point, health and the execution-recorder route. Process environments are
+compared locally for those routing fields, not copied into artifacts.
+
+`verify_service_launch` rechecks the live process, source, route and health.
+`stop_agent_service` additionally requires an empty agent list and the original
+launcher state directory before running only `down agent-service`. It verifies
+the owned process exited and the port became free, and writes a separate
+private stop record. It does not infer backend termination or delete workflows
+and computing units. Ambiguous/failed launches are not automatic stop targets.
+
+The CLI is `python -m utils.pilot_launch launch|verify|stop --help`.
+Keep the calling orchestration process alive through the run: a successful
+launch record is a point-in-time check, not a guarantee that an external tool
+runtime will preserve a background child after the command ends. The local
+smoke found exactly that boundary: a first one-shot launch disappeared before
+the next command and verification refused it. A fresh contained
+launch/verify/empty-stop invocation passed on port 3011 without any agent,
+workflow, CU, model call or backend execution. The recorder forwarded zero
+requests. No other service was stopped.
+
+This proof covers tracked runtime source and launcher files, not immutable
+installed dependencies: lock files are hashed, while the resolved shared
+`node_modules` directory is recorded but its contents are not fingerprinted.
+It also does not qualify the shared backend/worker, task/data, price schedule
+or real-model behavior. Those checks still belong to the outer guard.
 
 ## Single-attempt execution and failure artifacts
 
@@ -139,8 +176,8 @@ trace and snapshots are private run artifacts, not sanitized publications.
 
 Additional artifacts are `capture.json`, `snapshots.json`, canonical
 `response.json`, `verdict.json`, and helper-derived `pilot_metrics.json`.
-The last file is trace/token accounting only, **not** the final execution or
-collector-overhead report. Failed setup/preflight is unscored because no model
+The last file contains trace/token accounting and optional scoped execution
+measurements, **not** the final collector-overhead report. Failed setup/preflight is unscored because no model
 attempt was made; dispatched unsuccessful attempts remain in the record.
 Official raw scores and eligibility for the treatment comparison are separate.
 For this numeric task the evaluator no longer constructs an unused pipeline
@@ -224,10 +261,34 @@ unknown, not passes or compiler failures. Report known passes/failures,
 not-attempted and unknown counts **with denominators**; zero attempts has no
 pass rate. Request-duration sums are not total wall time or collector CPU time.
 
-The recorder currently exposes detached copies in memory. The pilot runner
-must persist them as `execution_requests.jsonl`, bind them to the correct arm
-and preserve partial records on failure. Local recorder tests use a controlled
-HTTP backend and are not Texera worker or LLM runs.
+The parent's `execution-recorder-run.ts` persists an exclusive private
+`execution_requests.jsonl`: a startup header, a fsynced start **before** each
+forward, a finish afterward, and a footer only after draining. Its read-only
+`/__recorder/status` identifies the recorder and outstanding requests. A failed
+start write prevents forwarding; a failed finish write preserves the actual
+backend response but prevents further admissions. SIGINT/SIGTERM drain; a
+SIGKILL test preserves an unfinished start. Neither a missing response nor a
+closed recorder proves backend termination.
+
+`utils.execution_journal.execution_report` requires the exact workflow, CU and
+recorder instance IDs. It deduplicates identical events, separates other
+workflows/CUs, and flags conflicting identities, malformed/truncated data,
+orphan finishes and inconsistent footers. Missing evidence is distinct from a
+valid closed zero-request journal. It validates measured phases instead of
+trusting saved outcome labels or heuristic engine error text. Each phase has
+passed/failed/not-attempted/unknown counts; `pass_rate` uses
+`passed / (passed + failed)`, with `known_attempted` and `known_coverage`
+alongside it. No attempts means a null rate, not 100%.
+
+`run_pilot_task(..., execution_journal_path=..., recorder_id=...)` attaches this
+report to `pilot_metrics.json`, scoped to the actual attempt resource IDs.
+Both optional arguments must be provided together. Without them, measurement
+status is missing and rates are null. A production guard must enforce the
+required recorder; optional reporting arguments are not an admission bypass.
+Capture after an attempt can see an open journal: the outer runner must retain
+the complete journal and refresh final reporting after recorder drain. Request
+duration and compiler-duration sums are observed measurements, not wall time
+or collector cost. Local HTTP fixtures are not Texera worker or LLM runs.
 
 ## Required pilot artifacts and cost report
 
@@ -255,16 +316,27 @@ it. No savings/accuracy claim is justified by the local setup tests.
 
 ## Local verification
 
-`python -m unittest discover -s tests -q`: **57 pass**, including the original
+`python -m unittest discover -s tests -q`: **78 pass**, including the original
 19 client/arm/native-trace and legacy pilot tests. New regressions cover actual
 listener resolution with controlled process fixtures, single-attempt policy,
 final-step rebroadcast accounting, durable partial capture, unknown/frozen
 cost, setup/dispatch/postflight failure, malformed trace/snapshot responses,
 answer-versus-transport status, and the real Executor/Evaluator path with a
-mocked agent. `kb.py systems` resolves all seven new SUT classes.
+mocked agent. The newest 21 tests cover source-pinned launch/empty shutdown,
+durable-journal denominators, missing/conflicting evidence and the measured
+report through the actual Executor/Evaluator path with a mocked agent.
+`kb.py systems` resolves all seven new SUT classes.
 
 These tests make no Texera service setup or model calls. They are not live
 worker E2E tests or real model traces. New client/system options remain
 keyword-only, preserving legacy positional arguments. New/scoped Python files
 pass Ruff formatting and F-rule checks; no dependency was installed into the
 shared benchmark venv.
+
+Additional development checks (not benchmark results): the parent reports
+1,120 Bun tests and typecheck passing; its 15 recorder tests include a real
+child-process interruption. A three-response loopback HTTP fixture wrote a
+real Bun journal which this Python reader consumed: two compiler passes/one
+failure; one runtime pass/one failure/one not attempted; 9 ms of synthetic
+compiler measurements. The separate real agent-service lifecycle smoke is
+described above. No Texera worker or provider was called in these checks.

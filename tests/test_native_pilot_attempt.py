@@ -23,7 +23,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from dataflow_agent import AgentSettings, MessageResult
-from systems.native_python_system import DataflowSystemLunaPythonPilotV2Control20260915Rep1 as Arm
+from systems.native_python_system import (
+    DataflowSystemLunaPythonPilotV2Control20260915Rep1 as Arm,
+)
 
 
 TASK = {
@@ -40,7 +42,12 @@ STEP = {
     "content": "17",
     "toolCalls": [],
     "inputMessages": [{"role": "user", "content": TASK["query"]}],
-    "usage": {"inputTokens": 100, "outputTokens": 20, "cachedInputTokens": 80, "totalTokens": 120},
+    "usage": {
+        "inputTokens": 100,
+        "outputTokens": 20,
+        "cachedInputTokens": 80,
+        "totalTokens": 120,
+    },
 }
 
 
@@ -77,7 +84,11 @@ class NativePilotAttemptTest(unittest.TestCase):
             "driver": "vercel-tool-use",
             "state": "AVAILABLE",
             "settings": self.agent.settings.to_api_dict(),
-            "delegate": {"workflowId": 456, "computingUnitId": 321, "userToken": "private-token"},
+            "delegate": {
+                "workflowId": 456,
+                "computingUnitId": 321,
+                "userToken": "private-token",
+            },
         }
         self.react = {"steps": [STEP], "state": "AVAILABLE"}
         self.api = patch("systems.native_pilot_system.agent_json", side_effect=self.request).start()
@@ -91,7 +102,10 @@ class NativePilotAttemptTest(unittest.TestCase):
         if resource == "/workflow":
             return {"workflow": {"operators": [], "links": []}}
         if resource.startswith("/snapshots/"):
-            return {"stepId": resource.split("/")[-1], "results": {"op": {"profile": {"version": "fixture"}}}}
+            return {
+                "stepId": resource.split("/")[-1],
+                "results": {"op": {"profile": {"version": "fixture"}}},
+            }
         raise AssertionError(resource)
 
     def serve(self):
@@ -108,11 +122,15 @@ class NativePilotAttemptTest(unittest.TestCase):
         self.assertEqual(result["explanation"]["answer"], "17")
         self.assertGreater(result["cost_usd"], 0)
         self.assertEqual(self.artifact("attempt.json")["status"], "completed")
-        self.assertEqual(self.artifact("react_steps.json")["steps"][0]["inputMessages"], STEP["inputMessages"])
+        self.assertEqual(
+            self.artifact("react_steps.json")["steps"][0]["inputMessages"],
+            STEP["inputMessages"],
+        )
         self.assertEqual(self.artifact("snapshots.json")["snapshots"][0]["stepId"], "s1")
         self.assertNotIn("private-token", json.dumps(self.artifact("config.json")))
         self.assertEqual(
-            [call.args[1] for call in self.guard.call_args_list], ["before_setup", "before_dispatch", "after_attempt"]
+            [call.args[1] for call in self.guard.call_args_list],
+            ["before_setup", "before_dispatch", "after_attempt"],
         )
         with self.assertRaises(FileExistsError):
             self.serve()
@@ -186,7 +204,15 @@ class NativePilotAttemptTest(unittest.TestCase):
     def test_synthetic_error_is_not_misparsed_as_an_answer(self):
         self.agent.run.return_value = MessageResult("Error: row 17", [], {}, {}, False, completed=True)
         self.react = {
-            "steps": [STEP, {"id": "err", "role": "agent", "isEnd": True, "content": "Error: row 17"}],
+            "steps": [
+                STEP,
+                {
+                    "id": "err",
+                    "role": "agent",
+                    "isEnd": True,
+                    "content": "Error: row 17",
+                },
+            ],
             "state": "AVAILABLE",
         }
         result = self.serve()
@@ -222,9 +248,15 @@ class NativePilotAttemptTest(unittest.TestCase):
         workload = Path(self.temporary.name) / "workload.json"
         workload.write_text(json.dumps([TASK]))
         self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
-        with patch("benchmark.benchmark.GPTInterface", side_effect=AssertionError("no LLM judge for numeric exact")):
+        with patch(
+            "benchmark.benchmark.GPTInterface",
+            side_effect=AssertionError("no LLM judge for numeric exact"),
+        ):
             verdict = run_pilot_task(
-                self.arm, guard=self.guard, workload_path=workload, dataset_directory="data/environment/input"
+                self.arm,
+                guard=self.guard,
+                workload_path=workload,
+                dataset_directory="data/environment/input",
             )
         self.agent.run.assert_called_once()
         self.assertEqual(verdict["score"], 1)
@@ -234,6 +266,34 @@ class NativePilotAttemptTest(unittest.TestCase):
         self.assertEqual(self.artifact("evaluation.json")["success"], 1)
         self.assertEqual(self.artifact("response.json")["task_id"], TASK["id"])
         self.assertEqual(self.artifact("pilot_metrics.json")["trace"]["agent_steps"], 1)
+        self.assertEqual(
+            self.artifact("pilot_metrics.json")["execution_measurements"]["journal_status"],
+            "missing",
+        )
+
+    def test_official_path_attaches_scoped_execution_measurements(self):
+        from native_python_pilot import run_pilot_task
+        from test_execution_journal import HEADER, request, footer
+
+        workload = Path(self.temporary.name) / "workload.json"
+        workload.write_text(json.dumps([TASK]))
+        journal = Path(self.temporary.name) / "execution_requests.jsonl"
+        journal.write_text("".join(json.dumps(event) + "\n" for event in [HEADER, *request("ok"), footer(1)]))
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        verdict = run_pilot_task(
+            self.arm,
+            guard=self.guard,
+            workload_path=workload,
+            dataset_directory="data/environment/input",
+            execution_journal_path=journal,
+            recorder_id=HEADER["instanceId"],
+        )
+        self.assertEqual(verdict["score"], 1)
+        measurements = self.artifact("pilot_metrics.json")["execution_measurements"]
+        self.assertEqual(measurements["requests"], 1)
+        self.assertEqual(measurements["compilation"]["pass_rate"], 1)
+        self.assertEqual(measurements["runtime"]["pass_rate"], 1)
+        self.assertFalse(measurements["backend_termination_verified"])
 
     def test_preflight_failure_is_unscored_not_an_official_wrong_answer(self):
         from native_python_pilot import run_pilot_task
@@ -242,7 +302,10 @@ class NativePilotAttemptTest(unittest.TestCase):
         workload.write_text(json.dumps([TASK]))
         self.guard.side_effect = ValueError("missing qualification")
         verdict = run_pilot_task(
-            self.arm, guard=self.guard, workload_path=workload, dataset_directory="data/environment/input"
+            self.arm,
+            guard=self.guard,
+            workload_path=workload,
+            dataset_directory="data/environment/input",
         )
         self.agent.run.assert_not_called()
         self.assertIsNone(verdict["score"])
