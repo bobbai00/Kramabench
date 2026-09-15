@@ -189,6 +189,10 @@ def audit_model_smoke_turn(case, trace, snapshots, head, *, before=None):
         report["observations"].append(_seen_observation("answer", calls, steps, snapshots, head))
     elif case == "cached":
         _require(operators == [] and observed == ["source"], "cached_observe_contract_mismatch")
+        _require(
+            not any(re.search(r"HIDDEN_100000[123]", _input(step)) for step in steps[: index + 1]),
+            "source_seen_before_cached_observe",
+        )
         old = (before or {}).get("results", {}).get("source", {})
         current = head.get("results", {}).get("source", {})
         _require(

@@ -125,6 +125,10 @@ class ModelSmokeAuditTest(unittest.TestCase):
         ]
         self.snapshots = {"observe": self.head, "final": self.head}
         self.assertEqual(self.audit("cached", before)["case"], "cached")
+        self.steps[0]["inputMessages"][1]["content"] = "HIDDEN_1000001"
+        with self.assertRaisesRegex(ValueError, "source_seen_before_cached_observe"):
+            self.audit("cached", before)
+        self.steps[0]["inputMessages"][1]["content"] = ""
         self.head["results"]["source"]["resultVersion"]["id"] = "b" * 64
         with self.assertRaisesRegex(ValueError, "cached_binding_changed"):
             self.audit("cached", before)
