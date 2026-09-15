@@ -24,7 +24,7 @@ override under an existing SUT name. See docs/native-python-pilot.md.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .native_pilot_system import NativePilotSystem
 
@@ -39,14 +39,17 @@ class PilotArm:
     collection: bool | None
     data: int
     flow: int
+    model_type: str = "gpt-5.6-luna"
+    reasoning_effort: str = "medium"
 
     @property
     def system_name(self) -> str:
-        return f"DataflowSystemLunaPythonPilot{self.key}20260915Rep1"
+        model = {"gpt-5.6-luna": "Luna", "gpt-5.6-terra": "Terra"}[self.model_type]
+        return f"DataflowSystem{model}PythonPilot{self.key}20260915Rep1"
 
     def settings(self) -> dict:
         return {
-            "model_type": "gpt-5.6-luna",
+            "model_type": self.model_type,
             "driver": None,
             "agent_mode": "native",
             "context_mode": "delta",
@@ -99,6 +102,11 @@ PILOT_ARMS = (
     PilotArm("Combined", 3011, "v2", "batch", False, True, 1, 1),
 )
 
+# Preserve the existing Luna namespaces. Terra is a matched, separately named
+# replication, never a model override under a frozen Luna result directory.
+TERRA_PILOT_ARMS = tuple(replace(arm, model_type="gpt-5.6-terra") for arm in PILOT_ARMS)
+ALL_PILOT_ARMS = PILOT_ARMS + TERRA_PILOT_ARMS
+
 
 def _make_arm(spec: PilotArm):
     def __init__(self, verbose: bool = False, *args, **kwargs):
@@ -137,6 +145,6 @@ def _make_arm(spec: PilotArm):
     )
 
 
-__all__ = [spec.system_name for spec in PILOT_ARMS]
-for _spec in PILOT_ARMS:
+__all__ = [spec.system_name for spec in ALL_PILOT_ARMS]
+for _spec in ALL_PILOT_ARMS:
     globals()[_spec.system_name] = _make_arm(_spec)

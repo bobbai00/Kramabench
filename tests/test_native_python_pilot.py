@@ -81,6 +81,24 @@ class NativePythonClientTest(unittest.TestCase):
 
 
 class NativePythonArmsTest(unittest.TestCase):
+    def test_terra_arms_match_luna_settings_except_model(self):
+        import systems
+        from systems.native_python_system import PILOT_ARMS, TERRA_PILOT_ARMS
+
+        self.assertEqual(len(TERRA_PILOT_ARMS), len(PILOT_ARMS))
+        with TemporaryDirectory() as directory:
+            for luna, terra in zip(PILOT_ARMS, TERRA_PILOT_ARMS):
+                expected = {**luna.settings(), "model_type": "gpt-5.6-terra"}
+                self.assertEqual(terra.settings(), expected)
+                self.assertEqual(terra.key, luna.key)
+                self.assertIn("Terra", terra.system_name)
+                self.assertEqual(terra.reasoning_effort, "medium")
+                self.assertNotEqual(terra.system_name, luna.system_name)
+                arm = getattr(systems, terra.system_name)(output_dir=directory, computing_unit_id=321)
+                self.assertEqual(arm.model_type, "gpt-5.6-terra")
+                with self.assertRaisesRegex(ValueError, "frozen"):
+                    getattr(systems, terra.system_name)(computing_unit_id=321, model_type="gpt-5.6-luna")
+
     def test_registered_arms_isolate_framework_collection_and_exposure(self):
         import systems
         from systems.native_python_system import PILOT_ARMS

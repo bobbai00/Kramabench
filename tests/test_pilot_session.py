@@ -137,6 +137,16 @@ class PilotSessionTest(unittest.TestCase):
                 self.patches["create_owned_computing_unit"].assert_not_called()
                 self.patches["run_pilot_task"].assert_not_called()
 
+    def test_terra_session_freezes_and_dispatches_the_requested_model(self):
+        result = self.run_session(model_type="gpt-5.6-terra")
+        self.assertEqual(result["status"], "passed")
+        prepared = self.patches["freeze_pilot_inputs"].call_args.args[0]
+        attempted = self.patches["run_pilot_task"].call_args.args[0]
+        self.assertEqual(prepared.model_type, "gpt-5.6-terra")
+        self.assertEqual(attempted.model_type, "gpt-5.6-terra")
+        self.assertIn("Terra", attempted.name)
+        self.assertEqual(self.contexts[0][0]["reasoning_effort"], "medium")
+
     def test_existing_first_attempt_is_not_replaced(self):
         reserved = self.root / "tasks/environment-easy-3"
         reserved.mkdir(parents=True)

@@ -97,7 +97,7 @@ def freeze_pilot_inputs(system, *, workload_path, execution_directory):
     checked separately by runtime qualification. Multiple copies of a file are
     allowed only when their bytes match; every resolved location is frozen.
     """
-    _require(system.model_type == "gpt-5.6-luna", "pilot_model_changed")
+    _require(system.model_type in {"gpt-5.6-luna", "gpt-5.6-terra"}, "pilot_model_changed")
     cwd = Path.cwd().resolve(strict=True)
     execution_directory = Path(execution_directory).resolve(strict=True)
     dataset = Path(system.dataset_directory).resolve(strict=True)

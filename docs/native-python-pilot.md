@@ -33,8 +33,9 @@ or changing the old arms' defaults.
 
 ## Registered treatments
 
-Each SUT name is `DataflowSystemLunaPythonPilot<Arm>20260915Rep1`.
-`kb.py systems` lists all seven. Definitions are in
+Each SUT name is `DataflowSystem<Model>PythonPilot<Arm>20260915Rep1`,
+where Model is `Luna` or `Terra`. The 14 names keep model results separate.
+Definitions are in
 [`systems/native_python_system.py`](../systems/native_python_system.py).
 
 | Arm | Service port | Catalog/tool mode | Collect profiles | dataLevel | flowLevel |
@@ -54,7 +55,13 @@ structural schema at L0/L0, and the two levels toggle selected evidence.
 the legacy column-statistics appendage. Collection is explicitly independent
 of exposure. No new arm sends the prototype `nativeFlowEvidence` flag.
 
-Shared settings: `gpt-5.6-luna`, native mode, DELTA, 25 steps, TSV,
+Models: exact `gpt-5.6-luna` and `gpt-5.6-terra`, both requiring medium
+reasoning at the live gateway (not merely a name/manifest assertion).
+The `tara` spelling is not an allowed substitute. Terra uses its own frozen
+cache-aware price schedule. `run_owned_pilot(model_type="gpt-5.6-terra", ...)`
+selects the matching Terra arm; all existing Luna names/settings remain intact.
+
+Shared settings: native mode, DELTA, 25 steps, TSV,
 2,000 result characters, 3,000 characters per cell, 240-second tool timeout,
 10-minute execution timeout, a fixed 1,800-second client turn budget,
 `resultSelection=all`, `attemptReflection=true`,

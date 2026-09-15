@@ -96,6 +96,22 @@ class PilotInputsTest(unittest.TestCase):
         self.assertNotIn("987654", prompt)
         self.assertLess(prompt.index("2012.csv"), prompt.index("2013.csv"))
 
+    def test_terra_freezes_its_own_pricing_and_cannot_reuse_luna_manifest(self):
+        luna = self.freeze()
+        self.system.model_type = "gpt-5.6-terra"
+        terra = self.freeze()
+        self.assertEqual(terra["model"], "gpt-5.6-terra")
+        self.assertEqual(terra["pricing"]["model"], "gpt-5.6-terra")
+        self.assertEqual(terra["prompt_sha256"], luna["prompt_sha256"])
+        self.assertNotEqual(terra["pricing"]["rates"], luna["pricing"]["rates"])
+        with self.assertRaisesRegex(ValueError, "pilot_inputs_changed"):
+            self.verify(luna)
+
+    def test_unregistered_model_is_rejected(self):
+        self.system.model_type = "gpt-5.6-tara"
+        with self.assertRaisesRegex(ValueError, "pilot_model_changed"):
+            self.freeze()
+
     def test_missing_worker_alias_is_not_a_valid_input_manifest(self):
         (self.worker / "data").unlink()
         with self.assertRaises((ValueError, FileNotFoundError)):

@@ -149,6 +149,7 @@ def run_owned_pilot(
     execution_directory,
     output_directory,
     qualification,
+    model_type="gpt-5.6-luna",
     task_output_directory=None,
     backend="http://127.0.0.1:8085",
 ):
@@ -179,7 +180,9 @@ def run_owned_pilot(
     try:
         stage("preflight")
         _require(callable(qualification), "runtime_qualification_required")
-        selected = [arm for arm in native_python_system.PILOT_ARMS if arm.key == arm_key]
+        selected = [
+            arm for arm in native_python_system.ALL_PILOT_ARMS if arm.key == arm_key and arm.model_type == model_type
+        ]
         _require(len(selected) == 1, "unknown_pilot_arm")
         spec = selected[0]
         backend = _local_origin(backend)
@@ -202,7 +205,7 @@ def run_owned_pilot(
         # Local preparation only, before resource allocation; never invent a CU
         # ID to instantiate a registered arm. The actual arm re-verifies this.
         inputs_system = NativePilotSystem(
-            name=spec.system_name, model_type="gpt-5.6-luna", output_dir=str(bundle.path / "input-preflight")
+            name=spec.system_name, model_type=spec.model_type, output_dir=str(bundle.path / "input-preflight")
         )
         prepare_pilot_task(inputs_system, workload_path=workload_path, dataset_directory=dataset_directory)
         inputs = freeze_pilot_inputs(
@@ -211,6 +214,8 @@ def run_owned_pilot(
         context = {
             "arm": spec.key,
             "system_name": spec.system_name,
+            "model_type": spec.model_type,
+            "reasoning_effort": spec.reasoning_effort,
             "backend": backend,
             "agent_source": source,
             "recorder_source": recorder_source,

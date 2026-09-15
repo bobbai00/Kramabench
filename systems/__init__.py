@@ -14,6 +14,13 @@ from .native_python_system import (
     DataflowSystemLunaPythonPilotDataOnly20260915Rep1,
     DataflowSystemLunaPythonPilotFlowOnly20260915Rep1,
     DataflowSystemLunaPythonPilotCombined20260915Rep1,
+    DataflowSystemTerraPythonPilotV1Reference20260915Rep1,
+    DataflowSystemTerraPythonPilotBatchParent20260915Rep1,
+    DataflowSystemTerraPythonPilotV2Control20260915Rep1,
+    DataflowSystemTerraPythonPilotCollectorOnly20260915Rep1,
+    DataflowSystemTerraPythonPilotDataOnly20260915Rep1,
+    DataflowSystemTerraPythonPilotFlowOnly20260915Rep1,
+    DataflowSystemTerraPythonPilotCombined20260915Rep1,
 )
 from .code_agent_system import CodeAgentSystem
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem
