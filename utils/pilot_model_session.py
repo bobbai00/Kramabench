@@ -32,14 +32,16 @@ from utils.pilot_session import _recorder_source, _verify_recorder
 from utils.resource_journal import ResourceJournal
 
 
-def run_owned_model_smoke(*, worktree, source_sha, context_mode, output_directory, qualification):
+def run_owned_model_smoke(
+    *, worktree, source_sha, context_mode, output_directory, qualification, model_type="gpt-5.6-luna"
+):
     bundle = AttemptBundle(Path(output_directory))
     result = {"version": 1, "status": "running", "context_mode": context_mode, "benchmark_attempt": False}
     recorder, system = None, None
     drained = False
     context = {
         "backend": "http://127.0.0.1:8085",
-        "model_type": "gpt-5.6-luna",
+        "model_type": model_type,
         "arm": "Combined",
         "agent_source": source_snapshot(worktree),
         "session_directory": str(bundle.path),
@@ -72,7 +74,12 @@ def run_owned_model_smoke(*, worktree, source_sha, context_mode, output_director
         )
         launch_path = bundle.path / "service/launch.json"
         spec = next(arm for arm in PILOT_ARMS if arm.key == "Combined")
-        settings = {**spec.settings(), "context_mode": context_mode, "message_layout": "native"}
+        settings = {
+            **spec.settings(),
+            "model_type": model_type,
+            "context_mode": context_mode,
+            "message_layout": "native",
+        }
         system = NativePilotSystem(
             name="NativePythonModelSmoke" + context_mode.title(),
             computing_unit_id=cuid,
@@ -92,7 +99,11 @@ def run_owned_model_smoke(*, worktree, source_sha, context_mode, output_director
             return {**evidence, "agent_service": service}
 
         result["model_smoke"] = run_model_smoke(
-            system, output_directory=bundle.path / "model", guard=guard, context_mode=context_mode
+            system,
+            output_directory=bundle.path / "model",
+            guard=guard,
+            context_mode=context_mode,
+            model_type=model_type,
         )
         capture, trace, snapshots, info, workflow = system._capture(task)
         for name, value in (

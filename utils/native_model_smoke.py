@@ -294,7 +294,7 @@ def _capture(system, bundle):
     return trace, snapshots, info, head_workflow
 
 
-def run_model_smoke(system, *, output_directory, guard, context_mode):
+def run_model_smoke(system, *, output_directory, guard, context_mode, model_type="gpt-5.6-luna"):
     """Run on an already-owned session; require live admission for every turn.
 
     guard(system, stage, info) must validate source/engine/worker/ownership and
@@ -303,11 +303,13 @@ def run_model_smoke(system, *, output_directory, guard, context_mode):
     artifacts and stops this fixture without canceling unknown backend work.
     """
     _require(callable(guard) and context_mode in {"delta", "latest"}, "live_qualification_guard_required")
+    _require(model_type in {"gpt-5.6-luna", "gpt-5.6-terra"}, "smoke_model_or_driver_mismatch")
     bundle = AttemptBundle(Path(output_directory))
     report = {
         "version": 1,
         "status": "running",
         "context_mode": context_mode,
+        "model_type": model_type,
         "cases": [],
         "resources": system._resources(),
         "admissions": [],
@@ -340,7 +342,7 @@ def run_model_smoke(system, *, output_directory, guard, context_mode):
         }
         _require(isinstance(info, dict) and info.get("state") == "AVAILABLE", "agent_not_idle")
         _require(
-            info.get("modelType") == "gpt-5.6-luna" and info.get("driver") == "vercel-tool-use",
+            info.get("modelType") == model_type and info.get("driver") == "vercel-tool-use",
             "smoke_model_or_driver_mismatch",
         )
         settings = info.get("settings", {})

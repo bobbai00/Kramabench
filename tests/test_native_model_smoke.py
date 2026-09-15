@@ -271,6 +271,20 @@ class ModelSmokeRunnerTest(unittest.TestCase):
         self.assertEqual(report["reason"], "smoke_model_or_driver_mismatch")
         self.system.agent.run.assert_not_called()
 
+    def test_explicit_terra_is_used_without_substitution(self):
+        self.info["modelType"] = "gpt-5.6-terra"
+        self.system.agent.run.return_value = SimpleNamespace(completed=False, error=None, stopped=False)
+        report = run_model_smoke(
+            self.system,
+            output_directory=self.path,
+            guard=lambda *args: {"qualified": True},
+            context_mode="delta",
+            model_type="gpt-5.6-terra",
+        )
+        self.assertEqual(report["model_type"], "gpt-5.6-terra")
+        self.assertEqual(report["reason"], "model_turn_incomplete")
+        self.system.agent.run.assert_called_once()
+
     def test_all_four_turns_use_new_steps_and_stop_after_the_final_audit(self):
         fixture = ModelSmokeAuditTest()
         fixture.setUp()
