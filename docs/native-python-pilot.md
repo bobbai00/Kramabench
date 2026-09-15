@@ -19,9 +19,13 @@
 
 # Python-native pilot: registered arms and measurement contract
 
-Date: 2026-09-15. Status: **local setup, not a completed evaluation**.
-No new task, real LLM, official score or cost/accuracy comparison is recorded
-by this checkpoint. The parent Dataflow Agent plan is
+Date: 2026-09-15. Status: **14/14 one-task pilot attempts complete**.
+The [final Luna/Terra report](../judgment_runs/native_python_dataflow_20260915/REPORT.md)
+records official scores, cache-aware costs, actual-input evidence audits,
+matching-worker and real-model qualification, and remaining limitations.
+Batching + observe was cheaper and correct on both models in this pilot;
+data/flow treatments did not improve accuracy. This is not a broad benchmark
+accuracy claim. The parent Dataflow Agent plan is
 `docs/native-python-dataflow-plan.md`, on `feat/native-python-dataflow`,
 descended from batching/observe commit `41cd8ae97`.
 
@@ -99,7 +103,9 @@ Before spending a model call:
    freeze full source SHAs, effective settings, backend/worker identity and
    data hashes in a run manifest. A port-to-worktree hint, or a V1 rerun on
    new code, does not establish historical provenance. The parent is
-   `41cd8ae97`; the precise original V1 revision still needs live verification.
+   `41cd8ae97`; the measured V1 reference was verified at
+   `bdd6b84037bd32818684e291dcdf5933b7a23466` (pre-batching V1 plus isolated
+   launcher support, not a copied historical result).
 3. Confirm isolated CUs/workflows, free result namespaces, required execution
    measurements and complete artifact capture. Do not use a watchdog rerun or
    overwrite to replace an unsuccessful first attempt. A missing/aborted
@@ -115,10 +121,13 @@ The one-attempt path, official numeric scoring, persistent recorder, scoped
 phase reporting, source-pinned agent launcher, allocation journal, verified
 owned-resource cleanup and collector aggregation are implemented. The owned
 single-arm runner now composes them with frozen inputs and post-drain metric
-finalization; its orchestration is locally tested. The production backend/
-worker and prior-live-gate qualification callback, matching worker/model runs,
-official pilot and final comparison report are **still pending**. A real
-setup-only lifecycle smoke passed earlier; this is not a launch-ready pilot.
+finalization. Production qualification and matching live runs subsequently
+passed at candidate `1c12044149da5a17c5c2f32c940c962762583133`, harness
+`1929be6841a9a7ff2ad9b7c87d2abdc7168d64c5`: six worker suites/20 cases,
+Terra-medium four-turn real-model smoke in both DELTA/LATEST, then all 14
+official attempts with verified owned-resource cleanup. The final report
+preserves earlier qualification failures and the pre-dispatch cached-read
+audit amendment; none of the scored first attempts was replaced.
 
 ## Isolated agent launch and shutdown
 
@@ -202,7 +211,7 @@ complete usage, a complete input trace, backend termination or treatment
 qualification. Synthetic error/stop steps are not parsed as answers.
 
 The pilot's destructor/`cleanup()` intentionally do not delete resources.
-The pending outer runner must verify terminal backend state and clean up only
+The owned outer runner must verify terminal backend state and clean up only
 its own agent/workflow/CU, recording unresolved IDs. Aborting a socket is not
 termination evidence. A crash during setup still needs per-allocation journaling
 in the outer runner; the current finalization journal covers exceptions and
@@ -547,7 +556,13 @@ not reclassify the old report or remove its cost.
 
 ## Local verification
 
-`.venv/bin/python -m unittest discover -s tests -q`: **160 pass**, including the original
+Final harness at `1929be6`: `.venv/bin/python -m unittest discover -s tests`
+passes **184 tests**, including production qualification, exact Terra selection
+and repeated cached-read identity checks. Parent agent `bun test` passes
+**1,129 tests** and `bun run typecheck` passes. The live qualification and
+official measurements are separate from these local tests; see the final report.
+
+Earlier local checkpoint: **160 pass**, including the original
 19 client/arm/native-trace and legacy pilot tests. New regressions cover actual
 listener resolution with controlled process fixtures, single-attempt policy,
 final-step rebroadcast accounting, durable partial capture, unknown/frozen
