@@ -230,7 +230,9 @@ class Evaluator:
             for answer_type in self.answer_type_fixtures:
                 self.answer_to_metric_dict[answer_type["name"]] = answer_type["metrics"]
         
-        self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
+        # Numeric/exact answer metrics require no model. Construct the optional
+        # pipeline judge only if that separate evaluation is actually requested.
+        self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini") if evaluate_pipeline else None
         self.run_subtasks = run_subtasks
         self.evaluate_pipeline = evaluate_pipeline
     
@@ -320,6 +322,8 @@ class Evaluator:
         token_usage_pipeline_input = 0
         token_usage_pipeline_output = 0
         if evaluate_pipeline:
+            if self.pipeline_evaluation_engine is None:
+                self.pipeline_evaluation_engine = GPTInterface(model="gpt-4o-mini")
             code_eval_list = []
             code_eval_list, token_usage_pipeline, token_usage_pipeline_input, token_usage_pipeline_output = self.pipeline_evaluation_engine.evaluate_data_pipeline(sut_generated_pipeline=response["code"],task=task)
             evaluation_result["llm_code_eval"] = code_eval_list
@@ -432,4 +436,3 @@ class Benchmark:
         eval_end_time = time.time()
         print(f"Evaluation took time {eval_end_time - eval_start_time}")
         return eval_results
-

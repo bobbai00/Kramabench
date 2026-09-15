@@ -262,7 +262,7 @@ class DataflowSystem(System):
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def process_dataset(self, dataset_directory: str | os.PathLike) -> None:
+    def _prepare_dataset(self, dataset_directory: str | os.PathLike) -> None:
         """
         Process the dataset by storing the directory path.
 
@@ -272,6 +272,7 @@ class DataflowSystem(System):
         Args:
             dataset_directory: Path to the dataset directory
         """
+        dataset_directory = str(dataset_directory)
         self.dataset_directory = dataset_directory
         self.dataset = {}
 
@@ -292,6 +293,8 @@ class DataflowSystem(System):
         # Try to load format hints
         self._load_format_hints(dataset_directory)
 
+    def process_dataset(self, dataset_directory: str | os.PathLike) -> None:
+        self._prepare_dataset(dataset_directory)
         # Initialize the agent. Best-effort: when `evaluate.py --use_system_cache`
         # short-circuits to the cached response file, `serve_query` is never
         # called and the agent isn't actually needed. Don't make scoring-only
@@ -560,48 +563,18 @@ Your last line MUST BE: **Final Answer: <value>**"""
         with open(prompt_path, "w") as f:
             f.write(prompt)
 
-        # Save config.json with run parameters
-        # Provenance: which service + which agent-service commit produced this run.
-        # Cross-vintage comparison (same config, different service build) silently
-        # invalidated an experiment once; stamp it so it is always auditable.
+        # Resolve the actual listener. A port-to-worktree guess (including an
+        # unmapped port falling back to main) can stamp a confidently wrong SHA.
+        # This is an on-disk source lookup, not proof of a process's loaded build.
         _endpoint = getattr(self, "agent_service_endpoint", None) or "http://localhost:3001"
-        try:
-            import subprocess as _sp, os as _os
-            # The service's code lives in the worktree that serves that PORT — not
-            # in the main checkout. Stamping main's SHA for a worktree-served port
-            # would be a confidently wrong provenance record.
-            # VERIFY THIS AGAINST REALITY BEFORE TRUSTING A STAMP:
-            #   readlink /proc/$(lsof -tiTCP:PORT -sTCP:LISTEN)/cwd
-            # A wrong entry is worse than none — it stamps a confident, false
-            # provenance. Both known failures happened:
-            #   * :3001 was mapped to the frontier-decay worktree while the
-            #     service actually ran from the MAIN checkout, so every gpt-5.2
-            #     arm recorded `fee02701d`, a commit on a branch that service
-            #     was not running.
-            #   * :3005 was absent, so it fell through to the main-repo default
-            #     and stamped main's SHA (dirty) for a clean worktree.
-            _WORKTREE_BY_PORT = {
-                "3002": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-role-policy",
-                "3005": "~/Desktop/bobflow/dataflow-agent-worktrees/prompt-fix",
-                "3007": "~/Desktop/dataflow-agent/.claude/worktrees/op-granularity",
-                "3008": "~/Desktop/dataflow-agent/.claude/worktrees/native-batch-observe",
-                "3009": "~/Desktop/dataflow-agent/.claude/worktrees/native-dataflow-evidence",
-                "3010": "~/Desktop/dataflow-agent/.claude/worktrees/op-granularity",
-            }
-            _port = _endpoint.rsplit(":", 1)[-1].strip("/")
-            _svc_dir = _os.path.expanduser(_WORKTREE_BY_PORT.get(_port, "~/Desktop/bobflow/dataflow-agent"))
-            _sha = _sp.run(["git", "-C", _svc_dir, "rev-parse", "--short", "HEAD"],
-                           capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
-            _dirty = bool(_sp.run(["git", "-C", _svc_dir, "status", "--porcelain",
-                                   "agent-service/src"], capture_output=True, text=True,
-                                  timeout=5).stdout.strip())
-        except Exception:
-            _sha, _dirty = "unknown", None
+        from utils.pilot_provenance import inspect_service_listener
+        _provenance = inspect_service_listener(_endpoint)
         config = {
             "agent_service_endpoint": _endpoint,
             "computing_unit_id": self.computing_unit_id,
-            "agent_service_git_sha": _sha,
-            "agent_service_src_dirty": _dirty,
+            "agent_service_git_sha": _provenance["git_sha"] or "unknown",
+            "agent_service_src_dirty": _provenance["source_dirty"],
+            "agent_service_provenance": _provenance,
             "system_name": self.name,
             "model_type": self.model_type,
             "driver": self.driver,

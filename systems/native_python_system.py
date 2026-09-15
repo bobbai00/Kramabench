@@ -26,7 +26,7 @@ override under an existing SUT name. See docs/native-python-pilot.md.
 import os
 from dataclasses import dataclass
 
-from .dataflow_system import DataflowSystem
+from .native_pilot_system import NativePilotSystem
 
 
 @dataclass(frozen=True)
@@ -123,13 +123,18 @@ def _make_arm(spec: PilotArm):
             raise ValueError("computing_unit_id must be a positive integer")
         kwargs.setdefault("agent_service_endpoint", f"http://localhost:{spec.port}")
         kwargs.update(frozen)
-        DataflowSystem.__init__(self, *args, name=spec.system_name, verbose=verbose, **kwargs)
+        NativePilotSystem.__init__(self, *args, name=spec.system_name, verbose=verbose, **kwargs)
+        self.pilot_spec = spec
 
-    return type(spec.system_name, (DataflowSystem,), {
-        "__init__": __init__,
-        "__module__": __name__,
-        "__doc__": f"One-attempt Python-native pilot: {spec.key}; no results claimed.",
-    })
+    return type(
+        spec.system_name,
+        (NativePilotSystem,),
+        {
+            "__init__": __init__,
+            "__module__": __name__,
+            "__doc__": f"One-attempt Python-native pilot: {spec.key}; no results claimed.",
+        },
+    )
 
 
 __all__ = [spec.system_name for spec in PILOT_ARMS]

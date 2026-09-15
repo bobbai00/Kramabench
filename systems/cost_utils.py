@@ -65,8 +65,8 @@ def _normalize(model: str) -> str:
     return m
 
 
-def _prices(model: str) -> Optional[Tuple[float, float, float, float]]:
-    """Return (input, output, cache_read, cache_creation) per-token USD, or None."""
+def _price_details(model: str):
+    """Resolve rates and their source together so a manifest can freeze both."""
     m = _normalize(model)
     try:
         import litellm
@@ -76,13 +76,38 @@ def _prices(model: str) -> Optional[Tuple[float, float, float, float]]:
             out_c = c.get("output_cost_per_token") or 0.0
             cread = c.get("cache_read_input_token_cost")
             cwrite = c.get("cache_creation_input_token_cost")
-            return (in_c, out_c,
+            rates = (in_c, out_c,
                     cread if cread is not None else in_c * 0.1,
                     cwrite if cwrite is not None else in_c * 1.25)
+            return rates, {
+                "table": "litellm.model_cost", "model_key": m if m in litellm.model_cost else model,
+                "cache_read_default_ratio": 0.1 if cread is None else None,
+                "cache_creation_default_ratio": 1.25 if cwrite is None else None,
+            }
     except Exception:
         pass
     f = _FALLBACK.get(m) or _FALLBACK.get(model)
-    return f
+    return (f, {"table": "systems.cost_utils._FALLBACK", "model_key": m}) if f else None
+
+
+def _prices(model: str) -> Optional[Tuple[float, float, float, float]]:
+    """Return (input, output, cache_read, cache_creation) per-token USD, or None."""
+    details = _price_details(model)
+    return details[0] if details else None
+
+
+def price_schedule(model: str) -> Optional[dict]:
+    """Frozen harness rates, not a claim about current public provider pricing."""
+    details = _price_details(model)
+    if not details:
+        return None
+    rates, source = details
+    return {
+        "version": 1, "kind": "token_estimate", "model": model,
+        "source": source, "currency": "USD", "unit": "per_token",
+        "rates": dict(zip(("input", "output", "cache_read", "cache_creation"), rates)),
+        "input_includes_cached": True, "output_includes_reasoning": True,
+    }
 
 
 def has_price(model: str) -> bool:
@@ -96,8 +121,10 @@ def compute_cost(
     cached_tokens: int = 0,
     cache_creation_tokens: int = 0,
     input_includes_cached: bool = True,
+    *,
+    pricing: Optional[dict] = None,
 ) -> Optional[float]:
-    p = _prices(model)
+    p = tuple(pricing["rates"][key] for key in ("input", "output", "cache_read", "cache_creation")) if pricing is not None else _prices(model)
     if not p:
         return None
     in_c, out_c, cread_c, cwrite_c = p

@@ -56,7 +56,8 @@ of exposure. No new arm sends the prototype `nativeFlowEvidence` flag.
 
 Shared settings: `gpt-5.6-luna`, native mode, DELTA, 25 steps, TSV,
 2,000 result characters, 3,000 characters per cell, 240-second tool timeout,
-10-minute execution timeout, `resultSelection=all`, `attemptReflection=true`,
+10-minute execution timeout, a fixed 1,800-second client turn budget,
+`resultSelection=all`, `attemptReflection=true`,
 no code-in-snapshot, no thought replay, no automatic/static compaction,
 no session/versioned layout, no optional recall/resume/general-inspect tools.
 The V2 catalog's required `inspectError` remains available independently of
@@ -103,8 +104,87 @@ Before spending a model call:
    of unrelated metrics. `kb.py compare`'s max-metric/strict-1.0 convention is
    different and must be labeled separately.
 
-The guarded orchestration, official scoring/report and real-input audit are
-**still pending**, so arm registration alone is not a launch-ready pilot.
+The one-attempt execution/capture path and official numeric scoring are now
+implemented and locally tested. The production launch/qualification guard,
+persistent execution recording, verified resource cleanup, final report and
+real-input audit are **still pending**. This is not a launch-ready pilot.
+
+## Single-attempt execution and failure artifacts
+
+`native_python_pilot.run_pilot_task` uses the existing KramaBench `Executor`
+and `Evaluator`, filtering exactly `environment-easy-3` and keeping the oracle
+file policy. It does not use caches, watchdog reruns or recovery rounds. New
+arms use `NativePilotSystem`; ordinary `kb.py tasks` calls without the required
+guard fail before setup or a model dispatch. The guard runs before setup,
+immediately before dispatch and after the attempt. The production guard is
+not supplied yet; tests use controlled guards and a mocked agent, not real
+provenance or Texera qualification.
+
+Dataset preparation no longer allocates a throwaway agent for these arms.
+Each task reserves a fresh directory exclusively, including unsuccessful or
+empty first attempts. `empty_turn_retries=0` overrides the legacy retry
+environment, and the fixed 1,800-second turn budget is recorded. There is no
+fresh-setup/reset fallback. Existing non-pilot arms retain their setup/retry
+policy.
+
+The client supports an event callback. Accepted step/state/complete/error
+events are flushed and fsynced into private `events.jsonl` immediately; init
+payloads and raw delegates are omitted. Each finalization attempts bounded
+REST reads of the full trace, effective agent settings/identity, workflow and
+every step snapshot. Snapshot identities are checked. Malformed or unavailable
+REST traces fall back to the received step journal and remain explicitly
+partial. `attempt.json` records dispatch/completion/qualification separately,
+resource IDs, capture status and sanitized exception types. The full raw
+trace and snapshots are private run artifacts, not sanitized publications.
+
+Additional artifacts are `capture.json`, `snapshots.json`, canonical
+`response.json`, `verdict.json`, and helper-derived `pilot_metrics.json`.
+The last file is trace/token accounting only, **not** the final execution or
+collector-overhead report. Failed setup/preflight is unscored because no model
+attempt was made; dispatched unsuccessful attempts remain in the record.
+Official raw scores and eligibility for the treatment comparison are separate.
+For this numeric task the evaluator no longer constructs an unused pipeline
+LLM judge; the official `success` metric and >=0.9 threshold are unchanged.
+
+A model's final answer that was actually received is retained even if the
+completion frame or input-message capture is missing. That does not establish
+complete usage, a complete input trace, backend termination or treatment
+qualification. Synthetic error/stop steps are not parsed as answers.
+
+The pilot's destructor/`cleanup()` intentionally do not delete resources.
+The pending outer runner must verify terminal backend state and clean up only
+its own agent/workflow/CU, recording unresolved IDs. Aborting a socket is not
+termination evidence. A crash during setup still needs per-allocation journaling
+in the outer runner; the current finalization journal covers exceptions and
+interrupts it can catch, not SIGKILL or power loss before an ID is persisted.
+
+## Accounting and provenance corrections
+
+- The server re-broadcasts its last ReAct step when marking `isEnd=true`.
+  The Python WebSocket client formerly added that step's usage twice. It now
+  replaces usage by step ID, and the pilot separately deduplicates the saved
+  trace. Historical artifacts are **not rewritten**; comparisons with old
+  recorded costs require auditing this accounting difference.
+- `price_schedule()` captures the existing harness rates and their source
+  before dispatch. Pricing that attempt uses the frozen schedule, including
+  cache reads, without charging reasoning again. These are token estimates,
+  not verified current public prices or provider invoices. Cross-arm schedule
+  equality must still be enforced by the production manifest guard.
+- Complete `cost_usd` requires complete valid per-step input/output/cache
+  usage and a completed turn. Partial known usage is retained with
+  `observed_cost_usd`, while whole-attempt cost is null. Missing cache usage,
+  missing pricing, impossible counts and unexplained zero charges do not
+  become a free result. Raw per-step usage remains in the trace.
+- `kb.py load_cost_stats` preserves unknown/partial costs as null. Cost,
+  compare, Venn and case-metric commands exclude them from cheaper-run
+  decisions and identify their known-cost coverage. Accuracy overlap is not
+  discarded simply because one cost is unknown. The CLI's existing strict
+  score convention is not changed to the pilot's >=0.9 convention.
+- Generic service provenance now resolves the actual local listening PID,
+  its entry point, on-disk Git revision, source dirtiness and process start
+  identity. Unresolved cases stay unknown. This is **not proof of loaded
+  source**; it explicitly returns `loaded_revision_verified=false` until the
+  outer runner verifies a source-pinned launch and pre/post stability.
 
 ## Trace and execution measurements
 
@@ -162,8 +242,9 @@ scoring helpers. Primary cost is `stats.json.cost_usd` with cache discounts,
 not total tokens. Freeze and publish the price schedule/source used; this is
 a token-based estimate, not a provider invoice. Missing pricing/usage or an
 unexplained zero with nonzero usage must be flagged, not counted as a free win.
-The existing generic harness's price-error fallback and port-based provenance
-hints require these explicit validation gates before this pilot is released.
+Generic historical price-error fallbacks are not sufficient evidence. The
+pilot's explicit unknown-cost handling and listener-source resolution still
+require the production manifest/launch validation gates before release.
 
 Report input/cached/output/reasoning tokens, steps, batch/observe/inspection
 counts, churn, partial failures and repairs, compile/runtime request outcomes,
@@ -174,8 +255,16 @@ it. No savings/accuracy claim is justified by the local setup tests.
 
 ## Local verification
 
-`python -m unittest discover -s tests -q`: 19 pass. This includes eight new
-V2/client/arm tests and seven new native-trace tests, plus the four unchanged
-legacy pilot tests. `kb.py systems` resolves all seven new SUT classes.
-No network/service setup or model call is part of these harness tests. New
-client/system options are keyword-only, preserving legacy positional arguments.
+`python -m unittest discover -s tests -q`: **57 pass**, including the original
+19 client/arm/native-trace and legacy pilot tests. New regressions cover actual
+listener resolution with controlled process fixtures, single-attempt policy,
+final-step rebroadcast accounting, durable partial capture, unknown/frozen
+cost, setup/dispatch/postflight failure, malformed trace/snapshot responses,
+answer-versus-transport status, and the real Executor/Evaluator path with a
+mocked agent. `kb.py systems` resolves all seven new SUT classes.
+
+These tests make no Texera service setup or model calls. They are not live
+worker E2E tests or real model traces. New client/system options remain
+keyword-only, preserving legacy positional arguments. New/scoped Python files
+pass Ruff formatting and F-rule checks; no dependency was installed into the
+shared benchmark venv.

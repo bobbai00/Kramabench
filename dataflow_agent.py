@@ -13,7 +13,7 @@ import os
 import json
 import requests
 import websocket
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 from dataclasses import dataclass, field
 
 # ============================================================================
@@ -356,6 +356,9 @@ class MessageResult:
     stats: dict
     stopped: bool
     error: Optional[str] = None
+    # An explicit server completion event, not inferred from EOF or zero steps.
+    # None preserves compatibility with clients/fixtures predating this field.
+    completed: Optional[bool] = field(default=None, kw_only=True)
 
 
 # ============================================================================
@@ -644,6 +647,9 @@ def send_message(
         agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
         receive_timeout: int = 600,
         max_turn_seconds: Optional[float] = None,
+        *,
+        empty_turn_retries: Optional[int] = None,
+        on_event: Optional[Callable[[dict], None]] = None,
 ) -> MessageResult:
     """Run one turn, retrying a silent no-op start.
 
@@ -656,11 +662,17 @@ def send_message(
     restart. Retrying an empty turn costs nothing when the run was genuinely
     empty and recovers the task when it was not.
     """
-    attempts = int(os.environ.get("KB_EMPTY_TURN_RETRIES", "2") or 0) + 1
+    # EOF / zero observed steps does not prove that the server did no work.
+    # A single-attempt pilot explicitly selects 0 regardless of legacy env.
+    retries = int(os.environ.get("KB_EMPTY_TURN_RETRIES", "2") or 0) if empty_turn_retries is None else empty_turn_retries
+    if type(retries) is not int or retries < 0:
+        raise ValueError("empty_turn_retries must be a nonnegative integer")
+    attempts = retries + 1
     result = None
     for attempt in range(attempts):
         result = _send_message_once(
-            agent_id, message, agent_endpoint, receive_timeout, max_turn_seconds
+            agent_id, message, agent_endpoint, receive_timeout, max_turn_seconds,
+            **({"on_event": on_event} if on_event is not None else {}),
         )
         if result.error or (result.stats or {}).get("steps"):
             return result
@@ -677,12 +689,14 @@ def _send_message_once(
         agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
         receive_timeout: int = 600,
         max_turn_seconds: Optional[float] = None,
+        *,
+        on_event: Optional[Callable[[dict], None]] = None,
 ) -> MessageResult:
     """
     Send a message to an agent via the WebSocket protocol and collect the response.
 
-    The agent-service no longer exposes a REST `/message` endpoint; instead it
-    publishes streaming step events over `ws://.../api/agents/:id/react`. This
+    The streaming API publishes step events over
+    `ws://.../api/agents/:id/react`. This
     function opens the WS, sends `{type: "message", content: ...}`, and reads
     events until a `complete` or `error` arrives.
 
@@ -713,6 +727,8 @@ def _send_message_once(
             "cache_creation_input_tokens": 0,
         }
         step_count = 0
+        agent_steps_seen = set()
+        step_usage_seen = {}
         stopped = False
         error: Optional[str] = None
         complete = False
@@ -761,6 +777,11 @@ def _send_message_once(
             except json.JSONDecodeError:
                 continue
 
+            # Persist progress before consuming another frame. If the socket
+            # subsequently fails, a single-attempt caller retains paid steps.
+            # A persistence failure propagates; never silently lose the journal.
+            if on_event is not None:
+                on_event(event)
             ev_type = event.get("type")
             if ev_type == "step":
                 step = event.get("step") or {}
@@ -768,19 +789,25 @@ def _send_message_once(
                 # WS `init` payload already enumerated prior steps separately,
                 # so step events here are scoped to the current message.
                 if step.get("role") == "agent":
-                    step_count += 1
+                    # The server re-broadcasts the final step with isEnd=true.
+                    # It is an update, not a second model call or token charge.
+                    step_key = step.get("id") or ("unidentified", len(agent_steps_seen))
+                    if step_key not in agent_steps_seen:
+                        agent_steps_seen.add(step_key)
+                        step_count += 1
                     if step.get("isEnd") and step.get("content"):
                         final_response = step["content"]
-                u = step.get("usage") or {}
-                usage_total["input_tokens"] += int(u.get("inputTokens") or 0)
-                usage_total["output_tokens"] += int(u.get("outputTokens") or 0)
-                usage_total["total_tokens"] += int(u.get("totalTokens") or 0)
-                usage_total["reasoning_tokens"] += int(u.get("reasoningTokens") or 0)
-                usage_total["cached_input_tokens"] += int(u.get("cachedInputTokens") or 0)
-                # Anthropic cache WRITES (1.25x input) — surfaced per step by
-                # agent-service's driver from litellm's raw usage extension.
-                usage_total["cache_creation_input_tokens"] += int(
-                    u.get("cacheCreationInputTokens") or 0)
+                    u = step.get("usage") or {}
+                    current = {target: int(u.get(source) or 0) for target, source in (
+                        ("input_tokens", "inputTokens"), ("output_tokens", "outputTokens"),
+                        ("total_tokens", "totalTokens"), ("reasoning_tokens", "reasoningTokens"),
+                        ("cached_input_tokens", "cachedInputTokens"),
+                        ("cache_creation_input_tokens", "cacheCreationInputTokens"),
+                    )}
+                    previous = step_usage_seen.get(step_key, {})
+                    for key, value in current.items():
+                        usage_total[key] += value - previous.get(key, 0)
+                    step_usage_seen[step_key] = current
             elif ev_type == "complete":
                 complete = True
             elif ev_type == "error":
@@ -799,6 +826,7 @@ def _send_message_once(
             stats={"steps": step_count},
             stopped=stopped,
             error=error,
+            completed=complete,
         )
     finally:
         try:
@@ -1251,7 +1279,8 @@ class DataflowAgent:
 
         return self
 
-    def run(self, prompt: str) -> MessageResult:
+    def run(self, prompt: str, *, empty_turn_retries: Optional[int] = None,
+            on_event: Optional[Callable[[dict], None]] = None) -> MessageResult:
         """
         Run the agent with a prompt and return the full message result.
 
@@ -1278,6 +1307,8 @@ class DataflowAgent:
             message=prompt,
             agent_endpoint=self.agent_service_endpoint,
             max_turn_seconds=self.max_turn_seconds,
+            empty_turn_retries=empty_turn_retries,
+            **({"on_event": on_event} if on_event is not None else {}),
         )
 
         # Store the result for later access

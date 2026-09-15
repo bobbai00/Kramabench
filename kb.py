@@ -523,6 +523,17 @@ def load_cost_stats(sut):
         if not st:
             continue
         parts = d.name.rsplit("-", 2)
+        raw_cost = st.get("cost_usd")
+        try:
+            cost = float(raw_cost) if raw_cost is not None and not isinstance(raw_cost, bool) else None
+            if cost is not None and (not math.isfinite(cost) or cost < 0):
+                cost = None
+        except (TypeError, ValueError, OverflowError):
+            cost = None
+        if st.get("cost_status") in {"partial", "unknown"}:
+            cost = None
+        if cost == 0 and any(st.get(key) for key in ("input_tokens", "output_tokens", "total_tokens")):
+            cost = None
         recs.append({
             "task_id": d.name,
             "workload": parts[0],
@@ -531,7 +542,9 @@ def load_cost_stats(sut):
             "output_tokens": int(st.get("output_tokens", 0) or 0),
             "total_tokens": int(st.get("total_tokens", 0) or 0),
             "num_steps": int(st.get("num_steps", 0) or 0),
-            "cost": float(st.get("cost_usd", 0) or 0),
+            "cost": cost,
+            "cost_status": st.get("cost_status", "complete" if cost is not None else "unknown"),
+            "observed_cost": st.get("observed_cost_usd"),
         })
     return recs
 
@@ -581,54 +594,68 @@ def cmd_cost(a):
     print(f"{'SUT':<44}{'tasks':>6}{'total $':>11}{'$/task':>9}{'in tok':>13}{'out tok':>13}{'steps':>8}")
     print("-" * 104)
     for s, recs in data.items():
-        n = len(recs); tc = sum(r["cost"] for r in recs)
+        n = len(recs); known = [r for r in recs if r["cost"] is not None]
+        tc = sum(r["cost"] for r in known)
         ti = sum(r["input_tokens"] for r in recs); to = sum(r["output_tokens"] for r in recs)
         ts = sum(r["num_steps"] for r in recs)
-        print(f"{s:<44}{n:>6}{('$%.2f' % tc):>11}{('$%.4f' % (tc / n)):>9}{ti:>13,}{to:>13,}{ts:>8,}")
+        total_text = '$%.2f' % tc if known else 'unknown'
+        mean_text = '$%.4f' % (tc / len(known)) if known else 'unknown'
+        print(f"{s:<44}{n:>6}{total_text:>11}{mean_text:>9}{ti:>13,}{to:>13,}{ts:>8,}")
+        if len(known) != n:
+            print(f"  cost coverage {len(known)}/{n}; {n-len(known)} unknown. Dollar totals/means use known costs only.")
     if a.trim_top:
         print("\ntrimmed $/task (drops the highest-cost PCT of tasks within each SUT):")
         header = f"{'SUT':<44}{'trim':>7}{'kept':>9}{'dropped':>9}{'trim $':>11}{'$/task':>9}"
         print(header)
         print("-" * len(header))
         for s, recs in data.items():
-            ordered = sorted(recs, key=lambda r: r["cost"], reverse=True)
+            ordered = sorted((r for r in recs if r["cost"] is not None), key=lambda r: r["cost"], reverse=True)
             for pct in a.trim_top:
                 if pct < 0 or pct >= 100:
                     sys.exit("--trim-top values must be in [0, 100)")
                 drop = math.floor(len(ordered) * pct / 100)
                 kept = ordered[drop:] if drop else ordered
+                if not kept:
+                    print(f"{s:<44}{str(pct)+'%':>7}  unknown (no complete costs)")
+                    continue
                 tc = sum(r["cost"] for r in kept)
                 print(f"{s:<44}{(str(pct) + '%'):>7}{len(kept):>9}{drop:>9}"
                       f"{('$%.2f' % tc):>11}{('$%.4f' % (tc / len(kept))):>9}")
     print("\n(cost = sum of stats.json cost_usd — litellm pricing, includes cache-read discounts)")
 
     for s, recs in data.items():
-        miss = sum(1 for r in recs if not r["cost"])
-        tag = f"  [{miss} task(s) missing cost_usd]" if miss else ""
+        miss = sum(1 for r in recs if r["cost"] is None)
+        tag = f"  [{miss} task(s) unknown cost_usd]" if miss else ""
         if a.by == "task" and a.top <= 0:
             continue
         print(f"\n=== {s}  (model={_first_model(s)}){tag} ===")
         if a.by == "task":
-            top = sorted(recs, key=lambda r: -r["cost"])[:a.top]
+            top = sorted((r for r in recs if r["cost"] is not None), key=lambda r: -r["cost"])[:a.top]
             print(f"  top {len(top)} tasks by cost:")
             for r in top:
                 print(f"    {r['task_id']:<30} ${r['cost']:.4f}  "
                       f"({r['input_tokens']:,} in / {r['output_tokens']:,} out, {r['num_steps']} steps)")
             continue
-        groups = defaultdict(lambda: {"cost": 0.0, "in": 0, "out": 0, "n": 0})
+        groups = defaultdict(lambda: {"cost": 0.0, "in": 0, "out": 0, "n": 0, "priced": 0})
         for r in recs:
             g = groups[r[a.by]]
-            g["cost"] += r["cost"]; g["in"] += r["input_tokens"]; g["out"] += r["output_tokens"]; g["n"] += 1
+            if r["cost"] is not None:
+                g["cost"] += r["cost"]; g["priced"] += 1
+            g["in"] += r["input_tokens"]; g["out"] += r["output_tokens"]; g["n"] += 1
         print(f"  by {a.by}:")
         print(f"    {a.by:<13}{'tasks':>6}{'cost':>11}{'$/task':>9}{'in tok':>13}{'out tok':>13}")
         for k, g in sorted(groups.items()):
-            print(f"    {k:<13}{g['n']:>6}{('$%.4f' % g['cost']):>11}{('$%.4f' % (g['cost'] / g['n'])):>9}"
+            total_text = '$%.4f' % g['cost'] if g['priced'] else 'unknown'
+            mean_text = '$%.4f' % (g['cost'] / g['priced']) if g['priced'] else 'unknown'
+            print(f"    {k:<13}{g['n']:>6}{total_text:>11}{mean_text:>9}"
                   f"{g['in']:>13,}{g['out']:>13,}")
+            if g['priced'] != g['n']:
+                print(f"      known-cost coverage {g['priced']}/{g['n']}")
         succ = load_task_success(s)
         if succ:
-            cp = [r["cost"] for r in recs if succ.get(r["task_id"], 0) >= 1.0]
-            cf = [r["cost"] for r in recs if r["task_id"] in succ and succ.get(r["task_id"], 0) < 1.0]
-            print("  by outcome (scored tasks):")
+            cp = [r["cost"] for r in recs if r["cost"] is not None and succ.get(r["task_id"], 0) >= 1.0]
+            cf = [r["cost"] for r in recs if r["cost"] is not None and r["task_id"] in succ and succ.get(r["task_id"], 0) < 1.0]
+            print("  by outcome (scored tasks with known cost):")
             for label, lst in [("passed", cp), ("failed", cf)]:
                 if lst:
                     print(f"    {label:<8}{len(lst):>4} tasks  ${sum(lst):>8.4f} total  ${sum(lst) / len(lst):.4f}/task")
@@ -706,8 +733,12 @@ def cmd_compare(a):
     print(f"{'SUT':<40}{'tasks':>6}{'pass':>6}{'pass%':>7}{'total$':>9}{'tokens':>13}")
     for s, succ, cost in [(A, sa, ca), (B, sb, cb)]:
         n = len(cost); pw = sum(1 for t in cost if succ.get(t, 0) >= 1.0)
-        tc = sum(r["cost"] for r in cost.values()); tk = sum(r["total_tokens"] for r in cost.values())
-        print(f"{short(s):<40}{n:>6}{pw:>6}{(100*pw/n if n else 0):>6.0f}%{('$%.2f' % tc):>9}{tk:>13,}")
+        known = [r["cost"] for r in cost.values() if r["cost"] is not None]
+        tc = sum(known); tk = sum(r["total_tokens"] for r in cost.values())
+        total_text = '$%.2f' % tc if known else 'unknown'
+        print(f"{short(s):<40}{n:>6}{pw:>6}{(100*pw/n if n else 0):>6.0f}%{total_text:>9}{tk:>13,}")
+        if len(known) != n:
+            print(f"  cost coverage {len(known)}/{n}; {n-len(known)} unknown (excluded from dollar totals/comparisons)")
     print(f"  A = {A}\n  B = {B}")
 
     common = sorted(set(ca) & set(cb))
@@ -718,15 +749,17 @@ def cmd_compare(a):
     print(f"\noutcome over {len(common)} shared tasks: "
           f"both pass {len(both)} | A-only {len(onlyA)} | B-only {len(onlyB)} | both fail {len(neither)}")
 
-    a_ch = [t for t in both if ca[t]["cost"] < cb[t]["cost"]]
-    b_ch = [t for t in both if cb[t]["cost"] < ca[t]["cost"]]
-    print(f"both-pass cost ({len(both)} tasks): "
+    priced = [t for t in common if ca[t]["cost"] is not None and cb[t]["cost"] is not None]
+    costed_both = [t for t in both if t in priced]
+    a_ch = [t for t in costed_both if ca[t]["cost"] < cb[t]["cost"]]
+    b_ch = [t for t in costed_both if cb[t]["cost"] < ca[t]["cost"]]
+    print(f"both-pass cost ({len(costed_both)}/{len(both)} tasks with both costs known): "
           f"A cheaper {len(a_ch)} (−${sum(cb[t]['cost']-ca[t]['cost'] for t in a_ch):.3f}) | "
           f"B cheaper {len(b_ch)} (−${sum(ca[t]['cost']-cb[t]['cost'] for t in b_ch):.3f})")
 
-    net = sum(cb[t]["cost"] - ca[t]["cost"] for t in common)  # +ve = B pricier
-    dom = sorted(common, key=lambda t: abs(cb[t]["cost"] - ca[t]["cost"]), reverse=True)
-    print(f"\ncost gap (Δ = B−A) net over shared = ${net:+.3f}  (+ = B pricier).  top {a.top} dominators:")
+    net = sum(cb[t]["cost"] - ca[t]["cost"] for t in priced)  # +ve = B pricier
+    dom = sorted(priced, key=lambda t: abs(cb[t]["cost"] - ca[t]["cost"]), reverse=True)
+    print(f"\ncost gap (Δ = B−A) net over {len(priced)} priced shared tasks = ${net:+.3f}  (+ = B pricier).  top {a.top} dominators:")
     print(f"  {'task':<22}{'Δ(B-A)':>10}   A($/steps/PF)      B($/steps/PF)")
     cum = 0.0
     for t in dom[:a.top]:
@@ -1095,8 +1128,8 @@ def cmd_venn(a):
     """A-vs-B Venn + both-pass cost split + per-category operator/file stats."""
     A, B = a.sut
     sa, sb = answer_scores(A), answer_scores(B)
-    ca = {r["task_id"]: r for r in load_cost_stats(A)}
-    cb = {r["task_id"]: r for r in load_cost_stats(B)}
+    ca = {r["task_id"]: r for r in load_cost_stats(A) if r["cost"] is not None}
+    cb = {r["task_id"]: r for r in load_cost_stats(B) if r["cost"] is not None}
     th = a.th
     common = sorted(set(sa) & set(sb))
     both = [t for t in common if sa[t] >= th and sb[t] >= th]
@@ -1125,7 +1158,7 @@ def cmd_venn(a):
     print(f"        \\                 /   \\                    /")
     print(f"          '───────────────'      '───────────────'")
     print(f"                     both fail: {len(neither)}   (shared tasks: {len(common)})")
-    print(f"\nboth-pass cost split ({bp} tasks): "
+    print(f"\nboth-pass cost split ({sum(t in ca and t in cb for t in both)}/{bp} tasks with both costs known): "
           f"A cheaper on {len(cheapA)} (saves ${gA:.3f}) | B cheaper on {len(cheapB)} (saves ${gB:.3f})")
     print(f"\nA-only: {tagged(onlyA)}")
     print(f"B-only: {tagged(onlyB)}")
@@ -1391,8 +1424,8 @@ def cmd_case_metrics(a):
     a cross-category matrix; dumps everything to JSON."""
     A, B = a.sut
     sa, sb = answer_scores(A), answer_scores(B)
-    ca = {r["task_id"]: r for r in load_cost_stats(A)}
-    cb = {r["task_id"]: r for r in load_cost_stats(B)}
+    ca = {r["task_id"]: r for r in load_cost_stats(A) if r["cost"] is not None}
+    cb = {r["task_id"]: r for r in load_cost_stats(B) if r["cost"] is not None}
     th, common = a.th, sorted(set(sa) & set(sb))
     both = [t for t in common if sa[t] >= th and sb[t] >= th]
     onlyA = [t for t in common if sa[t] >= th and sb[t] < th]
