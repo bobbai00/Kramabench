@@ -109,9 +109,7 @@ class NativePilotSystem(DataflowSystem):
         # destructor must never abort an unknown in-flight shared execution.
         pass
 
-    def serve_query(self, query, query_id="default-0", subset_files=None):
-        if self._pilot_guard is None:
-            raise RuntimeError("native pilot requires the launch/qualification guard")
+    def _attempt_inputs(self, query, query_id, subset_files):
         task = self.workload_data.get(query_id)
         if (
             query_id != PILOT_TASK
@@ -121,10 +119,30 @@ class NativePilotSystem(DataflowSystem):
             or task.get("answer_type") != "numeric_exact"
         ):
             raise ValueError("pilot task, query and oracle-file policy are frozen")
-        bundle = AttemptBundle(Path(self.output_dir) / query_id)
+        return task, build_pilot_prompt(self)[1]
+
+    def _attempt_bundle(self, query_id):
+        return AttemptBundle(Path(self.output_dir) / query_id)
+
+    def _attempt_metadata(self):
+        return {}
+
+    def _attempt_pricing(self):
+        return price_schedule(self.model_type)
+
+    def _finalize_stats(self, bundle, attempt, stats, trace):
+        return stats
+
+    def _after_attempt(self, bundle, attempt):
+        pass
+
+    def serve_query(self, query, query_id="default-0", subset_files=None):
+        if self._pilot_guard is None:
+            raise RuntimeError("native pilot requires the launch/qualification guard")
+        task, prompt = self._attempt_inputs(query, query_id, subset_files)
+        bundle = self._attempt_bundle(query_id)
         self.pilot_bundle = bundle
-        _, prompt = build_pilot_prompt(self)
-        pricing = price_schedule(self.model_type)
+        pricing = self._attempt_pricing()
         config = {
             "system_name": self.name,
             "query_id": query_id,
@@ -147,6 +165,7 @@ class NativePilotSystem(DataflowSystem):
             "backend_termination_verified": False,
             "resources": {},
             "errors": [],
+            **self._attempt_metadata(),
         }
         bundle.write("prompt.txt", prompt, text=True)
         bundle.write("ground_truth.json", task)
@@ -229,6 +248,7 @@ class NativePilotSystem(DataflowSystem):
                     "elapsed_seconds": attempt["elapsed_seconds"],
                     "pricing": pricing,
                 }
+            stats = self._finalize_stats(bundle, attempt, stats, trace)
             bundle.write("stats.json", stats)
             # Score a real observed final answer even if the final completion
             # frame was lost. Protocol completion, usage completeness and answer
@@ -240,6 +260,7 @@ class NativePilotSystem(DataflowSystem):
             bundle.write("answer.json", explanation)
             attempt["capture_complete"] = capture["complete"]
             attempt["input_trace_complete"] = stats["input_trace_complete"]
+            self._after_attempt(bundle, attempt)
             bundle.write("config.json", config)
             bundle.write("attempt.json", attempt)
         if isinstance(exception, (KeyboardInterrupt, SystemExit)):
