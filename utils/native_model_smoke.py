@@ -162,7 +162,7 @@ def audit_model_smoke_turn(case, trace, snapshots, head, *, before=None):
     allowed = {"dataflow", "inspectError"} if case == "failure" else {"dataflow"}
     _require(calls and all(call.get("toolName") in allowed for _, call in calls), "unexpected_tool")
     batches = [(i, call["input"]) for i, call in calls if call["toolName"] == "dataflow"]
-    _require(len(batches) == 1, "expected_one_batch")
+    _require(len(batches) >= 1 if case == "cached" else len(batches) == 1, "expected_one_batch")
     index, batch = batches[0]
     operators, observed = batch.get("operators"), batch.get("observe", [])
     _require(isinstance(operators, list) and all(isinstance(op, dict) for op in operators), "invalid_batch")
@@ -188,7 +188,14 @@ def audit_model_smoke_turn(case, trace, snapshots, head, *, before=None):
         _require(not any(re.search(r"HIDDEN_100000[123]", _input(step)) for step in steps), "hidden_source_row")
         report["observations"].append(_seen_observation("answer", calls, steps, snapshots, head))
     elif case == "cached":
-        _require(operators == [] and observed == ["source"], "cached_observe_contract_mismatch")
+        # A redundant read is an efficiency failure, not evidence of broken
+        # caching. Keep it visible in the report; every call must be the same
+        # read-only pull and retain the producing identity, including midway.
+        _require(
+            all(batch.get("operators") == [] and batch.get("observe") == ["source"] for _, batch in batches),
+            "cached_observe_contract_mismatch",
+        )
+        report.update(cached_read_calls=len(batches), redundant_cached_reads=len(batches) - 1)
         _require(
             not any(re.search(r"HIDDEN_100000[123]", _input(step)) for step in steps[: index + 1]),
             "source_seen_before_cached_observe",
@@ -203,6 +210,12 @@ def audit_model_smoke_turn(case, trace, snapshots, head, *, before=None):
             and current.get("sampleRecords") == old.get("sampleRecords"),
             "cached_binding_changed",
         )
+        for at, _ in batches:
+            pulled = snapshots.get(steps[at]["id"], {}).get("results", {}).get("source", {})
+            _require(
+                all(pulled.get(key) == old.get(key) for key in ("resultVersion", "materialization", "sampleRecords")),
+                "cached_binding_changed",
+            )
         proof = _seen_observation("source", calls, steps, snapshots, head)
         witnessed = next(step for step in steps if step["id"] == proof["input_step_id"])
         _require(all("HIDDEN_" + str(1000000 + i) in _input(witnessed) for i in (1, 2, 3)), "cached_rows_not_seen")

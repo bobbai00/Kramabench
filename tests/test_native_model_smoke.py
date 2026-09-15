@@ -133,6 +133,28 @@ class ModelSmokeAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cached_binding_changed"):
             self.audit("cached", before)
 
+    def test_repeated_cached_reads_are_measured_but_edits_or_new_versions_fail(self):
+        before = copy.deepcopy(self.head)
+        text = "Complete table\nx note\n1 HIDDEN_1000001\n2 HIDDEN_1000002\n3 HIDDEN_1000003"
+        self.head["nativeObservations"] = {"source": {"text": text, "resultVersion": "a" * 64}}
+        call = {"operators": [], "observe": ["source"]}
+        self.steps = [
+            model_step("observe", [("dataflow", copy.deepcopy(call))]),
+            model_step("repeat", [("dataflow", copy.deepcopy(call))], observation=text),
+            model_step("final", observation=text),
+        ]
+        self.snapshots = {step["id"]: copy.deepcopy(self.head) for step in self.steps}
+        report = self.audit("cached", before)
+        self.assertEqual(report["cached_read_calls"], 2)
+        self.assertEqual(report["redundant_cached_reads"], 1)
+        self.steps[1]["toolCalls"][0]["input"]["operators"] = [{"op": "udf", "id": "source"}]
+        with self.assertRaisesRegex(ValueError, "cached_observe_contract_mismatch"):
+            self.audit("cached", before)
+        self.steps[1]["toolCalls"][0]["input"] = copy.deepcopy(call)
+        self.snapshots["repeat"]["results"]["source"]["resultVersion"]["id"] = "b" * 64
+        with self.assertRaisesRegex(ValueError, "cached_binding_changed"):
+            self.audit("cached", before)
+
     def test_failure_needs_source_mapped_error_seen_before_inspection(self):
         diagnostic = {
             "code": "CALLBACK_RUNTIME",

@@ -471,7 +471,7 @@ is labeled `disabled_by_request`; effective settings still need live admission
 verification. No sample rows, column values or custom statistics are copied
 into the cost report.
 
-## Real-model smoke protocol (prepared; not yet run live)
+## Real-model smoke protocol
 
 `utils.native_model_smoke.run_model_smoke` accepts an already-owned fresh
 `NativePilotSystem`-compatible session, an exclusive private output directory,
@@ -494,7 +494,8 @@ true is not qualification. This interface is intentionally not an unguarded
 CLI. The caller also owns journaled allocation, final recorder drain and
 verified cleanup; this helper performs none of them.
 
-Run independently on fresh DELTA and LATEST sessions with `gpt-5.6-luna` and
+Run independently on fresh DELTA and LATEST sessions with the explicitly selected
+`gpt-5.6-luna` or `gpt-5.6-terra` at medium reasoning and
 `vercel-tool-use`. Required effective settings: native V2/batch, no parallel
 tool calls, `messageLayout: native`, profile collection on, data/flow levels
 1/1, column stats off, result/cell limits 2000/3000, `maxSteps: 25`,
@@ -511,7 +512,10 @@ Four directive-driven turns test:
 2. `operators: []` with explicit source observation; unchanged producing
    identity/rows and newly visible canary values, absent before the pull. The
    execution journal still provides the independent test for whether any
-   backend request occurred.
+   backend request occurred. Identical repeated cached reads are counted as
+   `cached_read_calls` and `redundant_cached_reads`, not silently discarded or
+   treated as new successful executions. Every read must preserve the original
+   result version, materialization and rows; edits or different targets fail.
 3. Deliberate callback failure with `observe: []`, followed by model-called
    `inspectError`. Check the actual execution/source-line diagnostic, cleared
    stale downstream rows, error visibility before inspection and inspection
@@ -529,6 +533,17 @@ are retained in each turn directory. Failure stops the fixture without a
 model retry, resource deletion, shared restart or backend cancellation. These
 strict directive tests are functional qualification, not representative cost
 measurements or proof that stats improve reasoning.
+
+September 15 live finding: the initial universal `expected_one_batch` assertion
+also applied to cached reads, although only the mutation turns explicitly
+require one batch. LATEST returned correct cached values after two identical
+read-only calls. That failed smoke is preserved under
+`/tmp/native-python-live-master.i9nfol/campaign-5/model-smoke-latest`.
+Before any official benchmark dispatch, the functional audit was revised to
+measure this redundancy separately while strengthening per-read identity
+checks. Mutation-turn one-batch assertions, later-input visibility, exact
+answers and all source/runtime admission checks remain unchanged. This does
+not reclassify the old report or remove its cost.
 
 ## Local verification
 
