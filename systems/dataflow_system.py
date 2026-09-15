@@ -44,6 +44,8 @@ class DataflowSystem(System):
         stats_enabled: bool = False,
         include_operator_properties: bool = None,
         result_selection: Optional[str] = None,
+        native_tool_mode: Optional[str] = None,
+        native_flow_evidence: Optional[bool] = None,
         schema_in_result: bool = False,
         loader_hint: bool = False,
         value_format_flags: bool = False,
@@ -160,6 +162,8 @@ class DataflowSystem(System):
         self.include_operator_properties = include_operator_properties
         # NATIVE mode result selection ("all" | "rule"); None -> server default.
         self.result_selection = result_selection
+        self.native_tool_mode = native_tool_mode
+        self.native_flow_evidence = native_flow_evidence
         # ---- DECORATE control: the two ordinal facet levels (CONTEXT-DESIGN §5) ----
         # Context decoration is controlled purely by flow_level / data_level (each
         # expands, agent-service side, into the per-rung render flags via the rung
@@ -395,6 +399,8 @@ class DataflowSystem(System):
             disabled_tools=self.disabled_tools,
             include_operator_properties=self.include_operator_properties,
             result_selection=self.result_selection,
+            native_tool_mode=self.native_tool_mode,
+            native_flow_evidence=self.native_flow_evidence,
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
             agent_turns=self.agent_turns,
@@ -569,6 +575,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "3002": "~/Desktop/bobflow/dataflow-agent-worktrees/feat-role-policy",
                 "3005": "~/Desktop/bobflow/dataflow-agent-worktrees/prompt-fix",
                 "3007": "~/Desktop/dataflow-agent/.claude/worktrees/op-granularity",
+                "3008": "~/Desktop/dataflow-agent/.claude/worktrees/native-batch-observe",
+                "3009": "~/Desktop/dataflow-agent/.claude/worktrees/native-dataflow-evidence",
+                "3010": "~/Desktop/dataflow-agent/.claude/worktrees/op-granularity",
             }
             _port = _endpoint.rsplit(":", 1)[-1].strip("/")
             _svc_dir = _os.path.expanduser(_WORKTREE_BY_PORT.get(_port, "~/Desktop/bobflow/dataflow-agent"))
@@ -605,6 +614,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "disabled_tools": self.disabled_tools,
                 "include_operator_properties": self.include_operator_properties,
                 "result_selection": self.result_selection,
+                "native_tool_mode": self.native_tool_mode,
+                "native_flow_evidence": self.native_flow_evidence,
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
                 "agent_turns": self.agent_turns,
@@ -2500,6 +2511,36 @@ def _mk_luna_native_anchor(name):
 DataflowSystemLunaNativeAnchorRep1 = _mk_luna_native_anchor("DataflowSystemLunaNativeAnchorRep1")
 DataflowSystemLunaNativeAnchorRep2 = _mk_luna_native_anchor("DataflowSystemLunaNativeAnchorRep2")
 DataflowSystemLunaNativeAnchorRep3 = _mk_luna_native_anchor("DataflowSystemLunaNativeAnchorRep3")
+
+
+# Fixed eight-task, one-repetition pilot. Keep these result namespaces separate
+# from the earlier campaigns; no recovery rounds are part of this protocol.
+def _mk_luna_native_pilot(name, endpoint, **settings):
+    anchor = _mk_luna_native_anchor(name)
+
+    def __init__(self, verbose: bool = False, *args, **kwargs):
+        kwargs.setdefault("agent_service_endpoint", endpoint)
+        for key, value in settings.items():
+            kwargs.setdefault(key, value)
+        anchor.__init__(self, verbose=verbose, *args, **kwargs)
+
+    return type(name, (DataflowSystem,), {
+        "__init__": __init__,
+        "__doc__": f"2026-09-14 native pilot; service {endpoint}; overrides {settings}.",
+    })
+
+
+DataflowSystemLunaNativePilotBaseline20260914Rep1 = _mk_luna_native_pilot(
+    "DataflowSystemLunaNativePilotBaseline20260914Rep1", "http://localhost:3010",
+)
+DataflowSystemLunaNativePilotBatch20260914Rep1 = _mk_luna_native_pilot(
+    "DataflowSystemLunaNativePilotBatch20260914Rep1", "http://localhost:3008",
+    native_tool_mode="batch", parallel_tool_calls=False,
+)
+DataflowSystemLunaNativePilotEvidence20260914Rep1 = _mk_luna_native_pilot(
+    "DataflowSystemLunaNativePilotEvidence20260914Rep1", "http://localhost:3009",
+    native_flow_evidence=True,
+)
 
 # Post-fix rerun arm (2026-09-14): identical to the scoped DELTA arms above
 # (native typed operators, DELTA, 2k, stats, resultSelection "scoped") and

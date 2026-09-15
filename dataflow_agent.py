@@ -94,6 +94,8 @@ class AgentSettings:
     # NATIVE mode result selection: "all" (every result block) or "rule" (ship
     # only what the data decided). None -> server default ("all").
     result_selection: Optional[str] = None
+    native_tool_mode: Optional[str] = None
+    native_flow_evidence: Optional[bool] = None
     thought_replay: bool = False
     thought_replay_k: int = 10
     agent_turns: bool = False
@@ -247,6 +249,10 @@ class AgentSettings:
             payload["includeOperatorProperties"] = self.include_operator_properties
         if self.result_selection is not None:
             payload["resultSelection"] = self.result_selection
+        if self.native_tool_mode is not None:
+            payload["nativeToolMode"] = self.native_tool_mode
+        if self.native_flow_evidence is not None:
+            payload["nativeFlowEvidence"] = self.native_flow_evidence
         if self.frontier_decay_config is not None:
             payload["frontierDecayConfig"] = self.frontier_decay_config
         if self.role_policy_config is not None:
@@ -968,6 +974,8 @@ class DataflowAgent:
             allowed_operator_types: Optional[list[str]] = None,
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             result_selection: Optional[str] = None,
+            native_tool_mode: Optional[str] = None,
+            native_flow_evidence: Optional[bool] = None,
             thought_replay: bool = False,
             thought_replay_k: int = 10,
             agent_turns: bool = False,
@@ -1075,6 +1083,8 @@ class DataflowAgent:
             allowed_operator_types=allowed_operator_types,
             include_operator_properties=include_operator_properties,
             result_selection=result_selection,
+            native_tool_mode=native_tool_mode,
+            native_flow_evidence=native_flow_evidence,
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
             agent_turns=agent_turns,
