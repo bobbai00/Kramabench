@@ -112,6 +112,9 @@ class DataflowSystem(System):
         verbose: bool = False,
         name: str = "DataflowSystem",
         *args,
+        native_catalog_version: Optional[str] = None,
+        native_profile_collection: Optional[bool] = None,
+        computing_unit_id: Optional[int] = None,
         **kwargs
     ):
         """
@@ -164,6 +167,8 @@ class DataflowSystem(System):
         self.result_selection = result_selection
         self.native_tool_mode = native_tool_mode
         self.native_flow_evidence = native_flow_evidence
+        self.native_catalog_version = native_catalog_version
+        self.native_profile_collection = native_profile_collection
         # ---- DECORATE control: the two ordinal facet levels (CONTEXT-DESIGN §5) ----
         # Context decoration is controlled purely by flow_level / data_level (each
         # expands, agent-service side, into the per-rung render flags via the rung
@@ -223,6 +228,7 @@ class DataflowSystem(System):
         self.index_thin_observations = index_thin_observations
         self.cache_aligned_context = cache_aligned_context
         self.agent_service_endpoint = agent_service_endpoint
+        self.computing_unit_id = computing_unit_id
         self.fold_resolved_revisions_config = fold_resolved_revisions_config
         self.probe_retirement_config = probe_retirement_config
         self.enable_inspect_tool = enable_inspect_tool
@@ -401,6 +407,8 @@ class DataflowSystem(System):
             result_selection=self.result_selection,
             native_tool_mode=self.native_tool_mode,
             native_flow_evidence=self.native_flow_evidence,
+            native_catalog_version=self.native_catalog_version,
+            native_profile_collection=self.native_profile_collection,
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
             agent_turns=self.agent_turns,
@@ -429,6 +437,7 @@ class DataflowSystem(System):
             index_thin_observations=self.index_thin_observations,
             cache_aligned_context=self.cache_aligned_context,
             **({"agent_service_endpoint": self.agent_service_endpoint} if self.agent_service_endpoint else {}),
+            computing_unit_id=self.computing_unit_id,
             fold_resolved_revisions_config=self.fold_resolved_revisions_config,
             probe_retirement_config=self.probe_retirement_config,
             enable_inspect_tool=self.enable_inspect_tool,
@@ -590,6 +599,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
             _sha, _dirty = "unknown", None
         config = {
             "agent_service_endpoint": _endpoint,
+            "computing_unit_id": self.computing_unit_id,
             "agent_service_git_sha": _sha,
             "agent_service_src_dirty": _dirty,
             "system_name": self.name,
@@ -616,6 +626,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "result_selection": self.result_selection,
                 "native_tool_mode": self.native_tool_mode,
                 "native_flow_evidence": self.native_flow_evidence,
+                "native_catalog_version": self.native_catalog_version,
+                "native_profile_collection": self.native_profile_collection,
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
                 "agent_turns": self.agent_turns,

@@ -96,6 +96,8 @@ class AgentSettings:
     result_selection: Optional[str] = None
     native_tool_mode: Optional[str] = None
     native_flow_evidence: Optional[bool] = None
+    native_catalog_version: Optional[str] = field(default=None, kw_only=True)
+    native_profile_collection: Optional[bool] = field(default=None, kw_only=True)
     thought_replay: bool = False
     thought_replay_k: int = 10
     agent_turns: bool = False
@@ -253,6 +255,10 @@ class AgentSettings:
             payload["nativeToolMode"] = self.native_tool_mode
         if self.native_flow_evidence is not None:
             payload["nativeFlowEvidence"] = self.native_flow_evidence
+        if self.native_catalog_version is not None:
+            payload["nativeCatalogVersion"] = self.native_catalog_version
+        if self.native_profile_collection is not None:
+            payload["nativeProfileCollection"] = self.native_profile_collection
         if self.frontier_decay_config is not None:
             payload["frontierDecayConfig"] = self.frontier_decay_config
         if self.role_policy_config is not None:
@@ -1034,6 +1040,10 @@ class DataflowAgent:
             agent_name: Optional[str] = None,
             verbosity_level: int = 1,
             max_turn_seconds: Optional[float] = None,
+            *,
+            native_catalog_version: Optional[str] = None,
+            native_profile_collection: Optional[bool] = None,
+            computing_unit_id: Optional[int] = None,
     ):
         """
         Initialize the DataflowAgent.
@@ -1058,6 +1068,7 @@ class DataflowAgent:
             tool_dialect: Tool-call dialect for the local-react driver
                 ("react-text" | "qwen-xml"); ignored by vercel-tool-use
             texera_api_endpoint: Texera backend API endpoint
+            computing_unit_id: Existing computing unit; None uses legacy discovery
             agent_service_endpoint: Agent service endpoint
             username: Texera username for authentication
             password: Texera password for authentication
@@ -1085,6 +1096,8 @@ class DataflowAgent:
             result_selection=result_selection,
             native_tool_mode=native_tool_mode,
             native_flow_evidence=native_flow_evidence,
+            native_catalog_version=native_catalog_version,
+            native_profile_collection=native_profile_collection,
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
             agent_turns=agent_turns,
@@ -1134,6 +1147,11 @@ class DataflowAgent:
         )
         self.texera_api_endpoint = texera_api_endpoint
         self.computing_unit_endpoint = computing_unit_endpoint
+        if computing_unit_id is not None and (type(computing_unit_id) is not int or computing_unit_id <= 0):
+            raise ValueError("computing_unit_id must be a positive integer")
+        # Configuration, not transient session state: cleanup/setup must not
+        # silently fall back to the first unrelated registered unit.
+        self.computing_unit_id = computing_unit_id
         self.agent_service_endpoint = agent_service_endpoint
         self.username = username
         self.password = password
@@ -1200,10 +1218,12 @@ class DataflowAgent:
         self._log("Login successful")
 
         self._log("Getting computing unit...")
-        self._computing_unit_id = get_or_create_computing_unit(
-            token=self._token,
-            computing_unit_endpoint=self.computing_unit_endpoint,
-        )
+        self._computing_unit_id = self.computing_unit_id
+        if self._computing_unit_id is None:
+            self._computing_unit_id = get_or_create_computing_unit(
+                token=self._token,
+                computing_unit_endpoint=self.computing_unit_endpoint,
+            )
         self._log(f"Using computing unit: {self._computing_unit_id}")
 
         self._log("Creating workflow...")

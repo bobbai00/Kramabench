@@ -655,7 +655,10 @@ def react_metrics(task_dir):
         for tc in tcs:
             m["tool_calls"] += 1
             m["tools"][tc.get("toolName")] += 1
-            opid = (tc.get("input") or {}).get("operatorId")
+            args = tc.get("input")
+            opid = args.get("operatorId") if isinstance(args, dict) else None
+            if tc.get("toolName") == "deleteOperator" and isinstance(args, dict):
+                opid = opid or args.get("id")  # native uses id; code/general use operatorId
             if tc.get("toolName") == "deleteOperator" and opid:
                 m["ops_deleted"].add(opid)
             elif tc.get("toolName") == "createOrModifyOperator" and opid:
@@ -670,11 +673,18 @@ def react_metrics(task_dir):
         m["total"] += u.get("totalTokens", 0) or 0
         m["reasoning"] += u.get("reasoningTokens", 0) or 0
         m["cached"] += u.get("cachedInputTokens", 0) or 0
-    m["final_ops_react"] = len(m["ops_touched"] - m["ops_deleted"])  # final ops per the trace
-    m["max_edits"] = max(m["edits"].values()) if m["edits"] else 0
-    m["max_edits_op"] = m["edits"].most_common(1)[0][0] if m["edits"] else None
     wf = _load(task_dir / "workflow.json")
     w = (wf.get("workflow") or {}) if isinstance(wf, dict) else {}
+    from utils.native_trace_metrics import native_trace_metrics
+    m.update(native_trace_metrics(steps, w))
+    m["ops_touched"].update(m["native_ops_touched"])
+    m["edits"].update(m["native_edits"])
+    # Historical helper name: attempt-based estimate, not proof of accepted
+    # final DAG membership (especially after failed edits / delete-and-readd).
+    # Use wf_ops/native_wf_types for the saved DAG itself.
+    m["final_ops_react"] = len(m["ops_touched"] - m["ops_deleted"])
+    m["max_edits"] = max(m["edits"].values()) if m["edits"] else 0
+    m["max_edits_op"] = m["edits"].most_common(1)[0][0] if m["edits"] else None
     m["wf_ops"] = len(w.get("operators", []))
     m["wf_links"] = len(w.get("links", []))
     m["wf_types"] = Counter(o.get("operatorType") for o in w.get("operators", []))
@@ -920,7 +930,8 @@ def _report_scores_from_logs(logdir, wls):
 
 def _load(p):
     try:
-        return json.load(open(p))
+        with open(p) as handle:
+            return json.load(handle)
     except Exception:
         return {}
 
