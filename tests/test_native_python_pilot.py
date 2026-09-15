@@ -17,11 +17,13 @@
 
 import unittest
 from inspect import Parameter, signature
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from dataflow_agent import AgentSettings, DataflowAgent
+from utils.pilot_artifacts import AttemptBundle
 
 
 class NativePythonClientTest(unittest.TestCase):
@@ -57,11 +59,14 @@ class NativePythonClientTest(unittest.TestCase):
                 self.assertNotIn("nativeFlowEvidence", payload)
 
     def test_pinned_computing_unit_survives_fresh_setups(self):
-        with patch("dataflow_agent.login", return_value="test-token"), \
-             patch("dataflow_agent.get_or_create_computing_unit") as discover, \
-             patch("dataflow_agent.create_workflow", return_value=123), \
-             patch("dataflow_agent.create_agent", return_value=SimpleNamespace(id="test-agent", name="test")) as create, \
-             patch("dataflow_agent.delete_agent"), patch("dataflow_agent.delete_workflow"):
+        with (
+            patch("dataflow_agent.login", return_value="test-token"),
+            patch("dataflow_agent.get_or_create_computing_unit") as discover,
+            patch("dataflow_agent.create_workflow", return_value=123),
+            patch("dataflow_agent.create_agent", return_value=SimpleNamespace(id="test-agent", name="test")) as create,
+            patch("dataflow_agent.delete_agent"),
+            patch("dataflow_agent.delete_workflow"),
+        ):
             agent = DataflowAgent(computing_unit_id=321, verbosity_level=0)
             for _ in range(2):
                 agent.setup()
@@ -117,6 +122,7 @@ class NativePythonArmsTest(unittest.TestCase):
                     self.assertEqual(arm.max_operator_result_cell_char_limit, 3000)
                     # Exercise the production system-to-client boundary without
                     # authenticating, creating resources, or calling an LLM.
+                    arm.pilot_bundle = AttemptBundle(Path(directory) / spec.key)
                     with patch.object(DataflowAgent, "setup"):
                         arm._setup_agent()
                     payload = arm.agent.settings.to_api_dict()
@@ -143,9 +149,15 @@ class NativePythonArmsTest(unittest.TestCase):
     def test_treatment_overrides_cannot_reuse_a_frozen_sut_name(self):
         from systems.native_python_system import DataflowSystemLunaPythonPilotV2Control20260915Rep1 as Arm
 
-        for key, value in (("model_type", "other"), ("native_profile_collection", True),
-                           ("data_level", 1), ("flow_level", 1), ("max_steps", 26),
-                           ("native_flow_evidence", True), ("column_stats", True)):
+        for key, value in (
+            ("model_type", "other"),
+            ("native_profile_collection", True),
+            ("data_level", 1),
+            ("flow_level", 1),
+            ("max_steps", 26),
+            ("native_flow_evidence", True),
+            ("column_stats", True),
+        ):
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, "frozen"):
                 Arm(computing_unit_id=321, **{key: value})
         with TemporaryDirectory() as directory:

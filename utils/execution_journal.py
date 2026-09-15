@@ -233,7 +233,8 @@ def execution_report(journal_path, *, workflow_id, computing_unit_id, expected_r
             "issues": ["unregistered_computing_unit"],
         }
     if footer is not None and (
-        type(footer.get("completed")) is not int
+        any(footer.get(key) != header.get(key) for key in ("backend", "computingUnitIds", "maxRequests"))
+        or type(footer.get("completed")) is not int
         or footer["completed"] != len(finishes)
         or type(footer.get("pending")) is not int
         or footer["pending"] != 0

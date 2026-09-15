@@ -270,6 +270,7 @@ class NativePilotAttemptTest(unittest.TestCase):
             self.artifact("pilot_metrics.json")["execution_measurements"]["journal_status"],
             "missing",
         )
+        self.assertEqual(self.artifact("pilot_metrics.json")["collector_measurements"]["status"], "disabled_by_request")
 
     def test_official_path_attaches_scoped_execution_measurements(self):
         from native_python_pilot import run_pilot_task
@@ -294,6 +295,43 @@ class NativePilotAttemptTest(unittest.TestCase):
         self.assertEqual(measurements["compilation"]["pass_rate"], 1)
         self.assertEqual(measurements["runtime"]["pass_rate"], 1)
         self.assertFalse(measurements["backend_termination_verified"])
+
+    def test_official_path_deduplicates_collector_productions_from_snapshots(self):
+        from native_python_pilot import run_pilot_task
+        from systems.native_python_system import DataflowSystemLunaPythonPilotDataOnly20260915Rep1 as DataArm
+        from test_collector_measurements import result
+        from test_execution_journal import HEADER, request, footer
+
+        old = self.arm
+        self.arm = DataArm(output_dir=self.temporary.name, computing_unit_id=321)
+        self.arm._setup_agent = old._setup_agent  # fixture closure reads the current self.arm
+        self.arm._expand_data_sources = old._expand_data_sources
+        self.react = {"steps": [{**STEP, "id": "s0", "isEnd": False}, STEP], "state": "AVAILABLE"}
+
+        def capture(agent, resource):
+            if resource.startswith("/snapshots/"):
+                return {"stepId": resource.split("/")[-1], "results": {"source": result()}}
+            return self.request(agent, resource)
+
+        self.api.side_effect = capture
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        workload = Path(self.temporary.name) / "workload.json"
+        workload.write_text(json.dumps([TASK]))
+        journal = Path(self.temporary.name) / "execution_requests.jsonl"
+        journal.write_text("".join(json.dumps(event) + "\n" for event in [HEADER, *request("r"), footer(1)]))
+        run_pilot_task(
+            self.arm,
+            guard=self.guard,
+            workload_path=workload,
+            dataset_directory="data/environment/input",
+            execution_journal_path=journal,
+            recorder_id=HEADER["instanceId"],
+        )
+        measured = self.artifact("pilot_metrics.json")["collector_measurements"]
+        self.assertEqual(measured["status"], "observed")
+        self.assertEqual(measured["profile_occurrences"], 2)
+        self.assertEqual(measured["unique_productions"], 1)
+        self.assertEqual(measured["observed_collection_ms"], 2)
 
     def test_preflight_failure_is_unscored_not_an_official_wrong_answer(self):
         from native_python_pilot import run_pilot_task

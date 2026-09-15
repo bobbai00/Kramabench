@@ -314,9 +314,98 @@ by producing result identity, not snapshot occurrence. Audit when each fact
 was actually present in model input before attributing a better decision to
 it. No savings/accuracy claim is justified by the local setup tests.
 
+## Allocation receipts and verified cleanup
+
+Pilot setup now reserves an exclusive `resource_allocations.jsonl` inside the
+attempt directory. It fsyncs an intent before each workflow/agent creation and
+the returned ID before the next allocation. The separately created local CU
+has its own `cu_allocations.jsonl`; a supplied CU reference is not ownership.
+Names carry a fresh journal nonce. Neither names nor receipts alone authorize
+deletion. Journals are mode 0600, exclude tokens/delegates, and reject retries,
+changed identities and malformed/truncated records. A crash between server
+creation and receipt remains an unresolved intent, never an automatic retry.
+
+`DataflowAgent.setup(on_resource=...)` is opt-in, synchronous, and uses bounded
+no-redirect requests with explicit CU and resource names. The pilot always uses
+it; legacy clients keep their existing transport/discovery defaults. Setup now
+fails before API calls if its attempt bundle is missing. Model turns remain
+single-attempt, and the pilot destructor still performs no cleanup.
+
+`utils.pilot_cleanup.cleanup_owned_resources` requires complete artifacts,
+matching allocation journals, the same source-pinned idle agent/delegate,
+current resource ownership and names, the exact local CU/backend, a closed
+scoped recorder, and terminal database executions matching every request.
+Unknown outcomes or another workflow's recorder traffic block deletion. The
+recorder footer must retain the startup route, CU whitelist and request limit.
+It records intent before each mutation, deletes the agent, deletes only the
+owned workflow, terminates only the owned **local CU registration**, and
+verifies each absence before proceeding. A malformed list is not absence.
+Local CU termination does not stop the shared JVM. No broad service stop,
+workflow delete or task rerun is a cleanup fallback.
+
+Failures preserve the unresolved IDs and partial cleanup report. This is one
+verified cleanup attempt, **not automatic recovery/resumption** after a
+partially completed delete. Investigate uncertain allocations/executions or
+partial cleanup before proceeding; do not blindly invoke it again. The outer
+production guard and runner integration remain required.
+
+### Live setup-only smoke
+
+From the harness, use a fresh private directory outside `system_scratch`:
+
+```bash
+.venv/bin/python -u -m utils.pilot_resource_smoke \
+  --worktree /absolute/path/to/native-python-dataflow \
+  --sha <full-candidate-root-SHA> --port 3011 \
+  --output /private/fresh/setup-smoke
+```
+
+This uses the client's local Texera/CU-manager endpoints and development login
+defaults. It creates a new local registration for the existing backend,
+starts a private loopback recorder, launches only the candidate agent through
+`bin/local-dev.sh`, exercises actual pilot setup/capture, then drains, verifies
+owned cleanup, and stops the empty private service. The orchestration process
+stays alive throughout; do not assume detached children outlive a tool runner.
+No `serve_query`, `/message`, workflow execution or official task is invoked.
+
+Live check on 2026-09-15 passed at root `762e80e96`: private service PID
+2722192 on 3011, workflow 4156, CU 73, agent `agent-bqtik7-1`. All three owned
+resources were cleaned and service termination verified. Fresh independent
+workflow/CU list reads confirm absence. The shared master PID 2114172 and its
+start time/cwd remained unchanged. Actual captured trace/workflow were empty;
+the recorder closed with zero requests, zero unfinished requests and no issues.
+Compiler/runtime pass rates are **null**, not 100%. Metadata and empty workflow
+capture are retained in `/tmp/native-python-c7-resources.ZQNqmc/run`; this text
+is the durable sanitized record. The final cross-workflow refusal was then
+added as a failing-first regression; that case was mocked, not exercised live.
+
+This is resource-lifecycle qualification only: no Python worker, operator,
+real model trace, accuracy or token-cost result is implied.
+
+## Collector measurement semantics
+
+`utils.collector_measurements.collector_report` now replaces the placeholder
+in `pilot_metrics.json`. It reads decoded, version-bound snapshot profiles,
+matches the producing execution to the workflow/CU-scoped execution journal,
+and de-duplicates `(workflow, operator, output port, producing execution)`.
+Retrieving the same cached result again adds no collector work; actual reruns
+remain separate. Changed bindings/measurements or reused worker producer IDs
+are conflicts, not opportunities to sum or select a maximum.
+
+Reported `observed_collection_ms` sums worker `ProfileAccumulator.add()`
+timers. It excludes profile snapshot/encoding, transport and agent rendering;
+it is neither total wall time nor CPU time. Cells processed and worker-profile
+payload bytes are also observed component totals, not total network traffic.
+Partial, unavailable, unbound and unattributed productions remain explicit.
+Even complete snapshot capture can miss failed/unreturned materializations,
+so `whole_attempt_overhead_complete` remains false. Collection-off/no profiles
+is labeled `disabled_by_request`; effective settings still need live admission
+verification. No sample rows, column values or custom statistics are copied
+into the cost report.
+
 ## Local verification
 
-`python -m unittest discover -s tests -q`: **78 pass**, including the original
+`python -m unittest discover -s tests -q`: **117 pass**, including the original
 19 client/arm/native-trace and legacy pilot tests. New regressions cover actual
 listener resolution with controlled process fixtures, single-attempt policy,
 final-step rebroadcast accounting, durable partial capture, unknown/frozen
@@ -325,7 +414,11 @@ answer-versus-transport status, and the real Executor/Evaluator path with a
 mocked agent. The newest 21 tests cover source-pinned launch/empty shutdown,
 durable-journal denominators, missing/conflicting evidence and the measured
 report through the actual Executor/Evaluator path with a mocked agent.
-`kb.py systems` resolves all seven new SUT classes.
+The additional 39 tests cover collector accounting and report integration,
+journaled setup, scoped cleanup and setup-only orchestration. Regression tests
+were run failing before fixes for mismatched recorder scope, malformed absence
+responses and cross-workflow cleanup. `kb.py systems` resolves all seven new
+SUT classes.
 
 These tests make no Texera service setup or model calls. They are not live
 worker E2E tests or real model traces. New client/system options remain

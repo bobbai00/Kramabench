@@ -11,6 +11,7 @@ clear history, workflow & react-step retrieval) goes through REST. The chat turn
 import time
 import os
 import json
+import inspect
 import requests
 import websocket
 from typing import Optional, Any, Callable
@@ -366,10 +367,27 @@ class MessageResult:
 # ============================================================================
 
 
+def _setup_post(url, payload, *, headers=None, timeout=None, allow_redirects=True):
+    """Legacy transport by default; pilot creation opts into bounded direct responses."""
+    options = {"json": payload}
+    if headers is not None:
+        options["headers"] = headers
+    if timeout is not None:
+        options["timeout"] = timeout
+    if not allow_redirects:
+        options["allow_redirects"] = False
+    response = requests.post(url, **options)
+    response.raise_for_status()
+    if not allow_redirects and not 200 <= response.status_code < 300:
+        raise RuntimeError("setup request did not return a direct successful response")
+    return response.json()
+
+
 def login(
         username: str = TEXERA_USERNAME,
         password: str = TEXERA_PASSWORD,
         api_endpoint: str = TEXERA_API_ENDPOINT,
+        *, timeout=None, allow_redirects=True,
 ) -> str:
     """
     Login to Texera and get an access token.
@@ -378,6 +396,8 @@ def login(
         username: Texera username
         password: Texera password
         api_endpoint: Texera API endpoint URL
+        timeout: Optional requests timeout; journaled pilot setup supplies (3, 15)
+        allow_redirects: False requires a direct successful response
 
     Returns:
         JWT access token
@@ -388,10 +408,7 @@ def login(
     url = f"{api_endpoint}/api/auth/login"
     payload = {"username": username, "password": password}
 
-    response = requests.post(url, json=payload)
-    response.raise_for_status()
-
-    data = response.json()
+    data = _setup_post(url, payload, timeout=timeout, allow_redirects=allow_redirects)
     return data["accessToken"]
 
 
@@ -399,9 +416,13 @@ def create_workflow(
         token: str,
         name: str = DEFAULT_WORKFLOW_NAME,
         api_endpoint: str = TEXERA_API_ENDPOINT,
+        *, timeout=None, allow_redirects=True,
 ) -> int:
     """
     Create a new workflow in Texera.
+
+    Keyword-only timeout/allow_redirects opt into the pilot's bounded,
+    no-redirect creation policy without changing legacy client defaults.
 
     Args:
         token: JWT access token
@@ -434,10 +455,7 @@ def create_workflow(
         "content": json.dumps(empty_content),  # Content must be JSON stringified
     }
 
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-
-    data = response.json()
+    data = _setup_post(url, payload, headers=headers, timeout=timeout, allow_redirects=allow_redirects)
     # The response contains a workflow object with wid
     return data.get("workflow", {}).get("wid") or data.get("wid")
 
@@ -547,9 +565,13 @@ def create_agent(
         name: Optional[str] = None,
         driver: Optional[str] = None,
         agent_endpoint: str = TEXERA_AGENT_SERVICE_ENDPOINT,
+        *, timeout=None, allow_redirects=True,
 ) -> AgentInfo:
     """
     Create a new agent in the agent service.
+
+    Keyword-only timeout/allow_redirects opt into the pilot's bounded,
+    no-redirect creation policy without changing legacy client defaults.
 
     Args:
         model_type: LLM model type to use
@@ -594,10 +616,7 @@ def create_agent(
     # Authorization header (not just the payload) on agent creation — it forwards
     # that identity to the LLM gateway. Without it, /api/agents returns 401.
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-
-    data = response.json()
+    data = _setup_post(url, payload, headers=headers, timeout=timeout, allow_redirects=allow_redirects)
     return AgentInfo(
         id=data["id"],
         name=data["name"],
@@ -1221,9 +1240,15 @@ class DataflowAgent:
         if self.verbosity_level >= level:
             print(f"[DataflowAgent] {message}")
 
-    def setup(self) -> "DataflowAgent":
+    def setup(self, *, on_resource: Optional[Callable[[dict], None]] = None) -> "DataflowAgent":
         """
         Setup the agent by logging in and creating necessary resources.
+
+        on_resource optionally persists sanitized allocation intents/receipts
+        synchronously (returning None). It requires explicit CU and resource
+        names, disables CU discovery, and uses bounded no-redirect requests.
+        A failed receipt retains the returned ID on this client and prevents
+        the next allocation. The callback does not authorize resource cleanup.
 
         This method:
         1. Logs into Texera to get an access token
@@ -1237,11 +1262,34 @@ class DataflowAgent:
         Raises:
             requests.HTTPError: If any API call fails
         """
+        if on_resource is not None and (
+            not callable(on_resource)
+            or type(self.computing_unit_id) is not int
+            or not 0 < self.computing_unit_id <= 2147483647
+            or not isinstance(self.workflow_name, str)
+            or not self.workflow_name
+            or not isinstance(self.agent_name, str)
+            or not self.agent_name
+        ):
+            raise ValueError("journaled setup requires a callback, explicit computing unit and resource names")
+
+        def record(event):
+            if on_resource is not None:
+                returned = on_resource(event)
+                if returned is not None:
+                    if inspect.iscoroutine(returned):
+                        returned.close()
+                    raise TypeError("resource callback must persist synchronously and return None")
+
+        # Legacy setup keeps its existing transport/discovery behavior. Pilot
+        # setup is bounded and never follows redirects with creation requests.
+        transport = {"timeout": (3, 15), "allow_redirects": False} if on_resource is not None else {}
         self._log("Logging into Texera...")
         self._token = login(
             username=self.username,
             password=self.password,
             api_endpoint=self.texera_api_endpoint,
+            **transport,
         )
         self._log("Login successful")
 
@@ -1253,16 +1301,21 @@ class DataflowAgent:
                 computing_unit_endpoint=self.computing_unit_endpoint,
             )
         self._log(f"Using computing unit: {self._computing_unit_id}")
+        record({"event": "reference", "kind": "computing_unit", "id": self._computing_unit_id})
 
         self._log("Creating workflow...")
+        record({"event": "create_intent", "kind": "workflow", "name": self.workflow_name})
         self._workflow_id = create_workflow(
             token=self._token,
             name=self.workflow_name,
             api_endpoint=self.texera_api_endpoint,
+            **transport,
         )
+        record({"event": "created", "kind": "workflow", "name": self.workflow_name, "id": self._workflow_id})
         self._log(f"Created workflow: {self._workflow_id}")
 
         self._log("Creating agent...")
+        record({"event": "create_intent", "kind": "agent", "name": self.agent_name})
         self._agent_info = create_agent(
             model_type=self.model_type,
             token=self._token,
@@ -1272,7 +1325,9 @@ class DataflowAgent:
             name=self.agent_name,
             driver=self.driver,
             agent_endpoint=self.agent_service_endpoint,
+            **transport,
         )
+        record({"event": "created", "kind": "agent", "name": self._agent_info.name, "id": self._agent_info.id})
         self._log(
             f"Created agent: {self._agent_info.id} (name: {self._agent_info.name})"
         )

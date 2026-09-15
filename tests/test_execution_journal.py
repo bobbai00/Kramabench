@@ -150,6 +150,13 @@ class ExecutionJournalTest(unittest.TestCase):
         self.assertEqual(result["compilation"]["known_coverage"], 0.5)
         self.assertFalse(result["backend_termination_verified"])
 
+    def test_footer_cannot_change_the_recorder_route_or_scope(self):
+        for field, value in (("backend", "http://127.0.0.1:8086"), ("computingUnitIds", [321]), ("maxRequests", 1)):
+            with self.subTest(field=field):
+                result = self.report([HEADER, *request("ok"), {**footer(1), field: value}])
+                self.assertEqual(result["journal_status"], "invalid")
+                self.assertIn("inconsistent_footer", result["issues"])
+
     def test_scope_and_identical_replays_do_not_double_count(self):
         start, finish = request("ok")
         result = self.report(

@@ -385,7 +385,7 @@ class DataflowSystem(System):
             if self.verbose:
                 print(f"[DataflowSystem] Could not load format hints: {e}")
 
-    def _setup_agent(self) -> None:
+    def _setup_agent(self, *, resource_callback=None, workflow_name=None, agent_name=None) -> None:
         """Initialize and setup the DataflowAgent."""
         if self.verbose:
             print(f"[DataflowSystem] Setting up agent with model: {self.model_type}")
@@ -460,9 +460,14 @@ class DataflowSystem(System):
             data_hints=self.data_hints,
             tool_dialect=self.tool_dialect,
             summarize_params=self.summarize_params,
+            **({"workflow_name": workflow_name} if workflow_name is not None else {}),
+            **({"agent_name": agent_name} if agent_name is not None else {}),
             verbosity_level=2 if self.verbose else 1,
         )
-        self.agent.setup()
+        if resource_callback is None:
+            self.agent.setup()
+        else:
+            self.agent.setup(on_resource=resource_callback)
 
     def _build_prompt(self, query: str, file_paths: List[str], format_hint: str = "") -> str:
         """

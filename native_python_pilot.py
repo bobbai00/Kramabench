@@ -29,6 +29,7 @@ from pathlib import Path
 import kb
 from benchmark.benchmark import Evaluator, Executor
 from systems.native_pilot_system import NativePilotSystem, PILOT_TASK
+from utils.collector_measurements import collector_report
 from utils.execution_journal import execution_report
 
 
@@ -148,6 +149,25 @@ def run_pilot_task(
             # Missing setup identity or unreadable evidence cannot erase the
             # official answer. Nor can it become a made-up compile pass rate.
             execution_measurements.update(journal_status="unavailable", error_type=type(error).__name__)
+    try:
+        snapshots = json.loads((bundle.path / "snapshots.json").read_text())
+        capture = json.loads((bundle.path / "capture.json").read_text())
+        collector_measurements = collector_report(
+            snapshots,
+            workflow_id=attempt["resources"].get("workflow_id"),
+            execution_ids=execution_measurements.get("engine_execution_ids")
+            if execution_measurements.get("journal_status") in {"open", "closed"}
+            else None,
+            collection_requested=system.pilot_spec.collection,
+            snapshots_complete=capture.get("complete") is True,
+        )
+    except Exception as error:
+        collector_measurements = {
+            "status": "unavailable",
+            "error_type": type(error).__name__,
+            "observed_collection_ms": None,
+            "whole_attempt_overhead_complete": False,
+        }
     bundle.write(
         "pilot_metrics.json",
         {
@@ -156,7 +176,7 @@ def run_pilot_task(
             "usage_status": stats["usage_status"],
             "input_trace_complete": stats["input_trace_complete"],
             "execution_measurements": execution_measurements,
-            "collector_measurements": "deduplicate producing result versions before aggregation",
+            "collector_measurements": collector_measurements,
         },
     )
     return verdict

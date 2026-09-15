@@ -33,6 +33,7 @@ from .cost_utils import price_schedule
 from .dataflow_system import DataflowSystem
 from utils.answer_parser import parse_answer
 from utils.pilot_artifacts import AttemptBundle, usage_report
+from utils.resource_journal import ResourceJournal
 
 
 PILOT_TASK = "environment-easy-3"
@@ -77,6 +78,17 @@ class NativePilotSystem(DataflowSystem):
     def process_dataset(self, dataset_directory):
         # Dataset preparation and cached scoring must not allocate a workflow.
         self._prepare_dataset(dataset_directory)
+
+    def _setup_agent(self):
+        # Each first attempt has an exclusive journal. Returned resource IDs
+        # reach disk before the next creation request or any model dispatch.
+        if not isinstance(getattr(self, "pilot_bundle", None), AttemptBundle):
+            raise RuntimeError("native pilot setup requires a reserved attempt bundle")
+        with ResourceJournal(self.pilot_bundle.path / "resource_allocations.jsonl") as journal:
+            prefix = "native-python-" + journal.run_id
+            super()._setup_agent(
+                resource_callback=journal.record, workflow_name=prefix + "-workflow", agent_name=prefix + "-agent"
+            )
 
     def cleanup(self):
         # The runner owns verified cleanup and keeps an explicit resource
