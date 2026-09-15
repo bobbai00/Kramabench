@@ -310,12 +310,15 @@ def run_model_smoke(system, *, output_directory, guard, context_mode):
         "context_mode": context_mode,
         "cases": [],
         "resources": system._resources(),
+        "admissions": [],
     }
     bundle.write("model_smoke.json", report)
 
     def qualify(stage, info):
         evidence = guard(system, stage, info)
         _require(isinstance(evidence, dict) and evidence.get("qualified") is True, "live_qualification_failed")
+        report["admissions"].append({"stage": stage, "evidence": evidence})
+        bundle.write("model_smoke.json", report)
         required = {
             "agentMode": "native",
             "nativeToolMode": "batch",

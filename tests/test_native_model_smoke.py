@@ -369,6 +369,8 @@ class ModelSmokeRunnerTest(unittest.TestCase):
 
         report = run_model_smoke(self.system, output_directory=self.path, guard=guard, context_mode="delta")
         self.assertEqual(report["status"], "passed", report)
+        self.assertEqual([entry["stage"] for entry in report["admissions"]], stages)
+        self.assertTrue(all(entry["evidence"]["qualified"] is True for entry in report["admissions"]))
         self.assertEqual([case["case"] for case in report["cases"]], ["chain", "cached", "failure", "repair"])
         self.assertEqual(self.system.agent.run.call_count, 4)
         self.assertEqual(
