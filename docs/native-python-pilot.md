@@ -105,11 +105,13 @@ Before spending a model call:
    different and must be labeled separately.
 
 The one-attempt path, official numeric scoring, persistent recorder, scoped
-phase reporting and source-pinned agent-only launcher are implemented and
-locally tested. The production qualification/ownership guard, resource
-allocation journal, verified workflow/CU cleanup, collector aggregation,
-final report and real-input audit are **still pending**. An isolated agent
-launch/verification/empty-stop smoke passed; this is not a launch-ready pilot.
+phase reporting, source-pinned agent launcher, allocation journal, verified
+owned-resource cleanup and collector aggregation are implemented. The owned
+single-arm runner now composes them with frozen inputs and post-drain metric
+finalization; its orchestration is locally tested. The production backend/
+worker and prior-live-gate qualification callback, matching worker/model runs,
+official pilot and final comparison report are **still pending**. A real
+setup-only lifecycle smoke passed earlier; this is not a launch-ready pilot.
 
 ## Isolated agent launch and shutdown
 
@@ -155,7 +157,10 @@ arms use `NativePilotSystem`; ordinary `kb.py tasks` calls without the required
 guard fail before setup or a model dispatch. The guard runs before setup,
 immediately before dispatch and after the attempt. The production guard is
 not supplied yet; tests use controlled guards and a mocked agent, not real
-provenance or Texera qualification.
+provenance or Texera qualification. Every guard return must be a dictionary
+with `qualified` exactly `True`. `False`, a missing field, a truthy string or
+integer, and a plain boolean cannot admit work. Postflight rejection preserves
+the raw answer but makes the attempt ineligible for treatment comparison.
 
 Dataset preparation no longer allocates a throwaway agent for these arms.
 Each task reserves a fresh directory exclusively, including unsuccessful or
@@ -177,7 +182,8 @@ trace and snapshots are private run artifacts, not sanitized publications.
 Additional artifacts are `capture.json`, `snapshots.json`, canonical
 `response.json`, `verdict.json`, and helper-derived `pilot_metrics.json`.
 The last file contains trace/token accounting and optional scoped execution
-measurements, **not** the final collector-overhead report. Failed setup/preflight is unscored because no model
+and producing-result collector measurements (with the limits described below).
+Failed setup/preflight is unscored because no model
 attempt was made; dispatched unsuccessful attempts remain in the record.
 Official raw scores and eligibility for the treatment comparison are separate.
 For this numeric task the evaluator no longer constructs an unused pipeline
@@ -286,9 +292,64 @@ Both optional arguments must be provided together. Without them, measurement
 status is missing and rates are null. A production guard must enforce the
 required recorder; optional reporting arguments are not an admission bypass.
 Capture after an attempt can see an open journal: the outer runner must retain
-the complete journal and refresh final reporting after recorder drain. Request
+the complete journal. `finalize_pilot_measurements(system)` refreshes only
+`pilot_metrics.json` after drain, using its original journal path and recorder
+ID. Missing bindings, open or invalid/foreign journals are refused without
+replacing the initial report. No model, executor, evaluator, guard or cleanup
+is called by this refresh; answer, score, trace and token-cost artifacts remain
+unchanged. The refreshed stage is `after_recorder_drain`, not proof of complete
+phase coverage or backend termination. Repeating the refresh is idempotent.
+Request
 duration and compiler-duration sums are observed measurements, not wall time
 or collector cost. Local HTTP fixtures are not Texera worker or LLM runs.
+
+## Frozen inputs and owned single-arm orchestration
+
+`utils.pilot_inputs.freeze_pilot_inputs` binds the actual official workload,
+exact in-memory task, the two ordered prompt file paths, matching harness/
+worker file bytes, prompt hash and the existing frozen harness price schedule.
+`verify_pilot_inputs` repeats the checks and rejects changes. File reads detect
+path/stat drift while hashing. Manifests contain hashes, paths, byte counts and
+pricing, not raw rows, prompt text or gold answers. A passing input check sets
+`runtime_qualified: false`: the caller must prove that the supplied execution
+directory is the actual worker working directory.
+
+Only the pilot sorts expanded file paths before building the prompt. Legacy
+file expansion remains unchanged. `prepare_pilot_task` is shared by the
+official attempt and read-only input preparation, so a `-tiny` workload cannot
+silently replace the exact official task in one path but not the other.
+
+`utils.pilot_session.run_owned_pilot` takes one registered arm, separately
+pinned agent and recorder worktrees/SHAs, workload/dataset/execution paths,
+fresh private session output, optional task output (default
+`system_scratch/<SUT>`), and a **mandatory** `qualification` callback. Its
+order is:
+
+1. Check clean agent/recorder/harness source, frozen arm port, free first-attempt
+   namespace and frozen local inputs; require runtime/prior-live-gate approval
+   **before** authentication or resource allocation.
+2. Journal a fresh owned LOCAL CU; start a candidate recorder for that CU;
+   verify the exact child, source hashes, route, persistence and idle status;
+   launch only the pinned agent through its supported isolated launcher.
+3. Run the existing `run_pilot_task` once. Each guard independently rechecks
+   input bytes/prompt/pricing, harness and recorder source, the launched agent
+   and recorder health before invoking the mandatory runtime qualification.
+4. Drain that recorder, refresh derived measurements, verify owned-resource
+   capture/ownership/terminal executions before cleanup, then stop only the
+   still-matching empty agent service. A wrong or ineligible answer is not
+   labeled a successful session. Exceptions preserve private IDs/artifacts;
+   the only unconditional shutdown action is draining the owned recorder.
+
+Historical agent worktrees use the same separately pinned **candidate recorder**
+as V2; they do not need to contain the new recorder files. The callback receives
+`(context, system, stage, info)`, with system/info absent at `before_resources`.
+It must supply actual matching-engine/worker, reference-source, effective
+settings, ownership and prior correctness/model evidence. No implementation of
+that production callback or permissive CLI is included here. A fixture returning
+`{"qualified": True}` remains a mock, not runtime qualification. Keep the outer
+Python caller alive throughout the session and start it freshly from the pinned
+harness. Tracked source and interpreter identity are recorded; installed Python
+or Bun dependency contents are not independently fingerprinted by this helper.
 
 ## Required pilot artifacts and cost report
 
@@ -464,7 +525,7 @@ measurements or proof that stats improve reasoning.
 
 ## Local verification
 
-`python -m unittest discover -s tests -q`: **132 pass**, including the original
+`.venv/bin/python -m unittest discover -s tests -q`: **160 pass**, including the original
 19 client/arm/native-trace and legacy pilot tests. New regressions cover actual
 listener resolution with controlled process fixtures, single-attempt policy,
 final-step rebroadcast accounting, durable partial capture, unknown/frozen
@@ -479,7 +540,11 @@ were run failing before fixes for mismatched recorder scope, malformed absence
 responses and cross-workflow cleanup. The newest 15 tests cover all four
 model-smoke audits, input-timing/echo/leak/stale-result failures, full mocked
 orchestration, qualification/model/mode rejection and interrupted-turn capture
-without retry/cancellation. They make **no model calls**. `kb.py systems`
+without retry/cancellation. The latest 28 tests cover frozen inputs (10), strict
+guard-return rejection (3), post-drain refresh without rerun/rescore (3), and
+owned session ordering/failure/source drift plus live-recorder admission with
+controlled fixtures (12). The new guard regressions failed before the fix.
+They make **no model calls**. `kb.py systems`
 resolves all seven new SUT classes.
 
 These tests make no Texera service setup or model calls. They are not live

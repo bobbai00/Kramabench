@@ -76,7 +76,7 @@ class NativePilotAttemptTest(unittest.TestCase):
             self.arm.agent = self.agent
 
         self.arm._setup_agent = Mock(side_effect=setup)
-        self.guard = Mock(return_value={"fixture_guard": True})
+        self.guard = Mock(return_value={"qualified": True, "fixture_guard": True})
         self.arm.bind_pilot_guard(self.guard)
         self.info = {
             "id": "fixture-agent",
@@ -165,7 +165,7 @@ class NativePilotAttemptTest(unittest.TestCase):
         def guard(system, stage, info):
             if stage == "before_dispatch":
                 raise ValueError("wrong build")
-            return {"fixture_guard": True}
+            return {"qualified": True, "fixture_guard": True}
 
         self.guard.side_effect = guard
         result = self.serve()
@@ -187,13 +187,46 @@ class NativePilotAttemptTest(unittest.TestCase):
         self.assertEqual(self.artifact("attempt.json")["status"], "not_started")
         self.assertEqual(self.artifact("attempt.json")["resources"]["workflow_id"], 456)
 
+    def test_rejected_guard_return_before_setup_never_allocates_or_dispatches(self):
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        self.guard.return_value = {"qualified": False}
+        result = self.serve()
+        self.arm._setup_agent.assert_not_called()
+        self.agent.run.assert_not_called()
+        self.assertFalse(result["pilot_evaluation_eligible"])
+
+    def test_nonaffirmative_guard_return_before_dispatch_never_calls_model(self):
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        for rejected in (None, False, True, {}, {"qualified": False}, {"qualified": 1}, {"qualified": "true"}):
+            with self.subTest(rejected=rejected), TemporaryDirectory() as directory:
+                self.agent.run.reset_mock()
+                self.arm.output_dir = directory
+                self.guard.side_effect = lambda system, stage, info: (
+                    rejected if stage == "before_dispatch" else {"qualified": True}
+                )
+                result = self.serve()
+                self.agent.run.assert_not_called()
+                self.assertFalse(result["pilot_evaluation_eligible"])
+                attempt = json.loads((Path(directory) / TASK["id"] / "attempt.json").read_text())
+                self.assertFalse(attempt["dispatched"])
+                self.assertEqual(attempt["errors"][0]["stage"], "before_dispatch")
+
+    def test_rejected_guard_return_after_attempt_retains_answer_but_disqualifies(self):
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        self.guard.side_effect = lambda system, stage, info: {"qualified": stage != "after_attempt"}
+        result = self.serve()
+        self.agent.run.assert_called_once()
+        self.assertEqual(result["explanation"]["answer"], "17")
+        self.assertFalse(result["pilot_evaluation_eligible"])
+        self.assertEqual(self.artifact("attempt.json")["qualification"], "failed")
+
     def test_postflight_drift_is_not_a_qualified_success(self):
         self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
 
         def guard(system, stage, info):
             if stage == "after_attempt":
                 raise ValueError("source drift")
-            return {}
+            return {"qualified": True}
 
         self.guard.side_effect = guard
         result = self.serve()
@@ -295,6 +328,84 @@ class NativePilotAttemptTest(unittest.TestCase):
         self.assertEqual(measurements["compilation"]["pass_rate"], 1)
         self.assertEqual(measurements["runtime"]["pass_rate"], 1)
         self.assertFalse(measurements["backend_termination_verified"])
+
+    def test_post_drain_refresh_finishes_measurements_without_rerunning_or_rescoring(self):
+        from native_python_pilot import finalize_pilot_measurements, run_pilot_task
+        from test_execution_journal import HEADER, request, footer
+
+        workload = Path(self.temporary.name) / "workload.json"
+        workload.write_text(json.dumps([TASK]))
+        journal = Path(self.temporary.name) / "execution_requests.jsonl"
+        start, finish = request("late")
+        journal.write_text("".join(json.dumps(event) + "\n" for event in [HEADER, start]))
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        run_pilot_task(
+            self.arm,
+            guard=self.guard,
+            workload_path=workload,
+            dataset_directory="data/environment/input",
+            execution_journal_path=journal,
+            recorder_id=HEADER["instanceId"],
+        )
+        initial = self.artifact("pilot_metrics.json")
+        self.assertEqual(initial["execution_measurements"]["unfinished_requests"], 1)
+        unchanged = {
+            name: (self.arm.pilot_bundle.path / name).read_bytes()
+            for name in ("evaluation.json", "answer.json", "verdict.json", "stats.json", "react_steps.json")
+        }
+        with journal.open("a") as stream:
+            stream.write("".join(json.dumps(event) + "\n" for event in [finish, footer(1)]))
+        with patch("native_python_pilot.Evaluator", side_effect=AssertionError("must not rescore")):
+            measured = finalize_pilot_measurements(self.arm)
+        self.assertEqual(measured["measurement_stage"], "after_recorder_drain")
+        self.assertEqual(measured["execution_measurements"]["journal_status"], "closed")
+        self.assertEqual(measured["execution_measurements"]["compilation"]["pass_rate"], 1)
+        self.assertEqual(measured["execution_measurements"]["runtime"]["pass_rate"], 1)
+        self.assertFalse(measured["execution_measurements"]["backend_termination_verified"])
+        self.assertEqual(measured["trace"], initial["trace"])
+        self.agent.run.assert_called_once()
+        self.assertEqual(self.guard.call_count, 3)
+        for name, value in unchanged.items():
+            self.assertEqual((self.arm.pilot_bundle.path / name).read_bytes(), value)
+        self.assertEqual(finalize_pilot_measurements(self.arm), measured)
+
+    def test_post_drain_refresh_rejects_open_or_replaced_journal(self):
+        from native_python_pilot import finalize_pilot_measurements, run_pilot_task
+        from test_execution_journal import HEADER, request, footer
+
+        workload = Path(self.temporary.name) / "workload.json"
+        workload.write_text(json.dumps([TASK]))
+        journal = Path(self.temporary.name) / "execution_requests.jsonl"
+        events = [HEADER, *request("ok")]
+        journal.write_text("".join(json.dumps(event) + "\n" for event in events))
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        run_pilot_task(
+            self.arm,
+            guard=self.guard,
+            workload_path=workload,
+            dataset_directory="data/environment/input",
+            execution_journal_path=journal,
+            recorder_id=HEADER["instanceId"],
+        )
+        initial = (self.arm.pilot_bundle.path / "pilot_metrics.json").read_bytes()
+        with self.assertRaisesRegex(ValueError, "closed"):
+            finalize_pilot_measurements(self.arm)
+        replaced = [{**event, "instanceId": "another-recorder"} for event in [*events, footer(1)]]
+        journal.write_text("".join(json.dumps(event) + "\n" for event in replaced))
+        with self.assertRaisesRegex(ValueError, "closed"):
+            finalize_pilot_measurements(self.arm)
+        self.assertEqual((self.arm.pilot_bundle.path / "pilot_metrics.json").read_bytes(), initial)
+        self.agent.run.assert_called_once()
+
+    def test_post_drain_refresh_requires_original_recorder_binding(self):
+        from native_python_pilot import finalize_pilot_measurements, run_pilot_task
+
+        workload = Path(self.temporary.name) / "workload.json"
+        workload.write_text(json.dumps([TASK]))
+        self.agent.run.return_value = MessageResult("17", [], {}, {}, False, completed=True)
+        run_pilot_task(self.arm, guard=self.guard, workload_path=workload, dataset_directory="data/environment/input")
+        with self.assertRaisesRegex(ValueError, "binding"):
+            finalize_pilot_measurements(self.arm)
 
     def test_official_path_deduplicates_collector_productions_from_snapshots(self):
         from native_python_pilot import run_pilot_task

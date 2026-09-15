@@ -40,6 +40,13 @@ PILOT_TASK = "environment-easy-3"
 PILOT_TURN_SECONDS = 1800
 
 
+def build_pilot_prompt(system):
+    """One canonical file order for the pilot only; never include the gold answer."""
+    task = system.workload_data[PILOT_TASK]
+    paths = sorted(system._expand_data_sources(task["data_sources"]))
+    return paths, system._build_prompt(task["query"], paths, system.format_hints.get(PILOT_TASK, ""))
+
+
 def agent_json(agent, resource):
     url = f"{agent.agent_service_endpoint.rstrip('/')}/api/agents/{quote(agent.agent_id, safe='')}{resource}"
     token = getattr(agent, "_token", None)
@@ -74,6 +81,12 @@ class NativePilotSystem(DataflowSystem):
         if not callable(guard):
             raise TypeError("pilot guard must be callable")
         self._pilot_guard = guard
+
+    def _qualify(self, stage, info):
+        evidence = self._pilot_guard(self, stage, info)
+        if not isinstance(evidence, dict) or evidence.get("qualified") is not True:
+            raise ValueError("pilot_guard_did_not_qualify")
+        return evidence
 
     def process_dataset(self, dataset_directory):
         # Dataset preparation and cached scoring must not allocate a workflow.
@@ -110,7 +123,7 @@ class NativePilotSystem(DataflowSystem):
             raise ValueError("pilot task, query and oracle-file policy are frozen")
         bundle = AttemptBundle(Path(self.output_dir) / query_id)
         self.pilot_bundle = bundle
-        prompt = self._build_prompt(query, self._expand_data_sources(subset_files), self.format_hints.get(query_id, ""))
+        _, prompt = build_pilot_prompt(self)
         pricing = price_schedule(self.model_type)
         config = {
             "system_name": self.name,
@@ -145,7 +158,7 @@ class NativePilotSystem(DataflowSystem):
         stage = "before_setup"
         started = time.monotonic()
         try:
-            config["preflight"] = self._pilot_guard(self, stage, None)
+            config["preflight"] = self._qualify(stage, None)
             bundle.write("config.json", config)
             stage = "setup"
             self._setup_agent()
@@ -155,7 +168,7 @@ class NativePilotSystem(DataflowSystem):
             config["effective_agent_before"] = public_info(info)
             config["requested_wire_settings"] = self.agent.settings.to_api_dict()
             bundle.write("config.json", config)
-            config["admission"] = self._pilot_guard(self, stage, info)
+            config["admission"] = self._qualify(stage, info)
             bundle.write("config.json", config)
             stage = "dispatch"
             attempt.update(status="running", dispatched=True, resources=self._resources())
@@ -198,7 +211,7 @@ class NativePilotSystem(DataflowSystem):
             bundle.write("snapshots.json", snapshots)
             bundle.write("capture.json", capture)
             try:
-                config["postflight"] = self._pilot_guard(self, "after_attempt", info_after)
+                config["postflight"] = self._qualify("after_attempt", info_after)
                 attempt["qualification"] = "passed" if stage == "dispatch" else "failed"
             except Exception as error:
                 attempt["qualification"] = "failed"

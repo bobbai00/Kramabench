@@ -43,6 +43,16 @@ def _json_value(value):
     return value
 
 
+def prepare_pilot_task(system, *, workload_path, dataset_directory):
+    """Prepare only local inputs; use the executor's exact workload, not -tiny."""
+    with Path(workload_path).open() as stream:
+        tasks = [task for task in json.load(stream) if task.get("id") == PILOT_TASK]
+    if len(tasks) != 1 or tasks[0].get("answer_type") != "numeric_exact":
+        raise ValueError("expected exactly one frozen numeric-exact pilot task")
+    system.process_dataset(dataset_directory)
+    system.workload_data[PILOT_TASK] = tasks[0]
+
+
 def run_pilot_task(
     system,
     *,
@@ -64,15 +74,8 @@ def run_pilot_task(
         raise TypeError("run_pilot_task requires a registered native pilot SUT")
     if (execution_journal_path is None) != (recorder_id is None):
         raise ValueError("execution journal and bound recorder ID must be provided together")
-    with Path(workload_path).open() as stream:
-        tasks = [task for task in json.load(stream) if task.get("id") == PILOT_TASK]
-    if len(tasks) != 1 or tasks[0].get("answer_type") != "numeric_exact":
-        raise ValueError("expected exactly one frozen numeric-exact pilot task")
     system.bind_pilot_guard(guard)
-    system.process_dataset(dataset_directory)
-    # Use the same exact workload as the official executor/evaluator, not a
-    # best-effort domain inference or a -tiny workload silently overriding it.
-    system.workload_data[PILOT_TASK] = tasks[0]
+    prepare_pilot_task(system, workload_path=workload_path, dataset_directory=dataset_directory)
     executor = Executor(
         system,
         system.name,
@@ -129,6 +132,17 @@ def run_pilot_task(
         except Exception as error:
             verdict.update(reason="official_evaluation_failed", error_type=type(error).__name__)
     bundle.write("verdict.json", verdict)
+    binding = None
+    if execution_journal_path is not None:
+        binding = {"journal_path": str(Path(execution_journal_path).resolve()), "recorder_id": recorder_id}
+    bundle.write(
+        "pilot_metrics.json",
+        _attempt_measurements(bundle, attempt, stats, system.pilot_spec.collection, binding),
+    )
+    return verdict
+
+
+def _attempt_measurements(bundle, attempt, stats, collection_requested, binding):
     execution_measurements = {
         "journal_status": "missing",
         "requests": None,
@@ -136,14 +150,14 @@ def run_pilot_task(
         "runtime": {"pass_rate": None},
         "backend_termination_verified": False,
     }
-    if execution_journal_path is not None:
+    if binding is not None:
         try:
             resources = attempt["resources"]
             execution_measurements = execution_report(
-                execution_journal_path,
+                binding["journal_path"],
                 workflow_id=resources.get("workflow_id"),
                 computing_unit_id=resources.get("computing_unit_id"),
-                expected_recorder_id=recorder_id,
+                expected_recorder_id=binding["recorder_id"],
             )
         except Exception as error:
             # Missing setup identity or unreadable evidence cannot erase the
@@ -158,7 +172,7 @@ def run_pilot_task(
             execution_ids=execution_measurements.get("engine_execution_ids")
             if execution_measurements.get("journal_status") in {"open", "closed"}
             else None,
-            collection_requested=system.pilot_spec.collection,
+            collection_requested=collection_requested,
             snapshots_complete=capture.get("complete") is True,
         )
     except Exception as error:
@@ -168,15 +182,48 @@ def run_pilot_task(
             "observed_collection_ms": None,
             "whole_attempt_overhead_complete": False,
         }
-    bundle.write(
-        "pilot_metrics.json",
-        {
-            "trace": _json_value(kb.react_metrics(bundle.path)),
-            "step_tokens": kb.step_token_rows(bundle.path),
-            "usage_status": stats["usage_status"],
-            "input_trace_complete": stats["input_trace_complete"],
-            "execution_measurements": execution_measurements,
-            "collector_measurements": collector_measurements,
-        },
-    )
-    return verdict
+    return {
+        "measurement_stage": "after_attempt",
+        "recorder_binding": binding,
+        "trace": _json_value(kb.react_metrics(bundle.path)),
+        "step_tokens": kb.step_token_rows(bundle.path),
+        "usage_status": stats["usage_status"],
+        "input_trace_complete": stats["input_trace_complete"],
+        "execution_measurements": execution_measurements,
+        "collector_measurements": collector_measurements,
+    }
+
+
+def finalize_pilot_measurements(system):
+    """Refresh only derived measurements after the originally bound recorder drains.
+
+    No agent, guard, executor, evaluator or cleanup call is made. An open,
+    invalid or foreign recorder cannot replace the initial measurement report.
+    Closure does not prove backend termination, complete phase coverage or
+    whole-attempt collector overhead; their existing unknowns remain explicit.
+    Repeating this local refresh on unchanged artifacts is idempotent.
+    """
+    if not isinstance(system, NativePilotSystem):
+        raise TypeError("finalization requires the original native pilot SUT")
+    bundle = system.pilot_bundle
+    previous = json.loads((bundle.path / "pilot_metrics.json").read_text())
+    binding = previous.get("recorder_binding")
+    if (
+        not isinstance(binding, dict)
+        or not isinstance(binding.get("journal_path"), str)
+        or not Path(binding["journal_path"]).is_absolute()
+        or not isinstance(binding.get("recorder_id"), str)
+        or not binding["recorder_id"]
+    ):
+        raise ValueError("original recorder binding is required")
+    attempt = json.loads((bundle.path / "attempt.json").read_text())
+    config = json.loads((bundle.path / "config.json").read_text())
+    stats = json.loads((bundle.path / "stats.json").read_text())
+    if config.get("system_name") != system.name or config.get("agent_settings") != system.pilot_spec.settings():
+        raise ValueError("pilot settings changed before measurement finalization")
+    metrics = _attempt_measurements(bundle, attempt, stats, system.pilot_spec.collection, binding)
+    if metrics["execution_measurements"]["journal_status"] != "closed":
+        raise ValueError("original recorder journal must be valid and closed")
+    metrics["measurement_stage"] = "after_recorder_drain"
+    bundle.write("pilot_metrics.json", metrics)
+    return metrics
