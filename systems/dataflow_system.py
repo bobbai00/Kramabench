@@ -41,20 +41,11 @@ class DataflowSystem(System):
         parallel_tool_calls: bool = None,
         allowed_operator_types: Optional[List[str]] = None,
         disabled_tools: Optional[List[str]] = None,
-        stats_enabled: bool = False,
         include_operator_properties: bool = None,
         result_selection: Optional[str] = None,
         native_tool_mode: Optional[str] = None,
-        native_flow_evidence: Optional[bool] = None,
-        schema_in_result: bool = False,
-        loader_hint: bool = False,
-        value_format_flags: bool = False,
-        lineage_stats: bool = False,
-        lineage_error_context: bool = False,
-        join_telemetry: bool = False,
-        graph_audit: bool = False,
-        coercion_telemetry: bool = False,
-        compact_stats: bool = False,
+        data_evidence: bool = False,
+        flow_evidence: bool = False,
         thought_replay: bool = False,
         thought_replay_k: int = 10,
         agent_turns: bool = False,
@@ -72,9 +63,6 @@ class DataflowSystem(System):
         # kwarg above, which rides the cumulative DECORATE data ladder (it forces
         # data_level=3 and thereby the whole stats bundle). These flip ONLY the
         # telemetry lines, so an arm can carry them without inheriting stats.
-        coercion_facts: bool = False,
-        row_lineage: bool = False,
-        stat_scopes: Optional[Dict[str, str]] = None,
         message_layout: Optional[str] = None,
         versioned_mode: bool = False,
         session_turns: bool = False,
@@ -98,15 +86,9 @@ class DataflowSystem(System):
         error_reflection: bool = False,
         error_reflection_threshold: int = 3,
         few_shot_prompt: bool = False,
-        table_structure_hint: bool = False,
         frontier_depth: int = 0,
-        flow_level: int = 0,
-        data_level: int = 0,
         max_result_rows: int = 0,
         attempt_reflection: bool = False,
-        column_stats: bool = False,
-        value_format: bool = False,
-        data_hints: bool = False,
         tool_dialect: str = None,
         summarize_params: Optional[Dict[str, object]] = None,
         verbose: bool = False,
@@ -141,6 +123,7 @@ class DataflowSystem(System):
             verbose: Enable verbose logging
             name: System name for benchmark identification
         """
+        self.agent = None  # cleanup is safe even when configuration validation fails.
         super().__init__(name, verbose=verbose, *args, **kwargs)
 
         self.model_type = model_type or "claude-haiku-4.5"
@@ -165,38 +148,16 @@ class DataflowSystem(System):
         self.include_operator_properties = include_operator_properties
         # NATIVE mode result selection ("all" | "rule"); None -> server default.
         self.result_selection = result_selection
+        retired = ["flow_level","data_level","column_stats","value_format","data_hints","native_flow_evidence","coercion_facts","row_lineage","stat_scopes","stats_enabled","schema_in_result","loader_hint","value_format_flags","lineage_stats","lineage_error_context","join_telemetry","graph_audit","coercion_telemetry","compact_stats","table_structure_hint"]
+        if any(key in kwargs for key in retired):
+            raise ValueError("Legacy evidence settings were removed; use data_evidence and flow_evidence with a new SUT name")
+        if type(data_evidence) is not bool or type(flow_evidence) is not bool:
+            raise ValueError("data_evidence and flow_evidence must be booleans")
+        self.data_evidence = data_evidence
+        self.flow_evidence = flow_evidence
         self.native_tool_mode = native_tool_mode
-        self.native_flow_evidence = native_flow_evidence
         self.native_catalog_version = native_catalog_version
         self.native_profile_collection = native_profile_collection
-        # ---- DECORATE control: the two ordinal facet levels (CONTEXT-DESIGN §5) ----
-        # Context decoration is controlled purely by flow_level / data_level (each
-        # expands, agent-service side, into the per-rung render flags via the rung
-        # catalog). The individual decoration booleans are no longer sent on the
-        # wire; for back-compat the legacy per-lever kwargs (schema_in_result,
-        # loader_hint, table_structure_hint, …) are TRANSLATED here to the minimum
-        # level that enables them, and OR'd with any explicit level. This collapses
-        # the old non-cumulative one-off configs onto the cumulative ladder.
-        #   flow L1 loader_hint | L2 lineage_stats/lineage_error_context |
-        #          L3 graph_audit/join_telemetry
-        #   data L1 schema_in_result | L2 table_structure_hint |
-        #          L3 value_format_flags/coercion_telemetry
-        flow_from_flags = 0
-        if loader_hint:
-            flow_from_flags = max(flow_from_flags, 1)
-        if lineage_stats or lineage_error_context:
-            flow_from_flags = max(flow_from_flags, 2)
-        if graph_audit or join_telemetry:
-            flow_from_flags = max(flow_from_flags, 3)
-        data_from_flags = 0
-        if schema_in_result or stats_enabled or compact_stats:
-            data_from_flags = max(data_from_flags, 1)
-        if table_structure_hint:
-            data_from_flags = max(data_from_flags, 2)
-        if value_format_flags or coercion_telemetry:
-            data_from_flags = max(data_from_flags, 3)
-        self.flow_level = max(flow_level, flow_from_flags)
-        self.data_level = max(data_level, data_from_flags)
         # SELECT reinjection + static prior (kept fine-grained knobs).
         self.thought_replay = thought_replay
         self.thought_replay_k = thought_replay_k
@@ -211,10 +172,6 @@ class DataflowSystem(System):
         self.enable_recall_tool = enable_recall_tool
         self.enable_resume_tool = enable_resume_tool
         self.enable_answer_grounding = enable_answer_grounding
-        self.coercion_facts = coercion_facts
-        self.row_lineage = row_lineage
-        # WHERE each data channel renders (source / nonsource / all / off).
-        self.stat_scopes = stat_scopes
         # block (legacy) | native (real tool-calling transcript)
         self.message_layout = message_layout
         self.versioned_mode = versioned_mode
@@ -242,9 +199,6 @@ class DataflowSystem(System):
         self.max_result_rows = max_result_rows
         # Attempt-reflection block on heavily-edited operators (plan3); no-op default.
         self.attempt_reflection = attempt_reflection
-        self.column_stats = column_stats
-        self.value_format = value_format
-        self.data_hints = data_hints
         # Tool-call dialect for the local-react driver. Default to the new Qwen
         # XML format ("qwen-xml"), matching the agent-service default; the
         # react-text variants opt in to the previous ReAct text format. Ignored
@@ -409,7 +363,8 @@ class DataflowSystem(System):
             include_operator_properties=self.include_operator_properties,
             result_selection=self.result_selection,
             native_tool_mode=self.native_tool_mode,
-            native_flow_evidence=self.native_flow_evidence,
+            data_evidence=self.data_evidence,
+            flow_evidence=self.flow_evidence,
             native_catalog_version=self.native_catalog_version,
             native_profile_collection=self.native_profile_collection,
             thought_replay=self.thought_replay,
@@ -425,9 +380,6 @@ class DataflowSystem(System):
             enable_recall_tool=self.enable_recall_tool,
             enable_resume_tool=self.enable_resume_tool,
             enable_answer_grounding=self.enable_answer_grounding,
-            coercion_facts=self.coercion_facts,
-            row_lineage=self.row_lineage,
-            stat_scopes=self.stat_scopes,
             message_layout=self.message_layout,
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
@@ -451,13 +403,8 @@ class DataflowSystem(System):
             error_reflection=self.error_reflection,
             error_reflection_threshold=self.error_reflection_threshold,
             few_shot_prompt=self.few_shot_prompt,
-            flow_level=self.flow_level,
-            data_level=self.data_level,
             max_result_rows=self.max_result_rows,
             attempt_reflection=self.attempt_reflection,
-            column_stats=self.column_stats,
-            value_format=self.value_format,
-            data_hints=self.data_hints,
             tool_dialect=self.tool_dialect,
             summarize_params=self.summarize_params,
             **({"workflow_name": workflow_name} if workflow_name is not None else {}),
@@ -603,7 +550,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "include_operator_properties": self.include_operator_properties,
                 "result_selection": self.result_selection,
                 "native_tool_mode": self.native_tool_mode,
-                "native_flow_evidence": self.native_flow_evidence,
+                "data_evidence": self.data_evidence,
+                "flow_evidence": self.flow_evidence,
                 "native_catalog_version": self.native_catalog_version,
                 "native_profile_collection": self.native_profile_collection,
                 "thought_replay": self.thought_replay,
@@ -624,13 +572,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "error_reflection": self.error_reflection,
                 "error_reflection_threshold": self.error_reflection_threshold,
                 "few_shot_prompt": self.few_shot_prompt,
-                "flow_level": self.flow_level,
-                "data_level": self.data_level,
                 "max_result_rows": self.max_result_rows,
                 "attempt_reflection": self.attempt_reflection,
-                "column_stats": self.column_stats,
-                "value_format": self.value_format,
-                "data_hints": self.data_hints,
                 "tool_dialect": self.tool_dialect,
                 "summarize_params": self.summarize_params,
             }

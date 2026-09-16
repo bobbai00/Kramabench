@@ -96,7 +96,8 @@ class AgentSettings:
     # only what the data decided). None -> server default ("all").
     result_selection: Optional[str] = None
     native_tool_mode: Optional[str] = None
-    native_flow_evidence: Optional[bool] = None
+    data_evidence: bool = False
+    flow_evidence: bool = False
     native_catalog_version: Optional[str] = field(default=None, kw_only=True)
     native_profile_collection: Optional[bool] = field(default=None, kw_only=True)
     thought_replay: bool = False
@@ -127,15 +128,6 @@ class AgentSettings:
     # Check that a final answer's numbers trace to materialized results or
     # recalled state; one feedback round on total failure.
     enable_answer_grounding: bool = False
-    # Execution telemetry renders (worker computes both unconditionally):
-    # coerce-to-NaN dataloss diagnostics, and the rows-in/rows-out Lineage fact.
-    coercion_facts: bool = False
-    row_lineage: bool = False
-    #: Position-aware gating for the data-facet channels — WHERE each enabled
-    #: channel renders, keyed by the operator's place in the DAG. Values per
-    #: channel: "all" | "source" | "nonsource" | "off". None = legacy (render
-    #: every enabled channel on every operator).
-    stat_scopes: Optional[dict] = None
     #: Wire framing: "block" (one user message per step) or "native" (real
     #: tool-calling transcript; our rendered evidence rides the tool results).
     message_layout: Optional[str] = None
@@ -196,15 +188,10 @@ class AgentSettings:
     error_reflection: bool = False
     error_reflection_threshold: int = 3
     few_shot_prompt: bool = False
-    flow_level: int = 0
-    data_level: int = 0
     max_result_rows: int = 0
     # Inject an `Attempt reflection:` block on heavily-edited operators
     # (plan3, progress reflection). False = no-op default.
     attempt_reflection: bool = False
-    column_stats: bool = False
-    value_format: bool = False
-    data_hints: bool = False
     # Tool-call dialect for the local-react driver ("qwen-xml" | "react-text").
     # Ignored by vercel-tool-use. Default is qwen-xml (the new format).
     tool_dialect: str = AGENT_TOOL_DIALECT
@@ -215,6 +202,8 @@ class AgentSettings:
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to API request format."""
+        if type(self.data_evidence) is not bool or type(self.flow_evidence) is not bool:
+            raise ValueError("data_evidence and flow_evidence must be booleans")
         payload: dict[str, Any] = {
             "maxSteps": self.max_steps,
             "maxOperatorEdits": self.max_operator_edits,
@@ -225,6 +214,8 @@ class AgentSettings:
             "executionTimeoutMinutes": self.execution_timeout_minutes,
             "disabledTools": self.disabled_tools,
             "agentMode": self.agent_mode,
+            "dataEvidence": self.data_evidence,
+            "flowEvidence": self.flow_evidence,
             "contextMode": self.context_mode,
             "parallelToolCalls": self.parallel_tool_calls,
             "thoughtReplay": self.thought_replay,
@@ -237,13 +228,8 @@ class AgentSettings:
             "errorReflection": self.error_reflection,
             "errorReflectionThreshold": self.error_reflection_threshold,
             "fewShotPrompt": self.few_shot_prompt,
-            "flowLevel": self.flow_level,
-            "dataLevel": self.data_level,
             "maxResultRows": self.max_result_rows,
             "attemptReflection": self.attempt_reflection,
-            "columnStats": self.column_stats,
-            "valueFormat": self.value_format,
-            "dataHints": self.data_hints,
             "toolDialect": self.tool_dialect,
         }
         if self.allowed_operator_types is not None:
@@ -254,8 +240,6 @@ class AgentSettings:
             payload["resultSelection"] = self.result_selection
         if self.native_tool_mode is not None:
             payload["nativeToolMode"] = self.native_tool_mode
-        if self.native_flow_evidence is not None:
-            payload["nativeFlowEvidence"] = self.native_flow_evidence
         if self.native_catalog_version is not None:
             payload["nativeCatalogVersion"] = self.native_catalog_version
         if self.native_profile_collection is not None:
@@ -276,12 +260,6 @@ class AgentSettings:
             payload["enableResumeTool"] = True
         if self.enable_answer_grounding:
             payload["enableAnswerGrounding"] = True
-        if self.coercion_facts:
-            payload["coercionTelemetry"] = True
-        if self.row_lineage:
-            payload["rowLineage"] = True
-        if self.stat_scopes:
-            payload["statScopes"] = self.stat_scopes
         if self.message_layout:
             payload["messageLayout"] = self.message_layout
         if self.versioned_mode:
@@ -1028,7 +1006,8 @@ class DataflowAgent:
             include_operator_properties: Optional[bool] = AGENT_INCLUDE_OPERATOR_PROPERTIES,
             result_selection: Optional[str] = None,
             native_tool_mode: Optional[str] = None,
-            native_flow_evidence: Optional[bool] = None,
+            data_evidence: bool = False,
+            flow_evidence: bool = False,
             thought_replay: bool = False,
             thought_replay_k: int = 10,
             agent_turns: bool = False,
@@ -1042,9 +1021,6 @@ class DataflowAgent:
             enable_recall_tool: bool = False,
             enable_resume_tool: bool = False,
             enable_answer_grounding: bool = False,
-            coercion_facts: bool = False,
-            row_lineage: bool = False,
-            stat_scopes: Optional[dict] = None,
             message_layout: Optional[str] = None,
             versioned_mode: bool = False,
             versioned_heads: bool | None = None,
@@ -1069,13 +1045,8 @@ class DataflowAgent:
             error_reflection: bool = False,
             error_reflection_threshold: int = 3,
             few_shot_prompt: bool = False,
-            flow_level: int = 0,
-            data_level: int = 0,
             max_result_rows: int = 0,
             attempt_reflection: bool = False,
-            column_stats: bool = False,
-            value_format: bool = False,
-            data_hints: bool = False,
             tool_dialect: str = AGENT_TOOL_DIALECT,
             summarize_params: Optional[dict[str, Any]] = None,
             texera_api_endpoint: str = TEXERA_API_ENDPOINT,
@@ -1142,7 +1113,8 @@ class DataflowAgent:
             include_operator_properties=include_operator_properties,
             result_selection=result_selection,
             native_tool_mode=native_tool_mode,
-            native_flow_evidence=native_flow_evidence,
+            data_evidence=data_evidence,
+            flow_evidence=flow_evidence,
             native_catalog_version=native_catalog_version,
             native_profile_collection=native_profile_collection,
             thought_replay=thought_replay,
@@ -1158,9 +1130,6 @@ class DataflowAgent:
             enable_recall_tool=enable_recall_tool,
             enable_resume_tool=enable_resume_tool,
             enable_answer_grounding=enable_answer_grounding,
-            coercion_facts=coercion_facts,
-            row_lineage=row_lineage,
-            stat_scopes=stat_scopes,
             message_layout=message_layout,
             versioned_mode=versioned_mode,
             versioned_heads=versioned_heads,
@@ -1182,13 +1151,8 @@ class DataflowAgent:
             error_reflection=error_reflection,
             error_reflection_threshold=error_reflection_threshold,
             few_shot_prompt=few_shot_prompt,
-            flow_level=flow_level,
-            data_level=data_level,
             max_result_rows=max_result_rows,
             attempt_reflection=attempt_reflection,
-            column_stats=column_stats,
-            value_format=value_format,
-            data_hints=data_hints,
             tool_dialect=tool_dialect,
             summarize_params=summarize_params,
         )
