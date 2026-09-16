@@ -33,6 +33,7 @@ from utils.pilot_artifacts import AttemptBundle
 ROUNDS = ("first", "recovery1", "recovery2")
 CAMPAIGN_ID = "NativeCampaign20260915Rep1"
 OBSERVE_ONLY_CAMPAIGN_ID = "NativeCampaignObserveOnly20260916Rep1"
+EVIDENCE_ONLY_CAMPAIGN_ID = "NativeEvidenceOnlyPilot20260916Rep1"
 
 
 class CampaignArm(PilotArm):
@@ -118,7 +119,7 @@ class NativeCampaignSystem(NativePilotSystem):
         if round_id not in ROUNDS:
             raise ValueError("NATIVE_CAMPAIGN_ROUND must be first, recovery1 or recovery2")
         archives = Path(self.output_dir) / "_attempts" / query_id
-        if self.campaign_id == OBSERVE_ONLY_CAMPAIGN_ID:
+        if self.campaign_id != CAMPAIGN_ID:
             for folder in [current, *(archives / item for item in ROUNDS)]:
                 metadata = folder / "attempt.json"
                 if metadata.exists() and json.loads(metadata.read_text()).get("campaign") != self.campaign_id:

@@ -3,6 +3,7 @@ System module initialization.
 This module provides system-level functionality and configurations.
 """
 from .baseline_example import ExampleBaselineSystem
+from .evidence_only_system import *
 from .dataflow_system import (
     DataflowSystem,
 )

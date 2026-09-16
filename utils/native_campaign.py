@@ -80,11 +80,11 @@ def runtime_identity(runtime):
 
 class CampaignGuard:
     def __init__(self, *, campaign=None):
-        from systems.native_campaign_system import CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID
+        from systems.native_campaign_system import CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID, EVIDENCE_ONLY_CAMPAIGN_ID
 
         self.campaign = CAMPAIGN_ID if campaign is None else campaign
-        _require(self.campaign in {CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID}, "campaign_manifest_invalid")
-        self.observe_only = self.campaign == OBSERVE_ONLY_CAMPAIGN_ID
+        _require(self.campaign in {CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID, EVIDENCE_ONLY_CAMPAIGN_ID}, "campaign_manifest_invalid")
+        self.observe_only = self.campaign != CAMPAIGN_ID
         path = os.environ.get("NATIVE_CAMPAIGN_MANIFEST")
         _require(path, "NATIVE_CAMPAIGN_MANIFEST is required before campaign dispatch")
         self.path = Path(path).resolve(strict=True)
@@ -145,6 +145,8 @@ class CampaignGuard:
             self.check_binding(binding, hash_content=False)
             bound[binding["resolved_path"]] = binding
         task_id = system.campaign_query_id
+        if "task_ids" in manifest:
+            _require(task_id in manifest["task_ids"], "campaign_task_not_selected")
         expected_paths = manifest.get("task_inputs", {}).get(task_id)
         if expected_paths is not None:
             _require(system.campaign_prompt_paths == expected_paths, "campaign_task_input_map_changed")
