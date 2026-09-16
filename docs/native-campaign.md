@@ -45,11 +45,22 @@ Before every model dispatch and after capture, admission reads the existing
 `GET /api/agents/:id/system-info`. It requires an enabled `dataflow` tool and a
 valid prompt/tool registry, and rejects `inspectResult` anywhere in the prompt,
 tool names, descriptions or schemas, including disabled registry entries.
-`config.json` retains the exact prompt and tool definitions, enabled/all tool
-names, and their canonical JSON SHA-256 under `admission.tool_surface` and
-`postflight.tool_surface`. A missing endpoint or invalid surface blocks model
-dispatch. The deprecated `enableInspectTool` setting may be absent or false;
+`config.json` retains the exact public prompt and registry descriptors,
+enabled/all tool names, and their canonical JSON SHA-256 under
+`admission.tool_surface` and `postflight.tool_surface`. This is the effective
+registry plus public descriptors/prompt, not a model-wire parameter-schema
+capture: the existing API may report `{}` for native-tool `inputSchema`.
+Registry membership, descriptions and prompt still provide the absence check.
+A missing endpoint or invalid surface blocks model dispatch. The deprecated
+`enableInspectTool` setting may be absent or false;
 true is rejected and is not a substitute for removing the actual tool.
+
+The admission guard is read-only and fails closed for each affected attempt.
+It has no global stop-file latch. A supervisor detecting qualification/capture
+failure can stop later native admissions only within its polling interval;
+preserve any already-running attempts. Captured terminal `agent_error` or
+`interrupted` outcomes with partial costs remain ordinary failed tasks eligible
+for the common recovery policy, not automatic reasons for a global halt.
 
 The canonical domain workload loader (not the shadowing `*-tiny.json` loader)
 is shared by all campaign classes. All 104 questions, oracle-file lists and
