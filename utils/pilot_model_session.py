@@ -26,15 +26,18 @@ from systems.native_python_system import PILOT_ARMS
 from utils.native_model_smoke import run_model_smoke
 from utils.pilot_artifacts import AttemptBundle
 from utils.pilot_cleanup import PilotResourceAPI, cleanup_owned_resources, create_owned_computing_unit
-from utils.pilot_launch import launch_agent_service, source_snapshot, stop_agent_service, verify_service_launch
+from utils.pilot_launch import _local_origin, launch_agent_service, source_snapshot, stop_agent_service, verify_service_launch
 from utils.pilot_resource_smoke import RecorderProcess
 from utils.pilot_session import _recorder_source, _verify_recorder
 from utils.resource_journal import ResourceJournal
 
 
 def run_owned_model_smoke(
-    *, worktree, source_sha, context_mode, output_directory, qualification, model_type="gpt-5.6-luna"
+    *, worktree, source_sha, context_mode, output_directory, qualification, model_type="gpt-5.6-luna", agent_port=3011
 ):
+    if type(agent_port) is not int or not 1024 <= agent_port <= 65535 or agent_port == 3001:
+        raise ValueError("invalid_smoke_agent_port")
+    agent_endpoint = _local_origin(f"http://127.0.0.1:{agent_port}")
     bundle = AttemptBundle(Path(output_directory))
     result = {"version": 1, "status": "running", "context_mode": context_mode, "benchmark_attempt": False}
     recorder, system = None, None
@@ -53,7 +56,7 @@ def run_owned_model_smoke(
         token = login(timeout=(3, 15), allow_redirects=False)
         api = PilotResourceAPI(
             token=token,
-            agent_endpoint="http://127.0.0.1:3011",
+            agent_endpoint=agent_endpoint,
             texera_endpoint=TEXERA_API_ENDPOINT,
             computing_unit_endpoint=TEXERA_COMPUTING_UNIT_ENDPOINT,
         )
@@ -67,7 +70,7 @@ def run_owned_model_smoke(
         _verify_recorder(recorder, recorder_source, require_empty=True)
         launch_agent_service(
             worktree,
-            port=3011,
+            port=agent_port,
             expected_sha=source_sha,
             recorder_url=recorder.metadata["url"],
             run_directory=bundle.path / "service",
@@ -83,7 +86,7 @@ def run_owned_model_smoke(
         system = NativePilotSystem(
             name="NativePythonModelSmoke" + context_mode.title(),
             computing_unit_id=cuid,
-            agent_service_endpoint="http://127.0.0.1:3011",
+            agent_service_endpoint=agent_endpoint,
             output_dir=str(bundle.path),
             **settings,
         )
