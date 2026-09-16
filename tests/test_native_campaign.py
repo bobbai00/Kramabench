@@ -79,18 +79,68 @@ class CampaignSettingsTest(unittest.TestCase):
 
     def test_all_104_main_tasks_admit_under_unchanged_oracle_policy(self):
         root = Path(__file__).resolve().parents[1]
-        tasks = [task for domain in ("archeology", "astronomy", "biomedical", "environment", "legal", "wildfire")
-                 for task in json.loads((root / "workload" / f"{domain}.json").read_text())]
+        domains = ("archeology", "astronomy", "biomedical", "environment", "legal", "wildfire")
+        workloads = {domain: json.loads((root / "workload" / f"{domain}.json").read_text()) for domain in domains}
+        tasks = [task for domain in domains for task in workloads[domain]]
         self.assertEqual(len(tasks), 104)
         with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            fixture = Path(directory)
+            (fixture / "workload").symlink_to(root / "workload", target_is_directory=True)
+            (fixture / "format_hint").symlink_to(root / "format_hint", target_is_directory=True)
+            for domain in domains:
+                (fixture / "data" / domain / "input").mkdir(parents=True)
+            for spec in CAMPAIGN_ARMS:
+                arm = getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
+                arm._setup_agent = Mock(side_effect=AssertionError("metadata loading must not allocate an agent"))
+                arm._expand_data_sources = Mock(return_value=["data/fixture.csv"])
+                for domain in domains:
+                    # Exercise the real loader, including any *-tiny fixture
+                    # that used to shadow canonical metadata during setup.
+                    arm.process_dataset(fixture / "data" / domain / "input")
+                    hints = {row["id"]: row["format_hint"] for row in
+                             json.loads((root / "format_hint" / f"{domain}.json").read_text())}
+                    for task in workloads[domain]:
+                        with self.subTest(sut=spec.system_name, task=task["id"]):
+                            observed, prompt = arm._attempt_inputs(task["query"], task["id"], task["data_sources"])
+                            self.assertEqual(observed, task)
+                            self.assertEqual(arm.format_hints[task["id"]], hints[task["id"]])
+                            self.assertIn(task["query"], prompt)
+                            self.assertIn(hints[task["id"]], prompt)
+                            self.assertNotIn('"answer_type"', prompt)
+                self.assertEqual(arm.workload_data, {task["id"]: task for task in tasks})
+                arm._setup_agent.assert_not_called()
+
+    def test_canonical_loader_preserves_format_hints_and_frozen_checks(self):
+        from systems.dataflow_system import DataflowSystem
+
+        root = Path(__file__).resolve().parents[1]
+        canonical = json.loads((root / "workload/legal.json").read_text())[0]
+        tiny = json.loads((root / "workload/legal-tiny.json").read_text())[0]
+        self.assertEqual(canonical["id"], tiny["id"])
+        self.assertNotEqual(canonical["data_sources"], tiny["data_sources"])
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            fixture = Path(directory)
+            (fixture / "workload").symlink_to(root / "workload", target_is_directory=True)
+            (fixture / "format_hint").symlink_to(root / "format_hint", target_is_directory=True)
+            dataset = fixture / "data/legal/input"
+            dataset.mkdir(parents=True)
+            legacy = DataflowSystem(output_dir=directory)
+            legacy._prepare_dataset(dataset)
             arm = Arm(output_dir=directory, computing_unit_id=321)
-            arm.workload_data = {task["id"]: task for task in tasks}
+            arm.process_dataset(dataset)
+            self.assertEqual(arm.workload_data[canonical["id"]], canonical)
+            self.assertEqual(arm.format_hints, legacy.format_hints)
+            # The fix is campaign-only; the shared/pilot loader is unchanged.
+            self.assertEqual(legacy.workload_data[tiny["id"]], tiny)
             arm._expand_data_sources = Mock(return_value=["data/fixture.csv"])
-            for task in tasks:
-                observed, prompt = arm._attempt_inputs(task["query"], task["id"], task["data_sources"])
-                self.assertEqual(observed, task)
-                self.assertIn(task["query"], prompt)
-                self.assertNotIn('"answer_type"', prompt)
+            arm._attempt_bundle = Mock(side_effect=AssertionError("invalid inputs must not reserve an attempt"))
+            arm._setup_agent = Mock(side_effect=AssertionError("invalid inputs must not allocate an agent"))
+            for query, sources in ((canonical["query"] + " changed", canonical["data_sources"]),
+                                   (canonical["query"], tiny["data_sources"]), (canonical["query"], [])):
+                with self.assertRaisesRegex(ValueError, "query and oracle-file policy are frozen"):
+                    arm.serve_query(query, canonical["id"], sources)
+            arm._attempt_bundle.assert_not_called()
+            arm._setup_agent.assert_not_called()
 
 
 class CampaignAttemptTest(unittest.TestCase):

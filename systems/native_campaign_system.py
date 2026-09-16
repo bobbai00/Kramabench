@@ -62,6 +62,15 @@ def frozen_pricing(model):
 class NativeCampaignSystem(NativePilotSystem):
     _campaign_guard = None
 
+    def _load_workload(self, dataset_directory):
+        # CampaignGuard and kb.py bind the canonical domain workload. The
+        # shared loader also reads *-tiny.json, whose duplicate IDs can replace
+        # the canonical oracle paths, answer type, and ground-truth metadata.
+        domain = Path(dataset_directory).parent.name
+        workload = Path(__file__).resolve().parents[1] / "workload" / f"{domain}.json"
+        tasks = json.loads(workload.read_text())
+        self.workload_data.update({task["id"]: task for task in tasks})
+
     def _qualify(self, stage, info):
         if self._campaign_guard is None:
             from utils.native_campaign import CampaignGuard
