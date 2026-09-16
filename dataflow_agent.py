@@ -570,7 +570,6 @@ def create_agent(
 
     payload: dict[str, Any] = {
         "modelType": model_type,
-        "userToken": token,
         "workflowId": workflow_id,
     }
     # The new agent-service validates `computingUnitId` as a strict number when
@@ -591,7 +590,7 @@ def create_agent(
         payload["settings"] = settings.to_api_dict()
 
     # The merged agent-service requires the delegating user's JWT in the
-    # Authorization header (not just the payload) on agent creation — it forwards
+    # Authorization header only on agent creation — it forwards
     # that identity to the LLM gateway. Without it, /api/agents returns 401.
     headers = {"Authorization": f"Bearer {token}"}
     data = _setup_post(url, payload, headers=headers, timeout=timeout, allow_redirects=allow_redirects)

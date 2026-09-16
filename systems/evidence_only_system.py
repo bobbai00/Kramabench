@@ -34,7 +34,8 @@ class EvidenceOnlyArm:
 
     @property
     def system_name(self):
-        return f'DataflowSystemTerraEvidenceOnlyPilot{self.key}20260916Rep1'
+        # Rep1 was a zero-model-dispatch setup failure under the strict API.
+        return f'DataflowSystemTerraEvidenceOnlyPilot{self.key}20260916Rep2'
 
     def settings(self):
         return {

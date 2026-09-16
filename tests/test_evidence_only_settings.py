@@ -19,12 +19,21 @@
 
 import unittest
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-from dataflow_agent import AgentSettings, DataflowAgent
+from dataflow_agent import AgentSettings, DataflowAgent, create_agent
 from systems.dataflow_system import DataflowSystem
 
 
 class EvidenceOnlySettingsTest(unittest.TestCase):
+    def test_creation_sends_auth_only_in_header(self):
+        reply = {'id': 'fixture', 'name': 'fixture', 'modelType': 'gpt-5.6-terra',
+                 'state': 'AVAILABLE', 'createdAt': 0}
+        with patch('dataflow_agent._setup_post', return_value=reply) as post:
+            create_agent('gpt-5.6-terra', 'fixture-token', 12, 34, AgentSettings())
+        self.assertNotIn('userToken', post.call_args.args[1])
+        self.assertEqual(post.call_args.kwargs['headers'], {'Authorization': 'Bearer fixture-token'})
+
     def test_all_four_arms_preserve_explicit_booleans(self):
         for data in (False, True):
             for flow in (False, True):
