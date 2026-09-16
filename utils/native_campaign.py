@@ -23,6 +23,7 @@ bindings and requested/effective settings; it never starts or repairs services.
 """
 
 import glob
+import hashlib
 import json
 import os
 import re
@@ -78,14 +79,19 @@ def runtime_identity(runtime):
 
 
 class CampaignGuard:
-    def __init__(self):
+    def __init__(self, *, campaign=None):
+        from systems.native_campaign_system import CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID
+
+        self.campaign = CAMPAIGN_ID if campaign is None else campaign
+        _require(self.campaign in {CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID}, "campaign_manifest_invalid")
+        self.observe_only = self.campaign == OBSERVE_ONLY_CAMPAIGN_ID
         path = os.environ.get("NATIVE_CAMPAIGN_MANIFEST")
         _require(path, "NATIVE_CAMPAIGN_MANIFEST is required before campaign dispatch")
         self.path = Path(path).resolve(strict=True)
         self.binding = file_binding(self.path)
         self.manifest = json.loads(self.path.read_text())
         _require(self.manifest.get("version") == 1
-                 and self.manifest.get("campaign") == "NativeCampaign20260915Rep1", "campaign_manifest_invalid")
+                 and self.manifest.get("campaign") == self.campaign, "campaign_manifest_invalid")
         _require(isinstance(self.manifest.get("bindings"), list) and self.manifest["bindings"],
                  "campaign_input_bindings_missing")
 
@@ -105,6 +111,8 @@ class CampaignGuard:
                      "campaign_file_binding_changed")
 
     def __call__(self, system, stage, info):
+        _require(getattr(system, "campaign_id", "NativeCampaign20260915Rep1") == self.campaign,
+                 "campaign_namespace_mismatch")
         self.check_binding(self.binding)
         manifest = self.manifest
         git = lambda *args: subprocess.check_output(
@@ -126,7 +134,7 @@ class CampaignGuard:
                  and observed["git_sha"] == service["git_sha"]
                  and observed.get("recorder_url", "").rstrip("/") == manifest["runtime"]["endpoint"].rstrip("/"),
                  "campaign_service_changed")
-        if key == "BatchParent":
+        if key == "BatchParent" and not self.observe_only:
             _require(observed["git_sha"] == "41cd8ae97e30edfec90c847886ed4068dd0fa9b0",
                      "campaign_batch_parent_revision_mismatch")
         route = gateway_route(system.model_type)
@@ -159,6 +167,7 @@ class CampaignGuard:
             self.check_binding(bound[resolved])
         task = [row for row in json.loads(workload.read_text()) if row.get("id") == task_id]
         _require(len(task) == 1 and task[0] == system.workload_data[task_id], "campaign_task_changed")
+        tool_surface = None
         if stage != "before_setup":
             _require(isinstance(info, dict) and info.get("id") == system.agent.agent_id
                      and info.get("modelType") == system.model_type and info.get("driver") == "vercel-tool-use",
@@ -169,8 +178,35 @@ class CampaignGuard:
             _require(delegate.get("computingUnitId") == system.computing_unit_id
                      and delegate.get("workflowId") == system.agent._workflow_id, "campaign_agent_route_mismatch")
             check_effective_settings(system.agent.settings.to_api_dict(), info.get("settings"))
-        return {"qualified": True, "manifest_sha256": self.binding["sha256"],
-                "service": observed, "gateway": route, "harness_sha": manifest["harness_sha"]}
+            if self.observe_only:
+                tool_surface = self.check_tool_surface(system.agent)
+        evidence = {"qualified": True, "manifest_sha256": self.binding["sha256"],
+                    "service": observed, "gateway": route, "harness_sha": manifest["harness_sha"]}
+        if tool_surface is not None:
+            evidence["tool_surface"] = tool_surface
+        return evidence
+
+    @staticmethod
+    def check_tool_surface(agent):
+        """Qualify the actual registry and prompt, including disabled entries."""
+        from systems.native_pilot_system import agent_json
+
+        observed = agent_json(agent, "/system-info")
+        _require(isinstance(observed, dict) and isinstance(observed.get("systemPrompt"), str)
+                 and observed["systemPrompt"].strip()
+                 and isinstance(observed.get("tools"), list) and observed["tools"], "campaign_tool_surface_invalid")
+        surface = {key: observed[key] for key in ("systemPrompt", "tools")}
+        encoded = json.dumps(surface, sort_keys=True, separators=(",", ":")).encode()
+        _require(b"inspectresult" not in encoded.lower(), "campaign_inspect_result_forbidden")
+        _require(all(isinstance(tool, dict) and isinstance(tool.get("name"), str) and tool["name"]
+                     and isinstance(tool.get("description"), str) and isinstance(tool.get("inputSchema"), dict)
+                     and type(tool.get("enabled")) is bool for tool in surface["tools"]),
+                 "campaign_tool_surface_invalid")
+        names = [tool["name"] for tool in surface["tools"]]
+        enabled = [tool["name"] for tool in surface["tools"] if tool["enabled"]]
+        _require(len(names) == len(set(names)) and "dataflow" in enabled, "campaign_tool_surface_invalid")
+        return {**surface, "tool_names": names, "enabled_tool_names": enabled,
+                "sha256": hashlib.sha256(encoded).hexdigest()}
 
 
 def cleanup_campaign_resources(system, bundle, attempt):

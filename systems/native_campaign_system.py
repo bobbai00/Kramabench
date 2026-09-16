@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Eight frozen full-workload arms, executed only through the native harness.
+"""Frozen full-workload arms, executed only through the native harness.
 
 Reuse the pilot's single-dispatch capture, resource journal and partial usage
 accounting. Service/CU lifecycle remains with the campaign supervisor.
@@ -32,26 +32,40 @@ from utils.pilot_artifacts import AttemptBundle
 
 ROUNDS = ("first", "recovery1", "recovery2")
 CAMPAIGN_ID = "NativeCampaign20260915Rep1"
+OBSERVE_ONLY_CAMPAIGN_ID = "NativeCampaignObserveOnly20260916Rep1"
 
 
 class CampaignArm(PilotArm):
+    campaign_id = CAMPAIGN_ID
+
     @property
     def system_name(self):
         model = {"gpt-5.6-luna": "Luna", "gpt-5.6-terra": "Terra"}[self.model_type]
         return f"DataflowSystem{model}NativeCampaign{self.key}20260915Rep1"
 
 
+class ObserveOnlyCampaignArm(CampaignArm):
+    campaign_id = OBSERVE_ONLY_CAMPAIGN_ID
+
+    @property
+    def system_name(self):
+        model = {"gpt-5.6-luna": "Luna", "gpt-5.6-terra": "Terra"}[self.model_type]
+        return f"DataflowSystem{model}NativeCampaignObserveOnly{self.key}20260916Rep1"
+
+
 CAMPAIGN_ARMS = tuple(
     CampaignArm(**vars(arm)) for arm in ALL_PILOT_ARMS
     if arm.key in {"BatchParent", "DataOnly", "FlowOnly", "Combined"}
 )
+OBSERVE_ONLY_CAMPAIGN_ARMS = tuple(ObserveOnlyCampaignArm(**vars(arm)) for arm in CAMPAIGN_ARMS)
+ALL_CAMPAIGN_ARMS = CAMPAIGN_ARMS + OBSERVE_ONLY_CAMPAIGN_ARMS
 
 
-def frozen_pricing(model):
+def frozen_pricing(model, campaign_id=CAMPAIGN_ID):
     scale = {"gpt-5.6-luna": 1, "gpt-5.6-terra": 10}[model]
     return {
         "version": 1, "kind": "token_estimate", "model": model,
-        "source": {"table": CAMPAIGN_ID}, "currency": "USD", "unit": "per_token",
+        "source": {"table": campaign_id}, "currency": "USD", "unit": "per_token",
         "rates": {"input": scale * .2 / 1e6, "cache_read": scale * .02 / 1e6,
                   "output": scale * 1.2 / 1e6, "cache_creation": 0},
         "input_includes_cached": True, "output_includes_reasoning": True,
@@ -60,6 +74,7 @@ def frozen_pricing(model):
 
 
 class NativeCampaignSystem(NativePilotSystem):
+    campaign_id = CAMPAIGN_ID
     _campaign_guard = None
 
     def _load_workload(self, dataset_directory):
@@ -74,7 +89,7 @@ class NativeCampaignSystem(NativePilotSystem):
     def _qualify(self, stage, info):
         if self._campaign_guard is None:
             from utils.native_campaign import CampaignGuard
-            self._campaign_guard = CampaignGuard()
+            self._campaign_guard = CampaignGuard(campaign=self.campaign_id)
         return self._campaign_guard(self, stage, info)
 
     def _attempt_inputs(self, query, query_id, subset_files):
@@ -86,7 +101,7 @@ class NativeCampaignSystem(NativePilotSystem):
         paths = sorted(self._expand_data_sources(subset_files))
         if self._campaign_guard is None and os.environ.get("NATIVE_CAMPAIGN_MANIFEST"):
             from utils.native_campaign import CampaignGuard
-            self._campaign_guard = CampaignGuard()
+            self._campaign_guard = CampaignGuard(campaign=self.campaign_id)
         manifest = getattr(self._campaign_guard, "manifest", None)
         if isinstance(manifest, dict) and query_id in manifest.get("task_inputs", {}):
             paths = manifest["task_inputs"][query_id]
@@ -103,6 +118,11 @@ class NativeCampaignSystem(NativePilotSystem):
         if round_id not in ROUNDS:
             raise ValueError("NATIVE_CAMPAIGN_ROUND must be first, recovery1 or recovery2")
         archives = Path(self.output_dir) / "_attempts" / query_id
+        if self.campaign_id == OBSERVE_ONLY_CAMPAIGN_ID:
+            for folder in [current, *(archives / item for item in ROUNDS)]:
+                metadata = folder / "attempt.json"
+                if metadata.exists() and json.loads(metadata.read_text()).get("campaign") != self.campaign_id:
+                    raise ValueError("campaign_namespace_mismatch: do not reuse superseded artifacts")
         if (archives / round_id).exists():
             raise FileExistsError("campaign round already archived")
         if current.exists():
@@ -126,10 +146,10 @@ class NativeCampaignSystem(NativePilotSystem):
         return bundle
 
     def _attempt_metadata(self):
-        return {"campaign": CAMPAIGN_ID, "round": self.campaign_round}
+        return {"campaign": self.campaign_id, "round": self.campaign_round}
 
     def _attempt_pricing(self):
-        return frozen_pricing(self.model_type)
+        return frozen_pricing(self.model_type, self.campaign_id)
 
     def _after_attempt(self, bundle, attempt):
         from utils.native_campaign import cleanup_campaign_resources
@@ -202,10 +222,11 @@ def _make_arm(spec):
 
     return type(spec.system_name, (NativeCampaignSystem,), {
         "__init__": __init__, "__module__": __name__,
+        "campaign_id": spec.campaign_id,
         "__doc__": f"Frozen full KramaBench campaign: {spec.key}, {spec.model_type}, medium.",
     })
 
 
-__all__ = [spec.system_name for spec in CAMPAIGN_ARMS]
-for _spec in CAMPAIGN_ARMS:
+__all__ = [spec.system_name for spec in ALL_CAMPAIGN_ARMS]
+for _spec in ALL_CAMPAIGN_ARMS:
     globals()[_spec.system_name] = _make_arm(_spec)

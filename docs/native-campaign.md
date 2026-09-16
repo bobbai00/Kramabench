@@ -17,7 +17,60 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Native full campaign, 2026-09-15 Rep1
+# Native full campaigns
+
+## ObserveOnly replacement, 2026-09-16 Rep1
+
+The 2026-09-15 campaign is superseded. Preserve its classes and artifacts for
+historical inspection, but do not resume its drivers, administrative amendment
+scripts, or configurations. Start all 104 tasks anew in each of these eight
+namespaces:
+`DataflowSystem{Luna|Terra}NativeCampaignObserveOnly{BatchParent|DataOnly|FlowOnly|Combined}20260916Rep1`.
+
+The replacement changes no frozen model, reasoning effort, evidence level,
+token budget, retry policy, pricing rate, or scoring rule. Both services must
+instead run separately source-pinned revisions with `inspectResult` removed.
+The V1 BatchParent remains based on the original no-V2-evidence implementation,
+but its manifest pins the inspector-removal commit rather than the historical
+`41cd8ae` revision. Old classes still require the historical revision.
+
+Create a fresh manifest with `campaign: "NativeCampaignObserveOnly20260916Rep1"`,
+the integrated harness SHA, and the newly qualified service launch records and
+SHAs. Requalify engine, gateway and input bindings; do not reuse an old manifest
+by editing its campaign label. The schema and endpoint/CU environment overrides
+below are otherwise unchanged. Set the explicit endpoint variables when using
+fresh ports, and preserve the old services' pending resource journals.
+
+Before every model dispatch and after capture, admission reads the existing
+`GET /api/agents/:id/system-info`. It requires an enabled `dataflow` tool and a
+valid prompt/tool registry, and rejects `inspectResult` anywhere in the prompt,
+tool names, descriptions or schemas, including disabled registry entries.
+`config.json` retains the exact prompt and tool definitions, enabled/all tool
+names, and their canonical JSON SHA-256 under `admission.tool_surface` and
+`postflight.tool_surface`. A missing endpoint or invalid surface blocks model
+dispatch. The deprecated `enableInspectTool` setting may be absent or false;
+true is rejected and is not a substitute for removing the actual tool.
+
+The canonical domain workload loader (not the shadowing `*-tiny.json` loader)
+is shared by all campaign classes. All 104 questions, oracle-file lists and
+format hints remain unchanged. New attempt metadata and per-attempt pricing
+identify the new campaign; its recovery hook rejects archived/current metadata
+from the superseded campaign before moving any artifacts.
+
+Use the native command with a new name and a fresh output namespace:
+
+```bash
+campaign_sut=DataflowSystemLunaNativeCampaignObserveOnlyCombined20260916Rep1
+NATIVE_CAMPAIGN_ROUND=first python kb.py run --sut "$campaign_sut" \
+    --parallel --isolate --watchdog-min 35
+```
+
+The recovery, capture, cost and cleanup rules below still apply. Run both
+explicit recovery rounds with the same strict-primary-metric threshold for
+every new arm; do not select old-campaign attempts as either first attempts or
+recoveries.
+
+## Historical campaign, 2026-09-15 Rep1
 
 The eight classes use the existing `kb.py run`, `tasks`, `rerun-failed`, and
 official evaluator. Each class is named

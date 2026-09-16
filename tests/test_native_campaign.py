@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import hashlib
 import json
 import os
 import subprocess
@@ -25,6 +26,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import systems
+import systems.native_campaign_system as campaign
 from dataflow_agent import AgentSettings, MessageResult
 from systems.native_campaign_system import CAMPAIGN_ARMS, NativeCampaignSystem, frozen_pricing
 from utils.native_campaign import CampaignGuard, cleanup_campaign_resources, file_binding
@@ -44,6 +46,48 @@ STEP = {
 
 
 class CampaignSettingsTest(unittest.TestCase):
+    def test_eight_observe_only_arms_use_fresh_names_and_identical_settings(self):
+        specs = campaign.OBSERVE_ONLY_CAMPAIGN_ARMS
+        self.assertEqual(len(specs), 8)
+        self.assertEqual(campaign.OBSERVE_ONLY_CAMPAIGN_ID, "NativeCampaignObserveOnly20260916Rep1")
+        self.assertTrue({spec.system_name for spec in specs}.isdisjoint(
+            spec.system_name for spec in CAMPAIGN_ARMS))
+        with TemporaryDirectory() as directory:
+            for spec in specs:
+                with self.subTest(sut=spec.system_name):
+                    prior = next(arm for arm in CAMPAIGN_ARMS
+                                 if (arm.key, arm.model_type) == (spec.key, spec.model_type))
+                    self.assertEqual(spec.settings(), prior.settings())
+                    self.assertFalse(spec.settings()["enable_inspect_tool"])
+                    model = "Luna" if spec.model_type == "gpt-5.6-luna" else "Terra"
+                    self.assertEqual(spec.system_name,
+                                     f"DataflowSystem{model}NativeCampaignObserveOnly{spec.key}20260916Rep1")
+                    arm = getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
+                    self.assertEqual(arm.campaign_id, campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+                    self.assertEqual(arm.pilot_spec.reasoning_effort, "medium")
+                    self.assertEqual(arm._attempt_pricing()["rates"], frozen_pricing(spec.model_type)["rates"])
+                    self.assertEqual(arm._attempt_pricing()["source"]["table"], campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+                    arm.campaign_round = "first"
+                    self.assertEqual(arm._attempt_metadata(), {
+                        "campaign": campaign.OBSERVE_ONLY_CAMPAIGN_ID, "round": "first"})
+                    with self.assertRaisesRegex(ValueError, "frozen"):
+                        getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321,
+                                                          enable_inspect_tool=True)
+
+    def test_observe_only_cannot_archive_superseded_attempt_as_its_own(self):
+        with TemporaryDirectory() as directory:
+            old = Arm(output_dir=directory, computing_unit_id=321)
+            with patch.dict(os.environ, {"NATIVE_CAMPAIGN_ROUND": "first"}):
+                old._attempt_bundle(TASK["id"])
+            before = (Path(directory) / TASK["id"] / "attempt.json").read_bytes()
+            new = getattr(systems, campaign.OBSERVE_ONLY_CAMPAIGN_ARMS[0].system_name)(
+                output_dir=directory, computing_unit_id=321)
+            with patch.dict(os.environ, {"NATIVE_CAMPAIGN_ROUND": "recovery1"}):
+                with self.assertRaisesRegex(ValueError, "campaign_namespace"):
+                    new._attempt_bundle(TASK["id"])
+            self.assertEqual((Path(directory) / TASK["id"] / "attempt.json").read_bytes(), before)
+            self.assertFalse((Path(directory) / "_attempts").exists())
+
     def test_exact_eight_frozen_arms_preserve_pilot_settings(self):
         from systems.native_python_system import ALL_PILOT_ARMS
 
@@ -89,7 +133,7 @@ class CampaignSettingsTest(unittest.TestCase):
             (fixture / "format_hint").symlink_to(root / "format_hint", target_is_directory=True)
             for domain in domains:
                 (fixture / "data" / domain / "input").mkdir(parents=True)
-            for spec in CAMPAIGN_ARMS:
+            for spec in campaign.ALL_CAMPAIGN_ARMS:
                 arm = getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
                 arm._setup_agent = Mock(side_effect=AssertionError("metadata loading must not allocate an agent"))
                 arm._expand_data_sources = Mock(return_value=["data/fixture.csv"])
@@ -280,6 +324,45 @@ class CampaignAttemptTest(unittest.TestCase):
                 self.arm.serve_query(query, TASK["id"], subset)
         self.arm._setup_agent.assert_not_called()
 
+    def test_observe_only_inspector_rejection_never_dispatches_a_model(self):
+        self.arm.campaign_id = campaign.OBSERVE_ONLY_CAMPAIGN_ID
+        self.arm._campaign_guard = lambda system, stage, info: (
+            {"qualified": True} if stage == "before_setup" else
+            {"qualified": True, "tool_surface": CampaignGuard.check_tool_surface(system.agent)}
+        )
+        surface = {"systemPrompt": "Use dataflow.", "tools": [
+            {"name": "inspectResult", "description": "Deprecated.", "inputSchema": {}, "enabled": False},
+        ]}
+        with patch("systems.native_pilot_system.agent_json", side_effect=lambda agent, resource:
+                   surface if resource == "/system-info" else self.request(agent, resource)):
+            self.serve()
+        self.agent.run.assert_not_called()
+        attempt = self.artifact("attempt.json")
+        self.assertEqual(attempt["campaign"], campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+        self.assertFalse(attempt["dispatched"])
+        self.assertEqual(attempt["errors"][0]["stage"], "before_dispatch")
+        self.assertIsNone(self.artifact("stats.json")["cost_usd"])
+
+    def test_observe_only_success_persists_exact_tool_surface_with_same_budget(self):
+        self.arm.campaign_id = campaign.OBSERVE_ONLY_CAMPAIGN_ID
+        self.arm._campaign_guard = lambda system, stage, info: (
+            {"qualified": True} if stage == "before_setup" else
+            {"qualified": True, "tool_surface": CampaignGuard.check_tool_surface(system.agent)}
+        )
+        surface = {"systemPrompt": "Use dataflow.", "tools": [
+            {"name": "dataflow", "description": "Observe results.", "inputSchema": {}, "enabled": True},
+        ]}
+        with patch("systems.native_pilot_system.agent_json", side_effect=lambda agent, resource:
+                   surface if resource == "/system-info" else self.request(agent, resource)):
+            self.serve()
+        self.agent.run.assert_called_once()
+        self.assertEqual(self.agent.run.call_args.kwargs["empty_turn_retries"], 0)
+        config = self.artifact("config.json")
+        self.assertEqual(config["max_turn_seconds"], 1800)
+        self.assertEqual(config["admission"]["tool_surface"]["tools"], surface["tools"])
+        self.assertEqual(config["postflight"]["tool_surface"]["systemPrompt"], surface["systemPrompt"])
+        self.assertEqual(config["pricing"]["source"]["table"], campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+
 
 class CampaignGuardTest(unittest.TestCase):
     def setUp(self):
@@ -347,6 +430,99 @@ class CampaignGuardTest(unittest.TestCase):
         result = guard(self.system, "before_dispatch", self.info)
         self.assertIs(result["qualified"], True)
         self.assertEqual(result["manifest_sha256"], file_binding(self.path)["sha256"])
+
+    def observe_only_guard(self):
+        self.manifest["campaign"] = campaign.OBSERVE_ONLY_CAMPAIGN_ID
+        self.path.write_text(json.dumps(self.manifest))
+        self.system.campaign_id = campaign.OBSERVE_ONLY_CAMPAIGN_ID
+        return CampaignGuard(campaign=campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+
+    def test_new_and_legacy_manifest_namespaces_cannot_mix(self):
+        with self.assertRaisesRegex(ValueError, "campaign_manifest_invalid"):
+            CampaignGuard(campaign=campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+        guard = self.observe_only_guard()
+        with self.assertRaisesRegex(ValueError, "campaign_manifest_invalid"):
+            CampaignGuard()
+        self.system.campaign_id = campaign.CAMPAIGN_ID
+        with self.assertRaisesRegex(ValueError, "campaign_namespace_mismatch"):
+            guard(self.system, "before_setup", None)
+
+    def test_all_eight_observe_only_launches_record_actual_prompt_and_tools(self):
+        surface = {"systemPrompt": "Use dataflow to observe cached results.", "tools": [
+            {"name": "dataflow", "description": "Edit, run and observe.",
+             "inputSchema": {"type": "object", "properties": {}}, "enabled": True},
+        ]}
+        for spec in campaign.OBSERVE_ONLY_CAMPAIGN_ARMS:
+            with self.subTest(sut=spec.system_name):
+                key = "BatchParent" if spec.key == "BatchParent" else "V2"
+                self.system.pilot_spec = spec
+                self.system.model_type = spec.model_type
+                self.system.agent_service_endpoint = f"http://localhost:{spec.port}"
+                self.system.agent.settings = AgentSettings(**{
+                    key: value for key, value in spec.settings().items() if key in AgentSettings.__dataclass_fields__})
+                self.info["modelType"] = spec.model_type
+                self.info["settings"] = self.system.agent.settings.to_api_dict()
+                self.manifest["services"][key] = {
+                    "endpoint": self.system.agent_service_endpoint, "launch_record": "fixture", "git_sha": "b" * 40}
+                route = {"name": spec.model_type, "reasoning_effort": "medium"}
+                self.manifest["gateway"][spec.model_type] = route
+                guard = self.observe_only_guard()
+                source = {"service_endpoint": self.system.agent_service_endpoint,
+                          "git_sha": "b" * 40, "recorder_url": "http://localhost:8085"}
+                with patch("utils.native_campaign.verify_service_launch", return_value=source), patch(
+                    "utils.native_campaign.gateway_route", return_value=route), patch(
+                    "systems.native_pilot_system.agent_json", return_value=surface) as api:
+                    self.assertTrue(guard(self.system, "before_setup", None)["qualified"])
+                    api.assert_not_called()
+                    admitted = guard(self.system, "before_dispatch", self.info)
+                    api.assert_called_once_with(self.system.agent, "/system-info")
+                    evidence = admitted["tool_surface"]
+                    self.assertEqual(evidence["systemPrompt"], surface["systemPrompt"])
+                    self.assertEqual(evidence["tools"], surface["tools"])
+                    self.assertEqual(evidence["tool_names"], ["dataflow"])
+                    self.assertEqual(evidence["enabled_tool_names"], ["dataflow"])
+                    encoded = json.dumps(surface, sort_keys=True, separators=(",", ":")).encode()
+                    self.assertEqual(evidence["sha256"], hashlib.sha256(encoded).hexdigest())
+                    self.assertEqual(guard(self.system, "after_attempt", self.info)["tool_surface"], evidence)
+                    # Deprecated wire flag may disappear or remain inert false.
+                    self.info["settings"]["enableInspectTool"] = False
+                    self.assertTrue(guard(self.system, "before_dispatch", self.info)["qualified"])
+                    self.info["settings"]["enableInspectTool"] = True
+                    with self.assertRaisesRegex(ValueError, "enableInspectTool"):
+                        guard(self.system, "before_dispatch", self.info)
+                    self.info["settings"].pop("enableInspectTool")
+
+    def test_observe_only_rejects_disabled_inspector_and_prompt_schema_leaks(self):
+        guard = self.observe_only_guard()
+        tool = {"name": "dataflow", "description": "Observe results.", "inputSchema": {}, "enabled": True}
+        surfaces = [
+            {"systemPrompt": "Use dataflow.", "tools": [tool, {**tool, "name": "inspectResult", "enabled": enabled}]}
+            for enabled in (True, False)
+        ] + [
+            {"systemPrompt": "Use inspectResult on the output.", "tools": [tool]},
+            {"systemPrompt": "Use dataflow.", "tools": [{**tool, "description": "Can call inspectResult."}]},
+            {"systemPrompt": "Use dataflow.", "tools": [{**tool, "inputSchema": {"inspectResult": {}}}]},
+        ]
+        for surface in surfaces:
+            with self.subTest(surface=surface), patch("systems.native_pilot_system.agent_json", return_value=surface):
+                with self.assertRaisesRegex(ValueError, "campaign_inspect_result_forbidden"):
+                    guard(self.system, "before_dispatch", self.info)
+                with self.assertRaisesRegex(ValueError, "campaign_inspect_result_forbidden"):
+                    guard(self.system, "after_attempt", self.info)
+
+    def test_observe_only_rejects_missing_invalid_or_unavailable_tool_surface(self):
+        guard = self.observe_only_guard()
+        tool = {"name": "dataflow", "description": "Observe.", "inputSchema": {}, "enabled": True}
+        for surface in ({}, {"systemPrompt": "", "tools": [tool]}, {"systemPrompt": "x", "tools": []},
+                        {"systemPrompt": "x", "tools": [tool, tool]},
+                        {"systemPrompt": "x", "tools": [{**tool, "enabled": False}]},
+                        {"systemPrompt": "x", "tools": [{**tool, "name": "other"}]}):
+            with self.subTest(surface=surface), patch("systems.native_pilot_system.agent_json", return_value=surface):
+                with self.assertRaisesRegex(ValueError, "campaign_tool_surface"):
+                    guard(self.system, "before_dispatch", self.info)
+        with patch("systems.native_pilot_system.agent_json", side_effect=ConnectionError("unavailable")):
+            with self.assertRaises(ConnectionError):
+                guard(self.system, "before_dispatch", self.info)
 
     def test_only_official_paraphrase_cache_may_change_during_scoring(self):
         cache = self.root / "benchmark/fixtures/paraphrase_cache.json"
