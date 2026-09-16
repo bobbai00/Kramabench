@@ -34,6 +34,7 @@ ROUNDS = ("first", "recovery1", "recovery2")
 CAMPAIGN_ID = "NativeCampaign20260915Rep1"
 OBSERVE_ONLY_CAMPAIGN_ID = "NativeCampaignObserveOnly20260916Rep1"
 EVIDENCE_ONLY_CAMPAIGN_ID = "NativeEvidenceOnlyPilot20260916Rep1"
+COMPACT_EVIDENCE_CAMPAIGN_ID = "NativeCompactEvidence20260916Rep1"
 
 
 class CampaignArm(PilotArm):

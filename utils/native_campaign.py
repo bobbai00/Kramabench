@@ -80,10 +80,10 @@ def runtime_identity(runtime):
 
 class CampaignGuard:
     def __init__(self, *, campaign=None):
-        from systems.native_campaign_system import CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID, EVIDENCE_ONLY_CAMPAIGN_ID
+        from systems.native_campaign_system import CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID, EVIDENCE_ONLY_CAMPAIGN_ID, COMPACT_EVIDENCE_CAMPAIGN_ID
 
         self.campaign = CAMPAIGN_ID if campaign is None else campaign
-        _require(self.campaign in {CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID, EVIDENCE_ONLY_CAMPAIGN_ID}, "campaign_manifest_invalid")
+        _require(self.campaign in {CAMPAIGN_ID, OBSERVE_ONLY_CAMPAIGN_ID, EVIDENCE_ONLY_CAMPAIGN_ID, COMPACT_EVIDENCE_CAMPAIGN_ID}, "campaign_manifest_invalid")
         self.observe_only = self.campaign != CAMPAIGN_ID
         path = os.environ.get("NATIVE_CAMPAIGN_MANIFEST")
         _require(path, "NATIVE_CAMPAIGN_MANIFEST is required before campaign dispatch")
