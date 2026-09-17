@@ -29,11 +29,12 @@ import systems
 import systems.native_campaign_system as campaign
 from dataflow_agent import AgentSettings, MessageResult
 from systems.native_campaign_system import CAMPAIGN_ARMS, NativeCampaignSystem, frozen_pricing
+from systems.compact_evidence_system import COMPACT_EVIDENCE_ARMS
 from utils.native_campaign import CampaignGuard, cleanup_campaign_resources, file_binding
 from utils.pilot_artifacts import AttemptBundle
 
 
-Arm = systems.DataflowSystemLunaNativeCampaignCombined20260915Rep1
+Arm = systems.DataflowSystemTerraCompactEvidenceFullCombined20260916Rep1
 TASK = {
     "id": "legal-hard-2", "query": "Fixture query, not a benchmark answer.",
     "answer_type": "list_exact", "answer": ["a", "b"], "data_sources": ["fixture.csv"],
@@ -46,7 +47,7 @@ STEP = {
 
 
 class CampaignSettingsTest(unittest.TestCase):
-    def test_eight_observe_only_arms_use_fresh_names_and_identical_settings(self):
+    def test_historical_observe_only_specs_remain_retired(self):
         specs = campaign.OBSERVE_ONLY_CAMPAIGN_ARMS
         self.assertEqual(len(specs), 8)
         self.assertEqual(campaign.OBSERVE_ONLY_CAMPAIGN_ID, "NativeCampaignObserveOnly20260916Rep1")
@@ -62,33 +63,29 @@ class CampaignSettingsTest(unittest.TestCase):
                     model = "Luna" if spec.model_type == "gpt-5.6-luna" else "Terra"
                     self.assertEqual(spec.system_name,
                                      f"DataflowSystem{model}NativeCampaignObserveOnly{spec.key}20260916Rep1")
-                    arm = getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
-                    self.assertEqual(arm.campaign_id, campaign.OBSERVE_ONLY_CAMPAIGN_ID)
-                    self.assertEqual(arm.pilot_spec.reasoning_effort, "medium")
-                    self.assertEqual(arm._attempt_pricing()["rates"], frozen_pricing(spec.model_type)["rates"])
-                    self.assertEqual(arm._attempt_pricing()["source"]["table"], campaign.OBSERVE_ONLY_CAMPAIGN_ID)
-                    arm.campaign_round = "first"
-                    self.assertEqual(arm._attempt_metadata(), {
-                        "campaign": campaign.OBSERVE_ONLY_CAMPAIGN_ID, "round": "first"})
+                    # Recorded historical namespaces must not silently acquire
+                    # the modern settings or re-enable removed legacy knobs.
+                    with self.assertRaisesRegex(ValueError, "Legacy evidence settings were removed"):
+                        getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
                     with self.assertRaisesRegex(ValueError, "frozen"):
                         getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321,
                                                           enable_inspect_tool=True)
 
     def test_observe_only_cannot_archive_superseded_attempt_as_its_own(self):
         with TemporaryDirectory() as directory:
-            old = Arm(output_dir=directory, computing_unit_id=321)
+            old = systems.DataflowSystemTerraEvidenceOnlyPilotCombined20260916Rep2(
+                output_dir=directory, computing_unit_id=321)
             with patch.dict(os.environ, {"NATIVE_CAMPAIGN_ROUND": "first"}):
                 old._attempt_bundle(TASK["id"])
             before = (Path(directory) / TASK["id"] / "attempt.json").read_bytes()
-            new = getattr(systems, campaign.OBSERVE_ONLY_CAMPAIGN_ARMS[0].system_name)(
-                output_dir=directory, computing_unit_id=321)
+            new = Arm(output_dir=directory, computing_unit_id=321)
             with patch.dict(os.environ, {"NATIVE_CAMPAIGN_ROUND": "recovery1"}):
                 with self.assertRaisesRegex(ValueError, "campaign_namespace"):
                     new._attempt_bundle(TASK["id"])
             self.assertEqual((Path(directory) / TASK["id"] / "attempt.json").read_bytes(), before)
             self.assertFalse((Path(directory) / "_attempts").exists())
 
-    def test_exact_eight_frozen_arms_preserve_pilot_settings(self):
+    def test_historical_frozen_specs_preserve_pilot_settings_but_cannot_run(self):
         from systems.native_python_system import ALL_PILOT_ARMS
 
         self.assertEqual(len(CAMPAIGN_ARMS), 8)
@@ -96,11 +93,8 @@ class CampaignSettingsTest(unittest.TestCase):
             for spec in CAMPAIGN_ARMS:
                 pilot = next(p for p in ALL_PILOT_ARMS if (p.key, p.model_type) == (spec.key, spec.model_type))
                 self.assertEqual(spec.settings(), pilot.settings())
-                arm = getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
-                self.assertIsInstance(arm, NativeCampaignSystem)
-                self.assertEqual(arm.model_type, spec.model_type)
-                self.assertEqual(arm.agent_service_endpoint, f"http://localhost:{spec.port}")
-                self.assertEqual(arm.pilot_spec.reasoning_effort, "medium")
+                with self.assertRaisesRegex(ValueError, "Legacy evidence settings were removed"):
+                    getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
                 for override in ({"max_steps": 26}, {"schema_in_result": True}, {"model_type": "gpt-5.2"}):
                     with self.assertRaisesRegex(ValueError, "frozen"):
                         getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321, **override)
@@ -133,7 +127,7 @@ class CampaignSettingsTest(unittest.TestCase):
             (fixture / "format_hint").symlink_to(root / "format_hint", target_is_directory=True)
             for domain in domains:
                 (fixture / "data" / domain / "input").mkdir(parents=True)
-            for spec in campaign.ALL_CAMPAIGN_ARMS:
+            for spec in COMPACT_EVIDENCE_ARMS:
                 arm = getattr(systems, spec.system_name)(output_dir=directory, computing_unit_id=321)
                 arm._setup_agent = Mock(side_effect=AssertionError("metadata loading must not allocate an agent"))
                 arm._expand_data_sources = Mock(return_value=["data/fixture.csv"])
@@ -208,7 +202,7 @@ class CampaignAttemptTest(unittest.TestCase):
         self.guard = Mock(return_value={"qualified": True, "manifest_sha256": "fixture"})
         self.arm._campaign_guard = self.guard
         self.info = {
-            "id": "fixture-agent", "modelType": "gpt-5.6-luna", "driver": "vercel-tool-use",
+            "id": "fixture-agent", "modelType": "gpt-5.6-terra", "driver": "vercel-tool-use",
             "state": "AVAILABLE", "settings": self.agent.settings.to_api_dict(),
             "delegate": {"workflowId": 456, "computingUnitId": 321, "userToken": "private-token"},
         }
@@ -325,7 +319,7 @@ class CampaignAttemptTest(unittest.TestCase):
         self.arm._setup_agent.assert_not_called()
 
     def test_observe_only_inspector_rejection_never_dispatches_a_model(self):
-        self.arm.campaign_id = campaign.OBSERVE_ONLY_CAMPAIGN_ID
+        self.arm.campaign_id = campaign.COMPACT_EVIDENCE_CAMPAIGN_ID
         self.arm._campaign_guard = lambda system, stage, info: (
             {"qualified": True} if stage == "before_setup" else
             {"qualified": True, "tool_surface": CampaignGuard.check_tool_surface(system.agent)}
@@ -338,13 +332,13 @@ class CampaignAttemptTest(unittest.TestCase):
             self.serve()
         self.agent.run.assert_not_called()
         attempt = self.artifact("attempt.json")
-        self.assertEqual(attempt["campaign"], campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+        self.assertEqual(attempt["campaign"], campaign.COMPACT_EVIDENCE_CAMPAIGN_ID)
         self.assertFalse(attempt["dispatched"])
         self.assertEqual(attempt["errors"][0]["stage"], "before_dispatch")
         self.assertIsNone(self.artifact("stats.json")["cost_usd"])
 
     def test_observe_only_success_persists_exact_tool_surface_with_same_budget(self):
-        self.arm.campaign_id = campaign.OBSERVE_ONLY_CAMPAIGN_ID
+        self.arm.campaign_id = campaign.COMPACT_EVIDENCE_CAMPAIGN_ID
         self.arm._campaign_guard = lambda system, stage, info: (
             {"qualified": True} if stage == "before_setup" else
             {"qualified": True, "tool_surface": CampaignGuard.check_tool_surface(system.agent)}
@@ -361,7 +355,7 @@ class CampaignAttemptTest(unittest.TestCase):
         self.assertEqual(config["max_turn_seconds"], 1800)
         self.assertEqual(config["admission"]["tool_surface"]["tools"], surface["tools"])
         self.assertEqual(config["postflight"]["tool_surface"]["systemPrompt"], surface["systemPrompt"])
-        self.assertEqual(config["pricing"]["source"]["table"], campaign.OBSERVE_ONLY_CAMPAIGN_ID)
+        self.assertEqual(config["pricing"]["source"]["table"], campaign.COMPACT_EVIDENCE_CAMPAIGN_ID)
 
 
 class CampaignGuardTest(unittest.TestCase):
