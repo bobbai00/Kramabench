@@ -137,3 +137,10 @@ import systems.claude_code_system as _ccs  # noqa: E402
 
 for _n in _CC_SONNET:
     globals()[_n] = getattr(_ccs, _n)
+
+
+# 2x2 layout probe (DELTA vs opBlock) x (evidence off/on), 2026-09-19.
+from .layout_probe_system import LAYOUT_PROBE_ARMS as _LAYOUT_ARMS  # noqa: E402
+
+for _cls in _LAYOUT_ARMS:
+    globals()[_cls.__name__] = _cls
