@@ -59,6 +59,9 @@ class DataflowSystem(System):
         enable_recall_tool: bool = False,
         enable_resume_tool: bool = False,
         enable_answer_grounding: bool = False,
+        # Seeded source roots: pass the task's file list with the message so
+        # the service scans + observes every source before the first model call.
+        seed_sources: bool = False,
         # Standalone telemetry renders. Distinct from the legacy `coercion_telemetry`
         # kwarg above, which rides the cumulative DECORATE data ladder (it forces
         # data_level=3 and thereby the whole stats bundle). These flip ONLY the
@@ -172,6 +175,9 @@ class DataflowSystem(System):
         self.enable_recall_tool = enable_recall_tool
         self.enable_resume_tool = enable_resume_tool
         self.enable_answer_grounding = enable_answer_grounding
+        if type(seed_sources) is not bool:
+            raise ValueError("seed_sources must be a boolean")
+        self.seed_sources = seed_sources
         # block (legacy) | native (real tool-calling transcript)
         self.message_layout = message_layout
         self.versioned_mode = versioned_mode
@@ -380,6 +386,7 @@ class DataflowSystem(System):
             enable_recall_tool=self.enable_recall_tool,
             enable_resume_tool=self.enable_resume_tool,
             enable_answer_grounding=self.enable_answer_grounding,
+            seed_sources=self.seed_sources,
             message_layout=self.message_layout,
             versioned_mode=self.versioned_mode,
             session_turns=self.session_turns,
@@ -544,6 +551,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "execution_timeout_minutes": self.execution_timeout_minutes,
                 "agent_mode": self.agent_mode,
                 "context_mode": self.context_mode,
+                "message_layout": self.message_layout,
+                "seed_sources": self.seed_sources,
                 "parallel_tool_calls": self.parallel_tool_calls,
                 "allowed_operator_types": self.allowed_operator_types,
                 "disabled_tools": self.disabled_tools,
@@ -603,7 +612,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
         # Run the agent with timing
         start_time = time.time()
         try:
-            result: MessageResult = self.agent.run(prompt)
+            result: MessageResult = self.agent.run(
+                prompt, **({"sources": list(file_paths)} if self.seed_sources else {})
+            )
         except Exception as e:
             print(f"[DataflowSystem] Error running agent: {e}")
             return {

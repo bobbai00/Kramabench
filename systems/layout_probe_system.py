@@ -37,6 +37,8 @@ This is a 5-task probe, NOT a campaign: it measures cost, step count and cache
 split. It is far too small for an accuracy claim.
 """
 
+import os
+
 from .dataflow_system import DataflowSystem
 
 # Frozen protocol shared by all four arms — the compact-evidence campaign's.
@@ -86,7 +88,7 @@ class _LayoutProbeBase(DataflowSystem):
     _NAME = "_LayoutProbeBase"
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
-        kwargs.setdefault("agent_service_endpoint", "http://localhost:3001")
+        kwargs.setdefault("agent_service_endpoint", os.environ.get("LAYOUT_PROBE_AGENT_ENDPOINT", "http://localhost:3001"))
         super().__init__(
             context_mode=self._CONTEXT_MODE,
             message_layout=self._MESSAGE_LAYOUT,

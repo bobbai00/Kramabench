@@ -144,3 +144,17 @@ from .layout_probe_system import LAYOUT_PROBE_ARMS as _LAYOUT_ARMS  # noqa: E402
 
 for _cls in _LAYOUT_ARMS:
     globals()[_cls.__name__] = _cls
+
+
+# Seeded source roots: control vs seeded (DELTA / opBlock), 2026-09-20.
+from .seed_probe_system import SEED_PROBE_ARMS as _SEED_ARMS  # noqa: E402
+
+for _cls in _SEED_ARMS:
+    globals()[_cls.__name__] = _cls
+
+
+# Native mode as an expression program (single catalog + filter/map/process), 2026-09-22.
+from .native_expression_system import NATIVE_EXPRESSION_ARMS as _NATIVE_EXPR_ARMS  # noqa: E402
+
+for _cls in _NATIVE_EXPR_ARMS:
+    globals()[_cls.__name__] = _cls

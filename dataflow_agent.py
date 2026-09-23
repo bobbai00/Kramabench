@@ -22,10 +22,10 @@ from dataclasses import dataclass, field
 # ============================================================================
 
 # Texera Backend Configuration
-TEXERA_API_ENDPOINT = "http://localhost:8080"
-TEXERA_COMPUTING_UNIT_ENDPOINT = "http://localhost:8888"
-TEXERA_AGENT_SERVICE_ENDPOINT = "http://localhost:3001"
-TEXERA_WORKFLOW_EXECUTION_ENDPOINT = "http://localhost:8085"
+TEXERA_API_ENDPOINT = os.environ.get("TEXERA_API_ENDPOINT", "http://localhost:8080")
+TEXERA_COMPUTING_UNIT_ENDPOINT = os.environ.get("TEXERA_COMPUTING_UNIT_ENDPOINT", "http://localhost:8888")
+TEXERA_AGENT_SERVICE_ENDPOINT = os.environ.get("TEXERA_AGENT_SERVICE_ENDPOINT", "http://localhost:3001")
+TEXERA_WORKFLOW_EXECUTION_ENDPOINT = os.environ.get("TEXERA_WORKFLOW_EXECUTION_ENDPOINT", "http://localhost:8085")
 
 # Authentication Configuration
 TEXERA_USERNAME = "texera"
@@ -41,7 +41,7 @@ AGENT_OPERATOR_RESULT_SERIALIZATION_MODE = "tsv"  # only "tsv" is supported
 AGENT_TOOL_TIMEOUT_SECONDS = 240
 AGENT_EXECUTION_TIMEOUT_MINUTES = 4
 AGENT_DISABLED_TOOLS: list[str] = []
-AGENT_MODE = "code"  # "code" or "general"
+AGENT_MODE = "code"  # "native" (operator program + filter/map/process) or "code" (script operators)
 AGENT_CONTEXT_MODE = "latest"  # "full", "delta", or "latest"
 AGENT_PARALLEL_TOOL_CALLS = True
 # Explicit LLM driver. None -> server auto-derives from modelType
@@ -128,6 +128,9 @@ class AgentSettings:
     # Check that a final answer's numbers trace to materialized results or
     # recalled state; one feedback round on total failure.
     enable_answer_grounding: bool = False
+    # Seeded source roots: the service scans the task's listed files and
+    # observes them before the first model call (message carries `sources`).
+    seed_sources: bool = False
     #: Wire framing: "block" (one user message per step) or "native" (real
     #: tool-calling transcript; our rendered evidence rides the tool results).
     message_layout: Optional[str] = None
@@ -231,6 +234,7 @@ class AgentSettings:
             "maxResultRows": self.max_result_rows,
             "attemptReflection": self.attempt_reflection,
             "toolDialect": self.tool_dialect,
+            "seedSources": self.seed_sources,
         }
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
@@ -646,6 +650,7 @@ def send_message(
         *,
         empty_turn_retries: Optional[int] = None,
         on_event: Optional[Callable[[dict], None]] = None,
+        sources: Optional[list] = None,
 ) -> MessageResult:
     """Run one turn, retrying a silent no-op start.
 
@@ -669,6 +674,7 @@ def send_message(
         result = _send_message_once(
             agent_id, message, agent_endpoint, receive_timeout, max_turn_seconds,
             **({"on_event": on_event} if on_event is not None else {}),
+            **({"sources": list(sources)} if sources else {}),
         )
         if result.error or (result.stats or {}).get("steps"):
             return result
@@ -687,6 +693,7 @@ def _send_message_once(
         max_turn_seconds: Optional[float] = None,
         *,
         on_event: Optional[Callable[[dict], None]] = None,
+        sources: Optional[list] = None,
 ) -> MessageResult:
     """
     Send a message to an agent via the WebSocket protocol and collect the response.
@@ -714,7 +721,8 @@ def _send_message_once(
     ws = websocket.create_connection(ws_url, timeout=receive_timeout)
 
     try:
-        ws.send(json.dumps({"type": "message", "content": message, "messageSource": "chat"}))
+        ws.send(json.dumps({"type": "message", "content": message, "messageSource": "chat",
+                            **({"sources": list(sources)} if sources else {})}))
 
         final_response = ""
         usage_total = {
@@ -1020,6 +1028,7 @@ class DataflowAgent:
             enable_recall_tool: bool = False,
             enable_resume_tool: bool = False,
             enable_answer_grounding: bool = False,
+            seed_sources: bool = False,
             message_layout: Optional[str] = None,
             versioned_mode: bool = False,
             versioned_heads: bool | None = None,
@@ -1076,7 +1085,7 @@ class DataflowAgent:
             tool_timeout_seconds: Tool execution timeout in seconds
             execution_timeout_minutes: Workflow execution timeout in minutes
             disabled_tools: List of tool names to disable
-            agent_mode: Agent mode ("code" or "general")
+            agent_mode: Agent mode ("native" or "code")
             context_mode: Snapshot-selection policy ("full", "delta", or "latest")
             parallel_tool_calls: Allow the model to emit multiple tool calls per turn
             allowed_operator_types: Optional whitelist of operator type names; None uses server default
@@ -1129,6 +1138,7 @@ class DataflowAgent:
             enable_recall_tool=enable_recall_tool,
             enable_resume_tool=enable_resume_tool,
             enable_answer_grounding=enable_answer_grounding,
+            seed_sources=seed_sources,
             message_layout=message_layout,
             versioned_mode=versioned_mode,
             versioned_heads=versioned_heads,
@@ -1298,7 +1308,8 @@ class DataflowAgent:
         return self
 
     def run(self, prompt: str, *, empty_turn_retries: Optional[int] = None,
-            on_event: Optional[Callable[[dict], None]] = None) -> MessageResult:
+            on_event: Optional[Callable[[dict], None]] = None,
+            sources: Optional[list] = None) -> MessageResult:
         """
         Run the agent with a prompt and return the full message result.
 
@@ -1327,6 +1338,7 @@ class DataflowAgent:
             max_turn_seconds=self.max_turn_seconds,
             empty_turn_retries=empty_turn_retries,
             **({"on_event": on_event} if on_event is not None else {}),
+            **({"sources": list(sources)} if sources else {}),
         )
 
         # Store the result for later access
