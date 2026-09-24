@@ -20,7 +20,7 @@
 The agent writes the dataflow as `name = operator(...)` statements over the
 single operator catalog, with three custom operators that carry Python
 (filter, map, process). Everything else is the 2026-09-16 compact-evidence
-campaign's frozen protocol: Terra-medium, DELTA, profiling on, 25 steps,
+campaign's frozen protocol: DELTA, profiling on, 25 steps,
 2,000-character results; the arms differ only in which evidence is on.
 
 The retired `native_tool_mode` / `native_catalog_version` knobs are not sent:
@@ -32,7 +32,6 @@ import os
 from .dataflow_system import DataflowSystem
 
 _PROTOCOL = dict(
-    model_type="gpt-5.6-terra",
     driver=None,
     agent_mode="native",
     native_profile_collection=True,
@@ -64,6 +63,7 @@ _PROTOCOL = dict(
 
 
 class _NativeExpressionBase(DataflowSystem):
+    _MODEL = "gpt-5.6-terra"
     _CONTEXT_MODE = "delta"
     _DATA = True
     _FLOW = False
@@ -72,9 +72,11 @@ class _NativeExpressionBase(DataflowSystem):
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
         kwargs.setdefault(
-            "agent_service_endpoint", os.environ.get("NATIVE_EXPR_AGENT_ENDPOINT", "http://localhost:3061")
+            "agent_service_endpoint",
+            os.environ.get("NATIVE_EXPR_AGENT_ENDPOINT", "http://localhost:3061"),
         )
         super().__init__(
+            model_type=self._MODEL,
             context_mode=self._CONTEXT_MODE,
             data_evidence=self._DATA,
             flow_evidence=self._FLOW,
@@ -116,10 +118,56 @@ class DataflowSystemTerraNativeExprCombined20260922(_NativeExpressionBase):
     _NAME = "DataflowSystemTerraNativeExprCombined20260922"
 
 
+class DataflowSystemLunaNativeExprDataOnly20260922(_NativeExpressionBase):
+    """The Terra Data-only protocol on gpt-5.6-luna: same knobs, cheaper model."""
+
+    _MODEL = "gpt-5.6-luna"
+    _NAME = "DataflowSystemLunaNativeExprDataOnly20260922"
+
+
+# 2026-09-23 evidence factorial on surface v4 (doc on filter/map, 15 operators,
+# orthogonal evidence budgets: data lines share the table's budget, flow lines
+# have their own). One rep per model, four arms each; new names so the 09-22
+# results stay untouched.
+_EVIDENCE_ARMS = {
+    "DataOnly": (True, False, "Data evidence only."),
+    "FlowOnly": (
+        False,
+        True,
+        "Flow evidence only (operator counters, contracts, upstream summaries).",
+    ),
+    "Combined": (True, True, "Data and flow evidence, each within its own budget."),
+    "NoEvidence": (
+        False,
+        False,
+        "Neither family: shape, schema and sampled rows only.",
+    ),
+}
+_FACTORIAL_ARMS = []
+for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra")):
+    for _arm, (_data, _flow, _doc) in _EVIDENCE_ARMS.items():
+        _name = f"DataflowSystem{_model_tag}NativeExpr{_arm}20260923"
+        _cls = type(
+            _name,
+            (_NativeExpressionBase,),
+            {
+                "__doc__": f"{_doc} Surface v4, {_model}, DELTA, 2,000 chars, 25 steps.",
+                "__module__": __name__,
+                "_MODEL": _model,
+                "_DATA": _data,
+                "_FLOW": _flow,
+                "_NAME": _name,
+            },
+        )
+        globals()[_name] = _cls
+        _FACTORIAL_ARMS.append(_cls)
+
 NATIVE_EXPRESSION_ARMS = (
+    DataflowSystemLunaNativeExprDataOnly20260922,
     DataflowSystemTerraNativeExprDataOnly20260922,
     DataflowSystemTerraNativeExprSeededDataOnly20260922,
     DataflowSystemTerraNativeExprFlowOnly20260922,
     DataflowSystemTerraNativeExprCombined20260922,
+    *_FACTORIAL_ARMS,
 )
 __all__ = [cls.__name__ for cls in NATIVE_EXPRESSION_ARMS]
