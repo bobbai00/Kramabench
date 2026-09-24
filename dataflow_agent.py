@@ -100,6 +100,8 @@ class AgentSettings:
     flow_evidence: bool = False
     native_catalog_version: Optional[str] = field(default=None, kw_only=True)
     native_profile_collection: Optional[bool] = field(default=None, kw_only=True)
+    # Native mode: require a `reasoning` argument on the dataflow tool (None = server default, off).
+    dataflow_reasoning: Optional[bool] = field(default=None, kw_only=True)
     thought_replay: bool = False
     thought_replay_k: int = 10
     agent_turns: bool = False
@@ -248,6 +250,10 @@ class AgentSettings:
             payload["nativeCatalogVersion"] = self.native_catalog_version
         if self.native_profile_collection is not None:
             payload["nativeProfileCollection"] = self.native_profile_collection
+        if self.dataflow_reasoning is not None:
+            if type(self.dataflow_reasoning) is not bool:
+                raise ValueError("dataflow_reasoning must be a boolean")
+            payload["dataflowReasoning"] = self.dataflow_reasoning
         if self.frontier_decay_config is not None:
             payload["frontierDecayConfig"] = self.frontier_decay_config
         if self.role_policy_config is not None:
@@ -1069,6 +1075,7 @@ class DataflowAgent:
             *,
             native_catalog_version: Optional[str] = None,
             native_profile_collection: Optional[bool] = None,
+            dataflow_reasoning: Optional[bool] = None,
             computing_unit_id: Optional[int] = None,
     ):
         """
@@ -1125,6 +1132,7 @@ class DataflowAgent:
             flow_evidence=flow_evidence,
             native_catalog_version=native_catalog_version,
             native_profile_collection=native_profile_collection,
+            dataflow_reasoning=dataflow_reasoning,
             thought_replay=thought_replay,
             thought_replay_k=thought_replay_k,
             agent_turns=agent_turns,

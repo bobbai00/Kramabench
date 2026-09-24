@@ -68,6 +68,7 @@ class _NativeExpressionBase(DataflowSystem):
     _DATA = True
     _FLOW = False
     _SEED = False
+    _REASONING = None  # None = server default (off); True = dataflow(reasoning, ...)
     _NAME = "_NativeExpressionBase"
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
@@ -81,6 +82,7 @@ class _NativeExpressionBase(DataflowSystem):
             data_evidence=self._DATA,
             flow_evidence=self._FLOW,
             seed_sources=self._SEED,
+            dataflow_reasoning=self._REASONING,
             name=self._NAME,
             verbose=verbose,
             *args,
@@ -161,6 +163,49 @@ for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra"))
         )
         globals()[_name] = _cls
         _FACTORIAL_ARMS.append(_cls)
+
+# 2026-09-24: reasoning argument A/B, and evidence made additive (data lines get
+# their own budget; sample rows are identical in every arm). The *20260923 arms
+# ran before the data budget change; the *20260924 arms run on the new code.
+for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra")):
+    for _arm, (_data, _flow, _doc) in _EVIDENCE_ARMS.items():
+        for _reasoning in (False, True):
+            _name = f"DataflowSystem{_model_tag}NativeExpr{_arm}{'Reasoning' if _reasoning else ''}20260924"
+            _cls = type(
+                _name,
+                (_NativeExpressionBase,),
+                {
+                    "__doc__": f"{_doc} Additive evidence budgets{', reasoning argument on' if _reasoning else ''}; {_model}, DELTA, 2,000 chars, 25 steps.",
+                    "__module__": __name__,
+                    "_MODEL": _model,
+                    "_DATA": _data,
+                    "_FLOW": _flow,
+                    "_REASONING": True if _reasoning else None,
+                    "_NAME": _name,
+                },
+            )
+            globals()[_name] = _cls
+            _FACTORIAL_ARMS.append(_cls)
+
+# Controls for the 2026-09-24 smoke test: the *20260923 settings under new names,
+# run against the agent that still serves the 2026-09-23 code, on the same tasks.
+for _arm in ("DataOnly", "Combined"):
+    _data, _flow, _doc = _EVIDENCE_ARMS[_arm]
+    _name = f"DataflowSystemLunaNativeExpr{_arm}Control20260924"
+    _cls = type(
+        _name,
+        (_NativeExpressionBase,),
+        {
+            "__doc__": f"{_doc} Control: 2026-09-23 code and prompt; gpt-5.6-luna.",
+            "__module__": __name__,
+            "_MODEL": "gpt-5.6-luna",
+            "_DATA": _data,
+            "_FLOW": _flow,
+            "_NAME": _name,
+        },
+    )
+    globals()[_name] = _cls
+    _FACTORIAL_ARMS.append(_cls)
 
 NATIVE_EXPRESSION_ARMS = (
     DataflowSystemLunaNativeExprDataOnly20260922,
