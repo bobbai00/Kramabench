@@ -207,6 +207,30 @@ for _arm in ("DataOnly", "Combined"):
     globals()[_name] = _cls
     _FACTORIAL_ARMS.append(_cls)
 
+# 2026-09-27: the 20260924 settings, used for the stuck-task runs: first on the
+# code with the state-registry picks (model request deadline + turn retry, step
+# lifecycle logs, whole-Arrow-batch engine I/O, pandas-named blank headers, CRLF
+# kept in quoted fields), then with the hang fixes that followed (execution
+# requests past Bun's 240 s sweep, dead-worker detection, input readers that
+# fail loudly, 64 MB result commits, a lighter scan).
+for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra")):
+    for _arm, (_data, _flow, _doc) in _EVIDENCE_ARMS.items():
+        _name = f"DataflowSystem{_model_tag}NativeExpr{_arm}20260927"
+        _cls = type(
+            _name,
+            (_NativeExpressionBase,),
+            {
+                "__doc__": f"{_doc} 2026-09-27 code (timeouts, engine batches); {_model}, DELTA, 2,000 chars, 25 steps.",
+                "__module__": __name__,
+                "_MODEL": _model,
+                "_DATA": _data,
+                "_FLOW": _flow,
+                "_NAME": _name,
+            },
+        )
+        globals()[_name] = _cls
+        _FACTORIAL_ARMS.append(_cls)
+
 NATIVE_EXPRESSION_ARMS = (
     DataflowSystemLunaNativeExprDataOnly20260922,
     DataflowSystemTerraNativeExprDataOnly20260922,
