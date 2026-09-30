@@ -33,6 +33,7 @@ class CodeAgentSystem(System):
         use_pitfalls_prompt: bool = None,
         no_action_detail: bool = False,
         max_print_outputs_length: int = None,
+        final_answer_tool_prompt: bool = False,
         *args, **kwargs
     ):
         super().__init__(name, verbose=verbose, *args, **kwargs)
@@ -48,6 +49,12 @@ class CodeAgentSystem(System):
         # agent's max_operator_result_char_limit). None ⇒ fall back to the
         # CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH env var / smolagents default.
         self.max_print_outputs_length = max_print_outputs_length
+        # The chat-style closing line ("Your last line MUST BE: **Final Answer:
+        # <value>**") contradicts smolagents' protocol, where an answer is a
+        # `final_answer(...)` call inside a code block: the model writes the
+        # line as text, smolagents rejects it as a parsing error, and Luna ran
+        # to the 25-step cap in 45% of tasks. True asks for the tool call.
+        self.final_answer_tool_prompt = final_answer_tool_prompt
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
         self.format_hints: Dict[str, str] = {}  # Map task_id -> format_hint string
@@ -153,7 +160,8 @@ Question: {query}
 
 Answer format: {format_hint}
 
-Your last line MUST BE: **Final Answer: <value>**"""
+""" + ("When you have the answer, return it by calling `final_answer(<value>)` in your code, with the value in the answer format above."
+       if self.final_answer_tool_prompt else "Your last line MUST BE: **Final Answer: <value>**")
 
         # Save outputs
         query_dir = os.path.join(self.output_dir, query_id)
@@ -335,6 +343,7 @@ _MATRIX_MODELS = (
     ("Gpt52Med", "gpt-5.2-medium"),     # gpt-5.2    @ medium
     ("Luna",     "gpt-5.6-luna"),       # pinned medium at the proxy
     ("Sonnet",   "claude-sonnet-5"),    # 1k/5k only, see _MODEL_BUDGETS
+    ("Terra",    "gpt-5.6-terra"),      # 5k only (2026-09-29 stats campaign)
 )
 
 #: Replicates per cell. The matrix is guided-only (CUSTOM_INSTRUCTIONS ON):
@@ -371,7 +380,7 @@ def _mk_matrix_arm(model_tag, model_alias, chars_tag, chars, guided, rep=None):
 
 #: Per-model budget override. Models absent here take the full _CHAR_BUDGETS
 #: sweep; sonnet-5 is registered at the two ends only (1k / 5k).
-_MODEL_BUDGETS = {"Sonnet": (("1k", 1000), ("5k", 5000))}
+_MODEL_BUDGETS = {"Sonnet": (("1k", 1000), ("5k", 5000)), "Terra": (("5k", 5000),)}
 
 CODE_AGENT_MATRIX_NAMES = []
 for _tag, _alias in _MATRIX_MODELS:
@@ -381,3 +390,20 @@ for _tag, _alias in _MATRIX_MODELS:
             globals()[_n] = _c
             CODE_AGENT_MATRIX_NAMES.append(_n)
 CODE_AGENT_MATRIX_NAMES = sorted(CODE_AGENT_MATRIX_NAMES)
+
+# 2026-09-29: the same 5k guided arms with the final_answer() closing line.
+for _tag, _alias in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra")):
+    for _rep in (0, 1, 2):
+        _n = f"CodeAgentSystem{_tag}Chars5kGuidedFinalAnswerRep{_rep}"
+
+        def _init(self, verbose: bool = False, *args, _alias=_alias, _n=_n, **kwargs):
+            kw = {"max_print_outputs_length": 5000, "max_steps": 25, "use_custom_prompt": True,
+                  "final_answer_tool_prompt": True}
+            kw.update(kwargs)
+            CodeAgentSystem.__init__(self, model_type=_alias, name=_n, verbose=verbose, *args, **kw)
+
+        globals()[_n] = type(_n, (CodeAgentSystem,), {
+            "__init__": _init,
+            "__doc__": f"{_alias} code agent, 5k stdout cap, guided, answer via final_answer().",
+        })
+        CODE_AGENT_MATRIX_NAMES.append(_n)

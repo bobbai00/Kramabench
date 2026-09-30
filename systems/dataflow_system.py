@@ -100,6 +100,7 @@ class DataflowSystem(System):
         native_catalog_version: Optional[str] = None,
         native_profile_collection: Optional[bool] = None,
         dataflow_reasoning: Optional[bool] = None,
+        native_checks: Optional[bool] = None,
         computing_unit_id: Optional[int] = None,
         **kwargs
     ):
@@ -163,6 +164,7 @@ class DataflowSystem(System):
         self.native_catalog_version = native_catalog_version
         self.native_profile_collection = native_profile_collection
         self.dataflow_reasoning = dataflow_reasoning
+        self.native_checks = native_checks
         # SELECT reinjection + static prior (kept fine-grained knobs).
         self.thought_replay = thought_replay
         self.thought_replay_k = thought_replay_k
@@ -376,6 +378,7 @@ class DataflowSystem(System):
             native_catalog_version=self.native_catalog_version,
             native_profile_collection=self.native_profile_collection,
             dataflow_reasoning=self.dataflow_reasoning,
+            native_checks=self.native_checks,
             thought_replay=self.thought_replay,
             thought_replay_k=self.thought_replay_k,
             agent_turns=self.agent_turns,
@@ -567,6 +570,7 @@ Your last line MUST BE: **Final Answer: <value>**"""
                 "native_catalog_version": self.native_catalog_version,
                 "native_profile_collection": self.native_profile_collection,
                 "dataflow_reasoning": self.dataflow_reasoning,
+                "native_checks": self.native_checks,
                 "thought_replay": self.thought_replay,
                 "thought_replay_k": self.thought_replay_k,
                 "agent_turns": self.agent_turns,

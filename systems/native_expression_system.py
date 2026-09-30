@@ -69,6 +69,7 @@ class _NativeExpressionBase(DataflowSystem):
     _FLOW = False
     _SEED = False
     _REASONING = None  # None = server default (off); True = dataflow(reasoning, ...)
+    _CHECKS = None  # None = server default (off); True = `check:` lines
     _NAME = "_NativeExpressionBase"
 
     def __init__(self, verbose: bool = False, *args, **kwargs):
@@ -83,6 +84,7 @@ class _NativeExpressionBase(DataflowSystem):
             flow_evidence=self._FLOW,
             seed_sources=self._SEED,
             dataflow_reasoning=self._REASONING,
+            native_checks=self._CHECKS,
             name=self._NAME,
             verbose=verbose,
             *args,
@@ -230,6 +232,111 @@ for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra"))
         )
         globals()[_name] = _cls
         _FACTORIAL_ARMS.append(_cls)
+
+# 2026-09-28: operator checks. Each operator's own assumptions (a scan's first
+# row is a header, a sum adds distinct records, a lookup join adds columns, the
+# steps inside a process function keep rows) tested by the engine on the full
+# tables; only violations become `check:` lines. A/B on the Data-only protocol,
+# one knob; the Control arm is the same code with checks off.
+for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra")):
+    for _checks in (False, True):
+        for _rep in (1, 2, 3):
+            _name = f"DataflowSystem{_model_tag}NativeExprDataOnly{'Checks' if _checks else 'Control'}20260928Rep{_rep}"
+            _cls = type(
+                _name,
+                (_NativeExpressionBase,),
+                {
+                    "__doc__": f"Data evidence{', operator checks on' if _checks else ', checks off (control)'}; {_model}, DELTA, 2,000 chars, 25 steps; rep {_rep}.",
+                    "__module__": __name__,
+                    "_MODEL": _model,
+                    "_DATA": True,
+                    "_FLOW": False,
+                    "_CHECKS": True if _checks else None,
+                    "_NAME": _name,
+                },
+            )
+            globals()[_name] = _cls
+            _FACTORIAL_ARMS.append(_cls)
+
+# Ablation (agent :3077, a frozen copy whose prompt omits the `check:` paragraph):
+# check lines without the prompt's instruction about them, and more Control reps.
+for _rep in (1, 2, 3):
+    for _tag, _checks in (("ChecksNoPrompt", True), ("Control", None)):
+        _name = f"DataflowSystemLunaNativeExprDataOnly{_tag}20260928Rep{_rep + (3 if _tag == 'Control' else 0)}"
+        _cls = type(
+            _name,
+            (_NativeExpressionBase,),
+            {
+                "__doc__": f"Data evidence, {'check lines without the prompt paragraph' if _checks else 'checks off (control)'}; gpt-5.6-luna; rep {_rep}.",
+                "__module__": __name__,
+                "_MODEL": "gpt-5.6-luna",
+                "_CHECKS": _checks,
+                "_NAME": _name,
+            },
+        )
+        globals()[_name] = _cls
+        _FACTORIAL_ARMS.append(_cls)
+
+# v2 (agent :3078): repeated records only when each source lists the record
+# once and several sources list it; no join or merge row checks; a paragraph
+# that says unchecked operators are unverified. Paired with Control reps 7-9.
+for _rep in (1, 2, 3):
+    for _tag, _checks, _r in (("ChecksV2", True, _rep), ("Control", None, _rep + 6)):
+        _name = f"DataflowSystemLunaNativeExprDataOnly{_tag}20260928Rep{_r}"
+        _cls = type(
+            _name,
+            (_NativeExpressionBase,),
+            {
+                "__doc__": f"Data evidence, {'v2 operator checks' if _checks else 'checks off (control)'}; gpt-5.6-luna; rep {_r}.",
+                "__module__": __name__,
+                "_MODEL": "gpt-5.6-luna",
+                "_CHECKS": _checks,
+                "_NAME": _name,
+            },
+        )
+        globals()[_name] = _cls
+        _FACTORIAL_ARMS.append(_cls)
+
+for _checks in (False, True):
+    _name = f"DataflowSystemLunaNativeExprDataOnly{'Checks' if _checks else 'Control'}20260928Smoke"
+    _cls = type(
+        _name,
+        (_NativeExpressionBase,),
+        {
+            "__doc__": "Smoke test of the 2026-09-28 checks arms (not a result).",
+            "__module__": __name__,
+            "_MODEL": "gpt-5.6-luna",
+            "_CHECKS": True if _checks else None,
+            "_NAME": _name,
+        },
+    )
+    globals()[_name] = _cls
+    _FACTORIAL_ARMS.append(_cls)
+
+# 2026-09-29 stats campaign: dataflow with no stats (plain records: shape,
+# schema, sampled rows) vs dataflow with stats (data evidence + flow evidence,
+# including the facts derived from operator semantics: header rows that read as
+# data, what a distinct count counts, group keys that pool entities, unread
+# flag columns), on Luna and Terra, 3 reps each. Same code for all arms; the
+# script-agent peers are CodeAgentSystem{Luna,Terra}Chars5kGuidedRep{0,1,2}.
+for _model_tag, _model in (("Luna", "gpt-5.6-luna"), ("Terra", "gpt-5.6-terra")):
+    for _arm, _stats in (("NoStats", False), ("Stats", True)):
+        for _rep in (1, 2, 3):
+            _name = f"DataflowSystem{_model_tag}NativeExpr{_arm}20260929Rep{_rep}"
+            _cls = type(
+                _name,
+                (_NativeExpressionBase,),
+                {
+                    "__doc__": f"{'Data + flow evidence' if _stats else 'No evidence: plain records'}; {_model}, DELTA, 2,000 chars, 25 steps; rep {_rep}.",
+                    "__module__": __name__,
+                    "_MODEL": _model,
+                    "_DATA": _stats,
+                    "_FLOW": _stats,
+                    "_NAME": _name,
+                },
+            )
+            globals()[_name] = _cls
+            _FACTORIAL_ARMS.append(_cls)
 
 NATIVE_EXPRESSION_ARMS = (
     DataflowSystemLunaNativeExprDataOnly20260922,
