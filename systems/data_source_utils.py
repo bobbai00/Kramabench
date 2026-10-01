@@ -78,7 +78,7 @@ def expand_data_sources(
         full_path = os.path.join(dataset_directory, p)
         result.append(os.path.relpath(full_path))
 
-    return list(set(result))  # Remove duplicates
+    return list(dict.fromkeys(result))  # Deduplicate without changing prompt order.
 
 
 def _resolve_wildcard_path(
