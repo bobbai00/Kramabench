@@ -15,9 +15,11 @@ def aggregate_results(system_name, results_df):
     workload_results = []
 
     for (workload, metric), group in results_df.groupby(["workload", "metric"]):
-        if metric in ['code', 'model_output']:
+        if metric in ['code', 'model_output', 'exit_code', 'stderr']:
             continue
-        group_dropped_na = group.dropna()
+        group_dropped_na = group.dropna().copy()
+        if metric == "success":
+            group_dropped_na["value"] = group_dropped_na["value"].astype(bool).astype(int)
         if metric != "llm_code_eval":
             mean = group_dropped_na["value"].mean()
             std = group_dropped_na["value"].std() if len(group_dropped_na) > 1 else 0

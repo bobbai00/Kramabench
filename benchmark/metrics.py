@@ -116,9 +116,16 @@ class F1(Metric):
                 target = json.loads(target)
             if isinstance(predicted, str) and isinstance(target, list):
                 try:
+                    # First try JSON parsing
                     predicted = json.loads(predicted)
                 except json.JSONDecodeError:
-                    predicted = eval(predicted)
+                    try:
+                        # Try eval for Python literal evaluation
+                        predicted = eval(predicted)
+                    except Exception:
+                        # Fall back to comma-separated parsing (upstream fad06c0)
+                        # Handle comma-separated strings like "Bucks Creek, Pleasant Street, Forest Street"
+                        predicted = [item.strip() for item in predicted.split(',') if item.strip()]
             if isinstance(predicted, str) and isinstance(target, str):
                 if predicted.strip().lower() == target.strip().lower():
                     return (1.0, 0, 0, 0)
@@ -383,24 +390,43 @@ def _round_to_target_precision(predicted: float, target: float) -> float:
     return round(predicted, decimal_places)
 
 
+def try_convert_to_number(value):
+    """Try to convert string to number, return original if not possible"""
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            # Remove percentage sign if present
+            cleaned_value = value.strip()
+            if cleaned_value.endswith('%'):
+                cleaned_value = cleaned_value[:-1].strip()
+            # Try float conversion first (handles both int and float strings)
+            return str_to_float(cleaned_value)
+        except (ValueError, TypeError):
+            return value
+    return value
+
+
 class Success(Metric):
     name = "success"
 
     def __call__(self, predicted: str | int | float, target: str | int | float):
+        if predicted is None:
+            return (0, 0, 0, 0)
         try:
-            # Handle numeric targets (int or float)
-            if isinstance(target, (int, float)):
-                # Convert string prediction to number
-                if isinstance(predicted, str):
-                    predicted = str_to_float(predicted)
-
-                if isinstance(target, int):
+            # Numbers written as text compare as numbers, and a trailing % is
+            # dropped ("4.65%" reads as 4.65), as in upstream fad06c0. The
+            # comparison keeps this fork's rule: round to the target's precision.
+            predicted_num = try_convert_to_number(predicted)
+            target_num = try_convert_to_number(target)
+            if isinstance(predicted_num, (int, float)) and isinstance(target_num, (int, float)):
+                if isinstance(target_num, int):
                     # For integer targets, round predicted and compare
-                    return (int(round(predicted) == target), 0, 0, 0)
+                    return (int(round(predicted_num) == target_num), 0, 0, 0)
                 else:
                     # For float targets, round predicted to target's precision
-                    rounded_predicted = _round_to_target_precision(predicted, target)
-                    rounded_target = round(target, _get_decimal_places(target))
+                    rounded_predicted = _round_to_target_precision(predicted_num, target_num)
+                    rounded_target = round(target_num, _get_decimal_places(target_num))
                     return (int(rounded_predicted == rounded_target), 0, 0, 0)
 
             # Handle string targets
