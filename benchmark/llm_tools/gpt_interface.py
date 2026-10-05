@@ -200,12 +200,14 @@ class GPTInterface(LLMInterface):
         token_usage = 0
         token_usage_input = 0
         token_usage_output = 0
+        # gpt-5 models reject any temperature but the default; for them the
+        # verdict cache alone keeps a pair's score fixed across runs.
+        sampling = {} if self.model.startswith("gpt-5") else {"temperature": 0, "seed": 0}
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0,
-                seed=0,
+                **sampling,
             )
             token_usage = response.usage.total_tokens
             token_usage_input = response.usage.prompt_tokens

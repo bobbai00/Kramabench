@@ -12,9 +12,9 @@ for concepts; come here for "how do I run it / where do I look."
   pinned `pyarrow==19.0.1`). Create via `uv venv --python 3.11 && uv pip install -r requirements.txt`.
 - **`OPENAI_API_KEY`** must be exported in any shell that runs the harness.
   The scoring metrics `llm_paraphrase` (string_approximate) and
-  `f1_approximate` (list_approximate) call `gpt-4o-mini` even when
-  `--no_pipeline_eval` is passed; `benchmark/benchmark.py:224` instantiates
-  the OpenAI client unconditionally.
+  `f1_approximate` (list_approximate) call `gpt-5-mini` (upstream's judge
+  since fad06c0) even when `--no_pipeline_eval` is passed. Verdicts are
+  cached per model in `benchmark/fixtures/paraphrase_cache.json`.
 - **Texera services on localhost** (only for DataflowSystem variants):
   - `8080` — backend
   - `8888` — computing unit
@@ -101,9 +101,9 @@ Re-export from
    metrics (`benchmark/fixtures/answer_type_fixtures.json`):
    - `numeric_exact` / `string_exact` → `success`
    - `numeric_approximate` → `mean_absolute_error`, `mean_squared_error`, `rae_score`
-   - `string_approximate` → `llm_paraphrase` (calls gpt-4o-mini)
+   - `string_approximate` → `llm_paraphrase` (calls gpt-5-mini)
    - `list_exact` → `f1`, `precision`, `recall`
-   - `list_approximate` → `f1_approximate` (gpt-4o-mini for strings, ≤1% rel err for numbers)
+   - `list_approximate` → `f1_approximate` (gpt-5-mini for strings, ≤1% rel err for numbers)
 5. **Per-task results** land in `results/{SUT}/{workload}_measures_{ts}.csv`
    (one row per `(task_id, metric)`).
 6. **Aggregation** in `evaluate.py:11-61` rolls up to

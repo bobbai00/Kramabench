@@ -205,7 +205,7 @@ class F1Approximate(Metric):
                 return (float(len(predicted) == 0), total_token_usage, token_usage_input, token_usage_output)
             matched_predicted: set[int] = set()
             recall_cnt = 0
-            llm_interface = GPTInterface(model="gpt-4o-mini")
+            llm_interface = GPTInterface(model="gpt-5-mini")
             for i, t in enumerate(target):
                 found = False
                 for j, p in enumerate(predicted):
@@ -339,7 +339,7 @@ class LLMParaphrase(Metric):
         """
         predicted = str(predicted)
         target = str(target)
-        llm_interface = GPTInterface(model="gpt-4o-mini")
+        llm_interface = GPTInterface(model="gpt-5-mini")
         is_paraphrase, token_usage, token_usage_input, token_usage_output = llm_interface.evaluate_paraphrase(predicted, target)
         if is_paraphrase is not None:
             return (int(is_paraphrase), token_usage, token_usage_input, token_usage_output)
