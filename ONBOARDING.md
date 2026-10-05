@@ -72,7 +72,7 @@ export OPENAI_API_KEY=sk-…
 
 This is required even with `--no_pipeline_eval`: the scoring metrics
 `llm_paraphrase` (for `string_approximate`) and `f1_approximate` (for
-`list_approximate`) call `gpt-4o-mini` unconditionally. `evaluate.py` does **not**
+`list_approximate`) call `gpt-5-mini` unconditionally. `evaluate.py` does **not**
 call `load_dotenv()`, so a `.env` file alone won't be picked up — export it or
 add a dotenv load yourself. If you have no key and are only running tasks whose
 answer types don't need the LLM metrics, a dummy key (`export
@@ -285,9 +285,9 @@ Each task's `answer_type` maps to a metric set
 |---|---|
 | `numeric_exact` / `string_exact` | `success` |
 | `numeric_approximate` | `rae_score` (+ MAE / MSE recorded) |
-| `string_approximate` | `llm_paraphrase` (gpt-4o-mini) |
+| `string_approximate` | `llm_paraphrase` (gpt-5-mini) |
 | `list_exact` | `f1` (+ precision/recall recorded) |
-| `list_approximate` | `f1_approximate` (gpt-4o-mini for strings, ≤1% rel-err for numbers) |
+| `list_approximate` | `f1_approximate` (gpt-5-mini for strings, ≤1% rel-err for numbers) |
 
 The headline **"Total score"** printed at the end of a run is
 `sum(support × mean)` over the headline metrics (`success`, `llm_paraphrase`,

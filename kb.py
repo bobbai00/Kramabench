@@ -9,7 +9,7 @@ scripts/list_failed_tasks.py, compute_scores.py) and adds the things that bit
 us in practice:
 
   * auto-exports OPENAI_API_KEY from ./.env  — the llm_paraphrase / f1_approximate
-    metrics call gpt-4o-mini, so a missing/dummy key silently corrupts scores.
+    metrics call gpt-5-mini, so a missing/dummy key silently corrupts scores.
   * ORACLE mode (--use_truth_subset) on by default — matches the recorded configs.
   * --parallel  — fan workloads/groups out concurrently.
   * a STALL WATCHDOG — gpt-5.x can hang in GENERATING with no client-side
