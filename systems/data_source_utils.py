@@ -78,7 +78,9 @@ def expand_data_sources(
         full_path = os.path.join(dataset_directory, p)
         result.append(os.path.relpath(full_path))
 
-    return list(set(result))  # Remove duplicates
+    # Remove duplicates but keep the task's order: a set made the order of the
+    # files in the prompt depend on the process's hash seed.
+    return list(dict.fromkeys(result))
 
 
 def _resolve_wildcard_path(
