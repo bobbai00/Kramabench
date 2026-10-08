@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 from smolagents import CodeAgent
 from smolagents.models import ChatMessage, MessageRole, OpenAIServerModel
-from smolagents.memory import ActionStep
+from smolagents.memory import ActionStep, PlanningStep
+from smolagents.utils import AgentMaxStepsError
 
 from code_agent_custom_prompt import CUSTOM_INSTRUCTIONS, FINE_GRAINED_INSTRUCTIONS, DATA_PITFALLS_INSTRUCTIONS
 
@@ -232,6 +233,9 @@ class CodeAgentResult:
     cache_creation_tokens: int = 0
     cost_usd: float = 0.0
     num_steps: int = 0
+    # smolagents' RunResult.state: "success" when the agent called
+    # final_answer(), "max_steps_error" when the step limit ended the run.
+    state: str = ""
 
 
 def extract_reasoning_trace(agent: CodeAgent) -> list[dict]:
@@ -364,26 +368,32 @@ class CodeAgentWrapper:
         total_tokens = 0
         num_steps = 0
         elapsed = 0.0
+        state = ""
 
         try:
-            # Use return_full_result=True to get RunResult with token usage and timing
-            result = self._agent.run(prompt, return_full_result=True)
+            # Not return_full_result=True: that exports the whole memory, which
+            # fails when a step holds a cyclic object (an openpyxl worksheet,
+            # for instance) and loses an answer the agent already gave. Token
+            # usage, state and steps are read from the memory the same way.
+            started = time.time()
+            output = self._agent.run(prompt)
+            elapsed = time.time() - started
 
-            # Extract response (output)
-            response = str(result.output) if result.output else ""
+            # Extract response (output). A falsy answer such as 0 is still an answer.
+            response = "" if output is None else str(output)
+            steps = self._agent.memory.steps
+            reached_limit = bool(steps) and isinstance(getattr(steps[-1], "error", None), AgentMaxStepsError)
+            state = "max_steps_error" if reached_limit else "success"
 
             # Extract token usage
-            if result.token_usage:
-                input_tokens = result.token_usage.input_tokens or 0
-                output_tokens = result.token_usage.output_tokens or 0
-                total_tokens = result.token_usage.total_tokens or 0
-
-            # Extract timing
-            if result.timing and result.timing.end_time:
-                elapsed = result.timing.end_time - result.timing.start_time
+            usages = [step.token_usage for step in steps if isinstance(step, (ActionStep, PlanningStep))]
+            if usages and all(usage is not None for usage in usages):
+                input_tokens = sum(usage.input_tokens for usage in usages)
+                output_tokens = sum(usage.output_tokens for usage in usages)
+                total_tokens = input_tokens + output_tokens
 
             # Count steps
-            num_steps = len(result.steps) if result.steps else 0
+            num_steps = len(steps)
 
         except (Exception, SystemExit) as e:
             # Agent-generated code sometimes calls `raise SystemExit(...)` or
@@ -441,6 +451,7 @@ class CodeAgentWrapper:
             cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
             num_steps=num_steps,
+            state=state,
         )
 
     def reset(self):

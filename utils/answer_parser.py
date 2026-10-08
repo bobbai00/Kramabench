@@ -127,3 +127,26 @@ def parse_answer(response: str, messages: Optional[List[dict]] = None) -> str:
                                     return f"(From tool result) {value[:500]}"
 
     return "No response from agent"
+
+
+def parse_explicit_answer(value) -> str:
+    """
+    Clean an answer the agent returned through an explicit channel, such as
+    smolagents' `final_answer(value)` or DSGym's `<answer>` tag.
+
+    The value is the answer, so it gets the cleaning a `Final Answer:` line
+    gets. The free-text search in parse_answer would keep only its last line
+    and drop every `_`, `*` and backtick inside it.
+
+    Args:
+        value: What the agent returned
+
+    Returns:
+        Parsed answer string
+    """
+    text = " ".join(str(value).split())
+    if not text:
+        return parse_answer("")
+    if re.search(r"final answer:", text, re.IGNORECASE):
+        return parse_answer(text)
+    return parse_answer(f"Final Answer: {text}")

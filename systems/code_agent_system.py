@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from benchmark.benchmark_api import System
 from code_agent import CodeAgentWrapper, CodeAgentResult, DEFAULT_API_BASE, DEFAULT_API_KEY
 from systems.data_source_utils import expand_data_sources
-from utils.answer_parser import parse_answer
+from utils.answer_parser import parse_answer, parse_explicit_answer
 
 
 # Default max steps (can be overridden by CODE_AGENT_MAX_STEPS env var)
@@ -33,6 +33,7 @@ class CodeAgentSystem(System):
         use_pitfalls_prompt: bool = None,
         no_action_detail: bool = False,
         max_print_outputs_length: int = None,
+        final_answer_tool_prompt: bool = False,
         *args, **kwargs
     ):
         super().__init__(name, verbose=verbose, *args, **kwargs)
@@ -48,6 +49,12 @@ class CodeAgentSystem(System):
         # agent's max_operator_result_char_limit). None ⇒ fall back to the
         # CODE_AGENT_MAX_PRINT_OUTPUTS_LENGTH env var / smolagents default.
         self.max_print_outputs_length = max_print_outputs_length
+        # The chat-style closing line ("Your last line MUST BE: **Final Answer:
+        # <value>**") contradicts smolagents' protocol, where an answer is a
+        # `final_answer(...)` call inside a code block: the model writes the
+        # line as text, smolagents rejects it as a parsing error, and Luna ran
+        # to the 25-step cap in 45% of tasks. True asks for the tool call.
+        self.final_answer_tool_prompt = final_answer_tool_prompt
         self.agent: Optional[CodeAgentWrapper] = None
         self.output_dir = f"./system_scratch/{name}"
         self.format_hints: Dict[str, str] = {}  # Map task_id -> format_hint string
@@ -142,6 +149,12 @@ class CodeAgentSystem(System):
 
         # Build prompt
         format_hint = self.format_hints.get(query_id, "")
+        completion_instruction = (
+            "When you have the answer, return it by calling `final_answer(<value>)` "
+            "in your code, with the value in the answer format above."
+            if self.final_answer_tool_prompt
+            else "Your last line MUST BE: **Final Answer: <value>**"
+        )
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
 
 Data files available (use these paths to read the data):
@@ -153,7 +166,7 @@ Question: {query}
 
 Answer format: {format_hint}
 
-Your last line MUST BE: **Final Answer: <value>**"""
+{completion_instruction}"""
 
         # Save outputs
         query_dir = os.path.join(self.output_dir, query_id)
@@ -182,12 +195,17 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "cost_usd": result.cost_usd,
             "num_steps": result.num_steps,
             "elapsed_seconds": round(result.elapsed_seconds, 2),
+            "state": result.state,
         }
         with open(os.path.join(query_dir, "stats.json"), "w") as f:
             json.dump(stats, f, indent=2)
 
-        # Parse answer
-        answer = parse_answer(result.response)
+        # Parse answer. A value passed to final_answer() is the answer itself;
+        # text written at the step limit is searched like any free text.
+        if self.final_answer_tool_prompt and result.state == "success":
+            answer = parse_explicit_answer(result.response)
+        else:
+            answer = parse_answer(result.response)
         with open(os.path.join(query_dir, "answer.json"), "w") as f:
             json.dump({"answer": answer}, f, indent=2)
 
