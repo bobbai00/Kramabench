@@ -1,8 +1,21 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 # -*- coding: utf-8 -*-
 """
 CodeAgentSystem - KramaBench System wrapper for smolagents CodeAgent.
 """
 
+from copy import deepcopy
 import os
 import json
 from typing import Dict, List, Optional
@@ -34,10 +47,16 @@ class CodeAgentSystem(System):
         no_action_detail: bool = False,
         max_print_outputs_length: int = None,
         final_answer_tool_prompt: bool = False,
+        model_parameters: Optional[dict] = None,
+        model_capabilities: Optional[dict] = None,
+        use_structured_outputs_internally: bool = False,
         *args, **kwargs
     ):
         super().__init__(name, verbose=verbose, *args, **kwargs)
         self.model_type = model_type
+        self.model_parameters = deepcopy(model_parameters)
+        self.model_capabilities = deepcopy(model_capabilities or {})
+        self.use_structured_outputs_internally = use_structured_outputs_internally
         self.max_steps = max_steps
         self.api_base = api_base
         self.api_key = api_key
@@ -78,6 +97,9 @@ class CodeAgentSystem(System):
         # Setup agent
         self.agent = CodeAgentWrapper(
             model_type=self.model_type,
+            model_parameters=self.model_parameters,
+            model_capabilities=self.model_capabilities,
+            use_structured_outputs_internally=self.use_structured_outputs_internally,
             max_steps=self.max_steps,
             api_base=self.api_base,
             api_key=self.api_key,

@@ -1,4 +1,16 @@
 # -*- coding: utf-8 -*-
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 DataflowSystem - KramaBench System wrapper for Texera DataflowAgent.
 
@@ -595,6 +607,9 @@ Your last line MUST BE: **Final Answer: <value>**"""
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
 
+        from utils.native_run_metrics import NativeRunMetrics
+        run_metrics = NativeRunMetrics(self.name, query_id, self.model_type)
+
         # WORKAROUND: Create a fresh agent for each query to avoid workflow state pollution
         # The reset() API doesn't properly clear workflow operators, causing stale operators
         # to accumulate and be reused incorrectly across tasks.
@@ -614,24 +629,17 @@ Your last line MUST BE: **Final Answer: <value>**"""
                     print(f"[DataflowSystem] Reset fallback warning: {e2}")
 
         # Run the agent with timing
-        start_time = time.time()
+        start_time = time.monotonic()
         try:
-            result: MessageResult = self.agent.run(
-                prompt, **({"sources": list(file_paths)} if self.seed_sources else {})
-            )
+            with run_metrics.solve():
+                result: MessageResult = self.agent.run(
+                    prompt, empty_turn_retries=0, **({"sources": list(file_paths)} if self.seed_sources else {})
+                )
         except Exception as e:
             print(f"[DataflowSystem] Error running agent: {e}")
-            return {
-                "explanation": {
-                    "id": "main-task",
-                    "answer": f"Error: {str(e)}",
-                },
-                "pipeline_code": "",
-                "token_usage": 0,
-                "token_usage_input": 0,
-                "token_usage_output": 0,
-            }
-        elapsed_seconds = time.time() - start_time
+            result = MessageResult(response=f"Error: {e}", messages=[], usage={}, stats={},
+                                   stopped=True, error=str(e), completed=False)
+        elapsed_seconds = time.monotonic() - start_time
 
         # Save response for debugging
         response_path = os.path.join(query_output_dir, "response.txt")
@@ -662,38 +670,16 @@ Your last line MUST BE: **Final Answer: <value>**"""
             print(f"[DataflowSystem] React steps count: {len(react_steps)}")
             print(f"[DataflowSystem] Stopped: {result.stopped}, Error: {result.error}")
 
-        # Extract token usage (with per-class breakdown: reasoning + cache-read)
-        usage = result.usage or {}
-        token_usage = usage.get("total_tokens", 0) or usage.get("totalTokens", 0)
-        token_usage_input = usage.get("input_tokens", 0) or usage.get("inputTokens", 0)
-        token_usage_output = usage.get("output_tokens", 0) or usage.get("outputTokens", 0)
-        token_usage_reasoning = usage.get("reasoning_tokens", 0) or usage.get("reasoningTokens", 0)
-        token_usage_cached = (
-            usage.get("cached_input_tokens", 0) or usage.get("cachedInputTokens", 0)
-            or usage.get("cache_read_input_tokens", 0)
-        )
-        # Anthropic bills cache WRITES at 1.25x input. The @ai-sdk/openai usage
-        # object does not expose litellm's cache_creation_tokens extension today,
-        # so this stays 0 on the dataflow path until agent-service surfaces it —
-        # the read is here so stats and cost pick it up the moment that lands.
-        token_usage_cache_creation = (
-            usage.get("cache_creation_input_tokens", 0)
-            or usage.get("cacheCreationInputTokens", 0)
-            or usage.get("cache_creation_tokens", 0)
-        )
-        cost_usd = 0.0
-        try:
-            from systems.cost_utils import compute_cost
-            c = compute_cost(
-                self.model_type,
-                input_tokens=token_usage_input,
-                output_tokens=token_usage_output,
-                cached_tokens=token_usage_cached,
-                cache_creation_tokens=token_usage_cache_creation,
-            )
-            cost_usd = c if c is not None else 0.0
-        except Exception:
-            pass
+        # Authoritative transport totals retain retries, cache writes and failed work.
+        full_metrics, metrics_path, accounting_path = run_metrics.finish(result, self.agent, query_output_dir)
+        observed = full_metrics["observed_usage"]
+        token_usage = observed.get("total_tokens") or 0
+        token_usage_input = observed.get("input_tokens") or 0
+        token_usage_output = observed.get("output_tokens") or 0
+        token_usage_reasoning = full_metrics["usage"].get("reasoning_tokens")
+        token_usage_cached = observed.get("cached_input_tokens") or 0
+        token_usage_cache_creation = observed.get("cache_creation_tokens") or 0
+        cost_usd = full_metrics["cost"]["cost_usd"]
 
         # Step count: prefer the WS-derived count from MessageResult.stats; fall
         # back to counting agent steps with tool calls in the ReAct trace.
@@ -715,6 +701,13 @@ Your last line MUST BE: **Final Answer: <value>**"""
             "cached_tokens": token_usage_cached,
             "cache_creation_tokens": token_usage_cache_creation,
             "cost_usd": cost_usd,
+            "observed_cost_usd": full_metrics["cost"]["observed_cost_usd"],
+            "metrics_path": metrics_path,
+            "model_accounting_path": accounting_path,
+            "usage_status": full_metrics["model_accounting"].get("usage_status", "unknown"),
+            "resource_scope": run_metrics.scope,
+            "stopped": result.stopped,
+            "error": result.error,
             "num_steps": num_steps,
             "elapsed_seconds": round(elapsed_seconds, 2),
         }

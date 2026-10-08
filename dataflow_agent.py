@@ -348,6 +348,8 @@ class MessageResult:
     # An explicit server completion event, not inferred from EOF or zero steps.
     # None preserves compatibility with clients/fixtures predating this field.
     completed: Optional[bool] = field(default=None, kw_only=True)
+    # Authoritative per-request accounting, including unknown failed billing.
+    model_accounting: Optional[dict] = field(default=None, kw_only=True)
 
 
 # ============================================================================
@@ -742,6 +744,7 @@ def _send_message_once(
         stopped = False
         error: Optional[str] = None
         complete = False
+        model_accounting = None
         turn_start = time.time()
 
         while not complete:
@@ -819,6 +822,20 @@ def _send_message_once(
                         usage_total[key] += value - previous.get(key, 0)
                     step_usage_seen[step_key] = current
             elif ev_type == "complete":
+                # The final server total includes grounding rounds, retries and
+                # work completed before a stop/error. Streaming step totals are
+                # a compatibility fallback for services without this payload.
+                final_usage = event.get("usage")
+                if isinstance(final_usage, dict):
+                    usage_total = {target: int(final_usage.get(source) or 0) for target, source in (
+                        ("input_tokens", "inputTokens"), ("output_tokens", "outputTokens"),
+                        ("total_tokens", "totalTokens"), ("reasoning_tokens", "reasoningTokens"),
+                        ("cached_input_tokens", "cachedInputTokens"),
+                        ("cache_creation_input_tokens", "cacheCreationInputTokens"),
+                    )}
+                model_accounting = event.get("modelAccounting")
+                stopped = bool(event.get("stopped", stopped))
+                error = event.get("error") or error
                 complete = True
             elif ev_type == "error":
                 error = event.get("error") or "unknown WebSocket error"
@@ -837,6 +854,7 @@ def _send_message_once(
             stopped=stopped,
             error=error,
             completed=complete,
+            model_accounting=model_accounting,
         )
     finally:
         try:

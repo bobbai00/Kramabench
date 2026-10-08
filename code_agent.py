@@ -1,9 +1,25 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 # -*- coding: utf-8 -*-
 """
 Code Agent - Wrapper for smolagents CodeAgent for KramaBench benchmarking.
 """
 
+from copy import deepcopy
+from functools import lru_cache
+import importlib.util
 import os
+from pathlib import Path
 import re
 import time
 from typing import Optional, Any
@@ -59,6 +75,25 @@ def _parse_model_and_reasoning_effort(model_type: str) -> tuple[str, Optional[st
     return model_type, None
 
 
+@lru_cache(maxsize=1)
+def load_structured_output_transport():
+    """Load the shared helper without importing either ``benchmark`` package.
+
+    The sandbox mounts this one source beside the wrapper. Ordinary Texera KB
+    runs find it in the sibling runtime directory; default standalone KB runs
+    do not need the helper unless capabilities are explicitly configured.
+    """
+    path = Path(__file__).resolve().with_name("structured_output_transport.py")
+    if not path.is_file():
+        path = Path(__file__).resolve().parents[1] / "runtime/structured_output_transport.py"
+    if not path.is_file():
+        raise RuntimeError("Configured model capabilities require the shared structured-output transport helper")
+    spec = importlib.util.spec_from_file_location("texera_structured_output_transport", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class UsageTrackingOpenAIModel(OpenAIServerModel):
     """OpenAIServerModel that accumulates the per-call token-class breakdown that
     smolagents' RunResult.token_usage drops — cache-read and reasoning tokens —
@@ -107,6 +142,7 @@ class UsageTrackingOpenAIModel(OpenAIServerModel):
 
     def generate(self, *args, **kwargs):
         msg = super().generate(*args, **kwargs)
+        msg.raw = getattr(msg.raw, "_structured_output_raw_response", msg.raw)
         self._track(msg)
         return msg
 
@@ -294,8 +330,14 @@ class CodeAgentWrapper:
         use_pitfalls_prompt: bool = None,
         max_print_outputs_length: int = None,
         no_action_detail: bool = False,
+        model_parameters: Optional[dict] = None,
+        model_capabilities: Optional[dict] = None,
+        use_structured_outputs_internally: bool = False,
     ):
         self.model_type = model_type
+        self.model_parameters = deepcopy(model_parameters)
+        self.model_capabilities = deepcopy(model_capabilities or {})
+        self.use_structured_outputs_internally = use_structured_outputs_internally
         self.max_steps = max_steps
         self.api_base = api_base
         self.api_key = api_key
@@ -315,20 +357,26 @@ class CodeAgentWrapper:
 
     def setup(self) -> "CodeAgentWrapper":
         """Setup the agent."""
-        model_id, reasoning_effort = _parse_model_and_reasoning_effort(self.model_type)
-        model_kwargs = {}
-        if reasoning_effort:
-            model_kwargs["reasoning_effort"] = reasoning_effort
-        # Reasoning models (gpt-5*/o*) only accept the default temperature (1);
-        # sending temperature=0.2 returns a 400. Omit it for those.
-        if not _is_reasoning_model(model_id):
-            model_kwargs["temperature"] = 0.2
+        if self.model_parameters is not None:
+            # Explicit provider facts supply an exact ID and generation options.
+            model_id, model_kwargs = self.model_type, deepcopy(self.model_parameters)
+        else:
+            model_id, reasoning_effort = _parse_model_and_reasoning_effort(self.model_type)
+            model_kwargs = {}
+            if reasoning_effort:
+                model_kwargs["reasoning_effort"] = reasoning_effort
+            # Preserve historical non-reasoning model temperature defaults.
+            if not _is_reasoning_model(model_id):
+                model_kwargs["temperature"] = 0.2
         self._model = UsageTrackingOpenAIModel(
             model_id=model_id,
             api_base=self.api_base,
             api_key=self.api_key,
             **model_kwargs,
         )
+
+        if self.model_capabilities:
+            load_structured_output_transport().install_structured_output_transport(self._model, self.model_capabilities)
 
         # Build agent kwargs
         agent_kwargs = {
@@ -338,6 +386,7 @@ class CodeAgentWrapper:
             "max_steps": self.max_steps,
             "verbosity_level": self.verbosity_level,
             "executor_kwargs": {"additional_functions": {"open": open}},
+            "use_structured_outputs_internally": self.use_structured_outputs_internally,
         }
 
         # Add max print outputs length if set

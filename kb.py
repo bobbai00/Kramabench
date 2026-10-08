@@ -559,16 +559,18 @@ def _first_model(sut):
 
 
 def load_task_success(sut):
-    """{task_id: max score across SCORE_METRICS} from the latest measures CSV per workload."""
+    """Latest score per task, supporting both bulk and isolated-task CSVs.
+
+    A recovery replaces that task's prior score, rather than selecting its
+    best historical attempt. Other tasks retain their latest recorded score.
+    """
     rdir = KB_ROOT / "results" / sut
     if not rdir.is_dir():
         return {}
-    latest = {}
-    for f in sorted(rdir.glob("*_measures_*.csv")):
-        latest[f.name.split("_measures_")[0]] = f
     succ = {}
-    for f in latest.values():
+    for f in sorted(rdir.glob("*_measures_*.csv")):
         try:
+            scores = {}
             with open(f) as fh:
                 for row in csv.DictReader(fh):
                     if row.get("metric") in SCORE_METRICS:
@@ -578,7 +580,8 @@ def load_task_success(sut):
                         except (TypeError, ValueError):
                             v = 0.0
                         if tid:
-                            succ[tid] = max(succ.get(tid, 0.0), v)
+                            scores[tid] = max(scores.get(tid, 0.0), v)
+            succ.update(scores)
         except Exception:
             pass
     return succ

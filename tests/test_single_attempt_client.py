@@ -19,17 +19,26 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from dataflow_agent import DataflowAgent, MessageResult, _send_message_once, send_message
+from dataflow_agent import (
+    DataflowAgent,
+    MessageResult,
+    _send_message_once,
+    send_message,
+)
 
 
 class SingleAttemptClientTest(unittest.TestCase):
     def empty(self):
-        return MessageResult(response="", messages=[], usage={}, stats={"steps": 0}, stopped=False)
+        return MessageResult(
+            response="", messages=[], usage={}, stats={"steps": 0}, stopped=False
+        )
 
     def test_explicit_zero_overrides_environment_retries(self):
         with (
             patch.dict("os.environ", {"KB_EMPTY_TURN_RETRIES": "2"}),
-            patch("dataflow_agent._send_message_once", return_value=self.empty()) as send,
+            patch(
+                "dataflow_agent._send_message_once", return_value=self.empty()
+            ) as send,
             patch("dataflow_agent.time.sleep") as sleep,
         ):
             result = send_message("agent", "query", empty_turn_retries=0)
@@ -40,7 +49,9 @@ class SingleAttemptClientTest(unittest.TestCase):
     def test_legacy_environment_policy_remains_available(self):
         with (
             patch.dict("os.environ", {"KB_EMPTY_TURN_RETRIES": "1"}),
-            patch("dataflow_agent._send_message_once", return_value=self.empty()) as send,
+            patch(
+                "dataflow_agent._send_message_once", return_value=self.empty()
+            ) as send,
             patch("dataflow_agent.time.sleep"),
         ):
             send_message("agent", "query")
@@ -62,8 +73,12 @@ class SingleAttemptClientTest(unittest.TestCase):
 
     def test_websocket_complete_and_silent_close_are_distinct(self):
         for frames, completed in ((['{"type":"complete"}'], True), ([""], False)):
-            socket = SimpleNamespace(send=lambda *args: None, recv=iter(frames).__next__, close=lambda: None)
-            with patch("dataflow_agent.websocket.create_connection", return_value=socket):
+            socket = SimpleNamespace(
+                send=lambda *args: None, recv=iter(frames).__next__, close=lambda: None
+            )
+            with patch(
+                "dataflow_agent.websocket.create_connection", return_value=socket
+            ):
                 result = _send_message_once("agent", "query")
                 self.assertIs(result.completed, completed)
 
@@ -72,11 +87,15 @@ class SingleAttemptClientTest(unittest.TestCase):
 
         step = {"id": "s1", "role": "agent", "usage": {"inputTokens": 10}}
         frames = iter([json.dumps({"type": "step", "step": step})])
-        socket = SimpleNamespace(send=lambda *args: None, recv=frames.__next__, close=lambda: None)
+        socket = SimpleNamespace(
+            send=lambda *args: None, recv=frames.__next__, close=lambda: None
+        )
         events = []
         with patch("dataflow_agent.websocket.create_connection", return_value=socket):
             with self.assertRaises(StopIteration):
-                send_message("agent", "query", empty_turn_retries=0, on_event=events.append)
+                send_message(
+                    "agent", "query", empty_turn_retries=0, on_event=events.append
+                )
         self.assertEqual(events, [{"type": "step", "step": step}])
 
     def test_client_forwards_event_callback(self):
@@ -95,7 +114,12 @@ class SingleAttemptClientTest(unittest.TestCase):
             "role": "agent",
             "isEnd": False,
             "content": "17",
-            "usage": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120, "cachedInputTokens": 80},
+            "usage": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "totalTokens": 120,
+                "cachedInputTokens": 80,
+            },
         }
         frames = iter(
             [
@@ -104,13 +128,91 @@ class SingleAttemptClientTest(unittest.TestCase):
                 '{"type":"complete"}',
             ]
         )
-        socket = SimpleNamespace(send=lambda *args: None, recv=frames.__next__, close=lambda: None)
+        socket = SimpleNamespace(
+            send=lambda *args: None, recv=frames.__next__, close=lambda: None
+        )
         with patch("dataflow_agent.websocket.create_connection", return_value=socket):
             result = _send_message_once("agent", "query")
         self.assertEqual(result.stats["steps"], 1)
         self.assertEqual(result.usage["input_tokens"], 100)
         self.assertEqual(result.usage["cached_input_tokens"], 80)
         self.assertEqual(result.response, "17")
+
+    def test_completion_replaces_partial_step_usage_with_all_transport_requests(self):
+        import json
+
+        accounting = {
+            "usageStatus": "complete",
+            "attemptedRequests": 2,
+            "usage": {
+                "inputTokens": 150,
+                "outputTokens": 30,
+                "totalTokens": 180,
+                "cachedInputTokens": 40,
+                "cacheCreationInputTokens": 60,
+                "reasoningTokens": 10,
+            },
+            "requests": [{"requestId": "first"}, {"requestId": "correction"}],
+        }
+        frames = [
+            json.dumps(
+                {
+                    "type": "step",
+                    "step": {
+                        "id": "s1",
+                        "role": "agent",
+                        "isEnd": True,
+                        "content": "42",
+                        "usage": {"inputTokens": 100, "outputTokens": 20},
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "complete",
+                    "usage": accounting["usage"],
+                    "modelAccounting": accounting,
+                }
+            ),
+        ]
+        socket = SimpleNamespace(
+            send=lambda *args: None, recv=iter(frames).__next__, close=lambda: None
+        )
+        with patch("dataflow_agent.websocket.create_connection", return_value=socket):
+            result = _send_message_once("agent", "query")
+        self.assertEqual(result.usage["input_tokens"], 150)
+        self.assertEqual(result.usage["cache_creation_input_tokens"], 60)
+        self.assertEqual(result.model_accounting, accounting)
+        self.assertEqual(result.stats["steps"], 1)
+        self.assertEqual(result.response, "42")
+
+    def test_failed_completion_retains_paid_usage_and_unknown_billing(self):
+        import json
+
+        accounting = {
+            "usageStatus": "partial",
+            "unknownUsageRequestIds": ["failed"],
+            "usage": {"inputTokens": 100, "outputTokens": 20},
+        }
+        frame = json.dumps(
+            {
+                "type": "complete",
+                "usage": accounting["usage"],
+                "modelAccounting": accounting,
+                "stopped": True,
+                "error": "turn failed",
+            }
+        )
+        socket = SimpleNamespace(
+            send=lambda *args: None, recv=iter([frame]).__next__, close=lambda: None
+        )
+        with patch("dataflow_agent.websocket.create_connection", return_value=socket):
+            result = _send_message_once("agent", "query")
+        self.assertTrue(result.completed)
+        self.assertTrue(result.stopped)
+        self.assertEqual(result.error, "turn failed")
+        self.assertEqual(result.usage["input_tokens"], 100)
+        self.assertEqual(result.model_accounting["usageStatus"], "partial")
 
 
 if __name__ == "__main__":
