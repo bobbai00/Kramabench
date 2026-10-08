@@ -1,0 +1,90 @@
+KramaBench single-task prompt-refactor subset, 2026-10-08 UTC
+
+This diagnostic used 12 tasks, two per each of six domains (one easy and one
+hard), selected before model calls by file format and analysis operation.
+It is a one-attempt smoke comparison, not a full-benchmark accuracy estimate.
+All 60 runs completed and were graded with the official evaluator. Scores
+were taken from saved evaluation.json and crosschecked against the official
+per-task score CSVs. Strict pass is score >= 1.0; all scores here are binary.
+
+Arm                   Passes   Mean score   Agent cost USD   Model calls
+data0_flow0             7/12     0.5833       0.033327         57
+data0_flow1             6/12     0.5000       0.035847         53
+data1_flow0             8/12     0.6667       0.031619         49
+data1_flow1             5/12     0.4167       0.034246         49
+smol_custom             4/12     0.3333       0.038611         43
+
+Total agent API estimate: $0.173650 across 251 requests. Costs use the frozen
+fallback per-token pricing in manifest.json, with cached input discounted
+and reasoning included in output. Grading, compute and provider invoices
+are excluded. Model calls are wire requests; smolagents memory-step counts
+include the initial TaskStep and would overcount requests.
+
+All arms used gpt-5.6-luna, medium reasoning, an 8,192-token response ceiling,
+25 steps/turns, a 900-second task limit, zero SDK retries and one attempt.
+Native mode used DELTA, prefix profile collection in every arm, no thought
+replay and no snapshot code. Data statistics off explicitly permitted only
+sample/full views; on permitted sample_stats/full. flowEvidence varied
+independently. Native samples were capped at 2,000 characters and five rows,
+full results at 5,000 characters. Each enabled data/flow evidence kind had
+a separate 2,000-character budget. smol execution output was capped at 5,000
+characters. Evidence adds context beyond the common result-output budget.
+
+smolagents retained its stock tool/code interface and received the exact
+shared Analysis principles once through instructions=. The older custom
+principle block was replaced, and fine-grained/pitfalls additions were off.
+Its completion instruction requested final_answer(value), consistent with
+CodeAgent's protocol. The rendered prompt is archived beside this report.
+Native and smolagents used the same Python 3.12 worker environment; the
+benchmark adapter/scorer used a separate Python 3.10 environment. Native
+workers saw the read-only data lake and local engine services. smolagents
+saw read-only task-domain inputs, a private workspace and a gateway relay,
+with network access disabled. Repository solutions and scorer gold were
+outside both worker mounts. Backend addresses and package versions are
+recorded in manifest.json; these are material environment differences.
+
+No task timeouts, provider failures, retries, source drift or evidence-off
+leaks were found. Native traces contain 35 action errors (reported in
+usage.csv), with all tasks still reaching an answer. All 12 smol runs ended
+with a successful final_answer call. One audited native failure was answer
+shape only: legal-easy-3, flow-only, computed 13.1628 but emitted a JSON
+object where official grading required a scalar. Its original score remains
+zero; no corrections or reruns were made.
+
+Manual trace findings (observed paths, not causal evidence about statistics):
+environment-easy-3 (data0_flow0, data1_flow0): Off/off groups by Beach Name alone and returns 267; data-only groups by Community Code plus Beach Name and returns 268. Both calculate over full rows.
+
+legal-hard-18 (data1_flow0, data1_flow1): Data-only multiplies the 2007 total by both the 2024 identity-theft share and age 40-plus share, giving 91000. Combined-evidence skips the identity-theft share and gives 520000. Its first category observation is incomplete and the agent never retrieves the missing category row.
+
+archeology-easy-11 (data1_flow0, data0_flow1): Data-only filters capital==primary, retains highest population per country, and gives 17.4274. Flow-only treats every non-null capital category as eligible, including administrative capitals, and gives 17.1667.
+
+biomedical-hard-7 (data0_flow0, data1_flow0): Off/off recovers through reader/sheet/column errors and ultimately reads the acetyl sheet with header=None, counting 16. Data-only reads it with an inferred header and treats 15 remaining records as complete. Full scan/statistics faithfully describe the parsed table but do not repair the dropped first gene.
+
+wildfire-hard-16 (data1_flow0, smol_custom): Native data-only returns gold [6.326, 0.787]. Custom smol excludes literal unknown strings but retains the actual unknown-cause code U, giving [40.149, 0]. It finished and graded normally.
+
+astronomy-easy-1 (data0_flow1, data1_flow1): Flow-only compares the March 9 forecast against Observed Ap values 10, 10, 32 and gives MAE 15. Combined-evidence extracts Estimated Ap values instead and gives 9.
+
+legal-easy-3 (data0_flow1, data1_flow1): Flow-only computes correct 13.1628 then answer.from emits the JSON object {ratio:13.1628}; official scalar-numeric grading returns 0. Combined-evidence returns the scalar and passes.
+
+The six semantic divergences above show unresolved population, grouping,
+reader/header, formula and category-code decisions despite execution
+success. Statistics describe the data as parsed; they do not prove reader
+or formula correctness. Different arms also generated different reasoning
+paths, so the data-only 8/12 result does not isolate a causal statistics gain.
+
+There is no fresh old-prompt control: the service did not expose a frozen
+system-prompt override. Prior results used a different full-output cap and
+cannot establish that this refactor preserved accuracy or reduced run cost.
+The subset is small and unpaired across stochastic trajectories. Repeat a
+predeclared selection with multiple attempts before generalizing the ranking.
+No additional model calls were made to prepare this versioned report.
+
+Files: scores.csv holds the 12-by-5 official score matrix; usage.csv holds
+all 60 task-arm costs, usage, calls, errors and completion states; summary.json
+holds arm aggregates and audit counts; manifest.json holds exact settings,
+selection rationale, input hashes and recorded run source/prompt hashes.
+Hashes preserve the pre-cleanup run revision and must not be interpreted as
+the later cleanup commit. Raw prompts beyond the stock/shared system prompt,
+wire events, traces, workspaces and downloaded inputs remain local artifacts.
+The main repository also archives the combined KramaBench/DA-Code comparison
+at benchmark/retrieval/results/20261008-prompt-refactor-subset.{json,txt}.
