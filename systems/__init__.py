@@ -44,6 +44,7 @@ from .native_campaign_system import (
 )
 from .code_agent_system import CodeAgentSystem
 from .code_agent_session import CodeAgentSessionRunner, CodeAgentSessionSystem
+from .dsgym_system import DSGymSystem, DSGymSystemLuna
 from .dataflow_agent_session import DataflowAgentSessionRunner, DataflowAgentSessionSystem
 from .claude_code_system import (
     ClaudeCodeSystem,
