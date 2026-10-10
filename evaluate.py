@@ -1,5 +1,7 @@
 import argparse
+import fcntl
 import sys
+import tempfile
 import datetime
 from email import parser
 import json
@@ -218,15 +220,21 @@ def main():
                  + " — the task id(s) likely don't exist in this workload.")
 
     aggregated_df = aggregate_results(system_name, results_df)
-    # Update aggregated results file
-    if os.path.exists(aggregated_results_path):
-        old_aggregated_df = pd.read_csv(aggregated_results_path)
-        old_aggregated_df = old_aggregated_df[
-            ~((old_aggregated_df["sut"] == system_name) & (old_aggregated_df["workload"] == f"{workload}.json"))
-        ]
-        aggregated_df = pd.concat([old_aggregated_df, aggregated_df])
-
-    aggregated_df.to_csv(aggregated_results_path, index=False)
+    # Update the aggregated results file. Concurrent evaluations share it: the
+    # read-modify-write holds an exclusive lock, and the new file replaces the
+    # old one atomically, so a reader never sees a half-written (empty) file.
+    with open(aggregated_results_path + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if os.path.exists(aggregated_results_path) and os.path.getsize(aggregated_results_path) > 0:
+            old_aggregated_df = pd.read_csv(aggregated_results_path)
+            old_aggregated_df = old_aggregated_df[
+                ~((old_aggregated_df["sut"] == system_name) & (old_aggregated_df["workload"] == f"{workload}.json"))
+            ]
+            aggregated_df = pd.concat([old_aggregated_df, aggregated_df])
+        handle, temporary = tempfile.mkstemp(dir=os.path.dirname(aggregated_results_path) or ".", suffix=".csv.tmp")
+        os.close(handle)
+        aggregated_df.to_csv(temporary, index=False)
+        os.replace(temporary, aggregated_results_path)
 
     # print("Done. Aggregated results:")
     # print(aggregated_df[aggregated_df["workload"] == workload_name])

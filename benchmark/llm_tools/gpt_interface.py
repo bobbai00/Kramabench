@@ -3,11 +3,13 @@ For LLM paraphrase evaluator, we implement this paper: https://aclanthology.org/
 For code evaluator, we implement and make data science specific improvements to this paper: https://aclanthology.org/2024.emnlp-main.1118.pdf
     and referred to this paper https://arxiv.org/pdf/2502.12466v1. Things like this https://arxiv.org/abs/2009.10297 doesn't work very well.
 """
+import fcntl
 import hashlib
 import json
 import logging
 import os
 import re
+import tempfile
 from typing import Dict, List, Tuple, Optional
 
 from openai import OpenAI
@@ -73,9 +75,20 @@ def _paraphrase_cache_put(key: str, verdict: bool) -> None:
     os.makedirs(os.path.dirname(_PARAPHRASE_CACHE_PATH), exist_ok=True)
     tmp = f"{_PARAPHRASE_CACHE_PATH}.{os.getpid()}.tmp"
     try:
-        with open(tmp, "w") as f:
-            json.dump(cache, f)
-        os.replace(tmp, _PARAPHRASE_CACHE_PATH)
+        # Concurrent evaluations share the file: merge with what is on disk under
+        # an exclusive lock, so no process drops verdicts another one just wrote.
+        with open(os.path.join(tempfile.gettempdir(), "kramabench-paraphrase-cache.lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                with open(_PARAPHRASE_CACHE_PATH) as f:
+                    on_disk = json.load(f)
+            except (OSError, ValueError):
+                on_disk = {}
+            on_disk.update(cache)
+            with open(tmp, "w") as f:
+                json.dump(on_disk, f)
+            os.replace(tmp, _PARAPHRASE_CACHE_PATH)
+            cache.update(on_disk)
     except Exception as e:
         logging.warning(f"paraphrase cache write failed: {e}")
 
