@@ -236,8 +236,11 @@ class AgentSettings:
             "maxResultRows": self.max_result_rows,
             "attemptReflection": self.attempt_reflection,
             "toolDialect": self.tool_dialect,
-            "seedSources": self.seed_sources,
         }
+        # Removed from the service with the multi-task state: send it only when
+        # an archived arm asks for it, so the service refuses that arm.
+        if self.seed_sources:
+            payload["seedSources"] = True
         if self.allowed_operator_types is not None:
             payload["allowedOperatorTypes"] = self.allowed_operator_types
         if self.include_operator_properties is not None:
