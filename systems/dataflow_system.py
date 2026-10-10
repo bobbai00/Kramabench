@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 from benchmark.benchmark_api import System
 from dataflow_agent import DataflowAgent, MessageResult, get_agent_workflow, get_agent_react_steps
 from systems.data_source_utils import expand_data_sources
-from utils.answer_parser import parse_answer
+from utils.answer_parser import parse_explicit_answer
 
 
 class DataflowSystem(System):
@@ -456,7 +456,7 @@ Question: {query}
 
 Answer format: {format_hint}
 
-Your last line MUST BE: **Final Answer: <value>**"""
+Return the answer in the requested format."""
 
         return prompt
 
@@ -722,8 +722,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
         with open(stats_path, "w") as f:
             json.dump(stats, f, indent=2)
 
-        # Parse answer from response (or from messages if response is empty)
-        answer = parse_answer(result.response, result.messages)
+        # The service returns the terminal answer; never promote intermediate tool results.
+        answer = parse_explicit_answer(result.response)
 
         if self.verbose:
             print(f"[DataflowSystem] Answer: {answer[:200]}..." if len(str(answer)) > 200 else f"[DataflowSystem] Answer: {answer}")

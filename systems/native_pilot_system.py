@@ -31,7 +31,7 @@ import requests
 
 from .cost_utils import price_schedule
 from .dataflow_system import DataflowSystem
-from utils.answer_parser import parse_answer
+from utils.answer_parser import parse_explicit_answer
 from utils.pilot_artifacts import AttemptBundle, usage_report
 from utils.resource_journal import ResourceJournal
 
@@ -254,7 +254,7 @@ class NativePilotSystem(DataflowSystem):
             # frame was lost. Protocol completion, usage completeness and answer
             # correctness are separate measurements; do not conflate them.
             response = (final_step.get("content") or "") if model_final and attempt["dispatched"] else ""
-            answer = parse_answer(response, []) if response else ""
+            answer = parse_explicit_answer(response) if response else ""
             explanation = {"id": "main-task", "answer": answer}
             bundle.write("response.txt", result.response if result else "", text=True)
             bundle.write("answer.json", explanation)

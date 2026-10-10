@@ -245,6 +245,12 @@ class CampaignAttemptTest(unittest.TestCase):
         self.assertEqual(self.artifact("stats.json")["all_attempts"]["attempt_count"], 1)
         self.assertNotIn("private-token", json.dumps(self.artifact("config.json")))
 
+    def test_terminal_multiline_answer_is_preserved_without_marker(self):
+        answer = "first_row\nsecond_row"
+        self.agent.run.return_value = MessageResult(answer, [], {}, {}, False, completed=True)
+        self.trace = {"steps": [{**STEP, "content": answer}], "state": "AVAILABLE"}
+        self.assertEqual(self.serve()["explanation"]["answer"], answer)
+
     def test_recovery_requires_round_and_archives_every_prior_artifact(self):
         self.serve()
         prior = Path(self.temporary.name) / TASK["id"]

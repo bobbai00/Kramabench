@@ -12,6 +12,7 @@ import os
 from typing import Any, Optional, List, Dict
 
 from benchmark.session_runner import SessionRunner
+from utils.answer_parser import parse_explicit_answer
 from dataflow_agent import (
     DataflowAgent,
     AGENT_MAX_STEPS,
@@ -135,10 +136,7 @@ Question: {query}
 Instructions:
 1. Read the relevant data files using the provided paths.
 2. Answer the question step by step.
-3. Your final answer should be on the last line in the format: **Final Answer: <value>**
-   - For numeric questions: just the number (e.g., "15")
-   - For list questions: a JSON array (e.g., ["Tokyo", "London"])
-   - For string questions: just the value (e.g., "file.txt")"""
+3. Return the answer in the format requested by the question."""
         elif file_paths:
             # Subsequent queries mention available files
             prompt = f"""Continue the analysis. Additional files available if needed:
@@ -146,12 +144,12 @@ Instructions:
 
 Question: {query}
 
-Provide your answer on the last line as: **Final Answer: <value>**"""
+Return the answer in the format requested by the question."""
         else:
             # No specific files - just the query
             prompt = f"""{query}
 
-Provide your answer on the last line as: **Final Answer: <value>**"""
+Return the answer in the format requested by the question."""
 
         return prompt
 
@@ -188,27 +186,8 @@ Provide your answer on the last line as: **Final Answer: <value>**"""
         return self._parse_answer(result.response)
 
     def _parse_answer(self, response: str) -> str:
-        """Extract the final answer from the response."""
-        import re
-
-        if not response:
-            return ""
-
-        # Look for **Final Answer: xxx** pattern
-        match = re.search(r'\*?\*?Final Answer:?\*?\*?\s*(.+?)(?:\n|$)', response, re.IGNORECASE)
-        if match:
-            answer = match.group(1).strip()
-            # Clean markdown formatting
-            answer = re.sub(r'^\*\*|\*\*$', '', answer).strip()
-            answer = re.sub(r'^`|`$', '', answer).strip()
-            return answer
-
-        # Return last non-empty line as fallback
-        lines = [l.strip() for l in response.strip().split('\n') if l.strip()]
-        if lines:
-            return lines[-1]
-
-        return response.strip()
+        """The response is already the terminal answer, including its formatting."""
+        return parse_explicit_answer(response)
 
     def get_reasoning_trace(self) -> Dict[str, Any]:
         """

@@ -3,12 +3,32 @@
 Utility functions for parsing agent answers from responses.
 
 This module provides shared logic for extracting final answers from
-agent responses, used by both CodeAgentSystem and DataflowSystem.
+agent responses. Dataflow terminal content uses parse_explicit_answer;
+legacy unstructured baselines retain parse_answer.
 """
 
 import json
 import re
 from typing import List, Optional
+
+
+def parse_explicit_answer(response: object) -> str:
+    """Preserve terminal answer content without guessing from prose or tool rows.
+
+    A sole legacy/requested ``Final Answer:`` line may wrap its value for
+    grading. Multiline responses and all other Markdown remain intact.
+    """
+    text = "" if response is None else str(response)
+    if not text.strip():
+        return "No response from agent"
+    legacy = re.fullmatch(
+        r"(?:\*\*Final Answer:[ \t]*(.+?)\*\*|\*\*Final Answer:\*\*[ \t]*(.+)|Final Answer:[ \t]*(.+))",
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if legacy:
+        return next(value for value in legacy.groups() if value is not None).strip()
+    return text
 
 
 def parse_answer(response: str, messages: Optional[List[dict]] = None) -> str:

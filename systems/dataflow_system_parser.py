@@ -14,6 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+from utils.answer_parser import parse_explicit_answer
+
 
 def _count_sloc(code: str) -> int:
     """
@@ -132,11 +134,36 @@ class ToolCallOutput:
         if isinstance(data, dict):
             output_type = data.get("type", "text")
             value = data.get("value", "")
-            return cls(output_type=output_type, value=value, raw=data)
+            text = value if isinstance(value, str) else json.dumps(value)
+            return cls(output_type=output_type, value=text, raw=data)
         return cls(value=str(data), raw={"value": str(data)})
 
+    def _action_result(self) -> Optional[dict]:
+        value = self.raw.get("value", self.raw)
+        return value if isinstance(value, dict) and value.get("kind") == "dataflow-actions" else None
+
+    def accepted_answer(self) -> Optional[str]:
+        """Only a completed answer receipt establishes a terminal answer."""
+        result = self._action_result()
+        if not result or result.get("status") != "completed":
+            return None
+        for item in result.get("actions", []):
+            action = item.get("action", {})
+            if item.get("status") != "ok" or action.get("type") != "answer":
+                continue
+            output = item.get("output")
+            answer = action.get("content")
+            if isinstance(output, dict) and output.get("composed") is True:
+                answer = output.get("answer")
+            if isinstance(answer, str) and answer.strip():
+                return parse_explicit_answer(answer)
+        return None
+
     def is_error(self) -> bool:
-        """Check if output indicates an error."""
+        """Use structured status when available, without searching answer text."""
+        result = self._action_result()
+        if result is not None:
+            return result.get("status") == "error" or any(item.get("status") == "error" for item in result.get("actions", []))
         return "[ERROR]" in self.value or "error" in self.value.lower()
 
 
@@ -544,6 +571,7 @@ class DataflowSystemParser:
                     tool_calls=current_tool_calls.copy(),
                     tool_results=results,
                     has_error=has_error,
+                    is_final_answer=any(result.accepted_answer() is not None for result in results),
                 )
                 steps.append(step)
                 current_tool_calls = []
@@ -553,15 +581,16 @@ class DataflowSystemParser:
     def _extract_final_answer(self, messages: list[Message]) -> Optional[str]:
         """Extract final answer from messages."""
         for msg in reversed(messages):
+            if msg.is_tool_message():
+                for _, result in reversed(msg.get_tool_results()):
+                    answer = result.accepted_answer()
+                    if answer is not None:
+                        return answer
             if msg.is_assistant_message():
                 text = msg.get_text()
                 if text and "Final Answer:" in text:
-                    # Extract answer after "Final Answer:"
-                    idx = text.find("Final Answer:")
-                    answer = text[idx + len("Final Answer:"):].strip()
-                    # Clean up common formatting
-                    answer = answer.strip("*").strip()
-                    return answer
+                    # Compatibility for archived text-only final answers.
+                    return parse_explicit_answer(text)
         return None
 
     def _match_tool_results(self, trace: DataflowTrace) -> None:
