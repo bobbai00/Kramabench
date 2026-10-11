@@ -33,8 +33,15 @@ def parse_answer(response: str, messages: Optional[List[dict]] = None) -> str:
         if final_answer_matches:
             # Take the last match (the final "Final Answer:" in the response)
             answer = final_answer_matches[-1].strip()
-            # Clean markdown formatting
-            answer = re.sub(r'^\*\*|\*\*$', '', answer).strip()
+            # Clean markdown formatting. A label repeated on the same line
+            # ("Final Answer: **Final Answer: 1.1413**") is one match, so the
+            # inner label is still in the answer; drop it too.
+            while True:
+                cleaned = re.sub(r'^\*\*|\*\*$', '', answer).strip()
+                cleaned = re.sub(r'^\*?\*?Final Answer:\*?\*?\s*', '', cleaned, flags=re.IGNORECASE).strip()
+                if cleaned == answer:
+                    break
+                answer = cleaned
             answer = re.sub(r'^`|`$', '', answer).strip()
             # If it looks like a JSON array, return as-is
             if answer.startswith('[') and answer.endswith(']'):

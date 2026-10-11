@@ -39,6 +39,13 @@ class ExplicitAnswerTests(unittest.TestCase):
         self.assertEqual(parse_explicit_answer("**Final Answer: 42**"), "42")
         self.assertEqual(parse_explicit_answer(""), "No response from agent")
 
+    def test_a_repeated_label_is_not_part_of_the_answer(self):
+        # Haiku 5.5 (2026-10-10) wrote the label twice on its last line.
+        self.assertEqual(parse_answer("so 1.1413.\n\nFinal Answer: **Final Answer: 1.1413**"), "1.1413")
+        self.assertEqual(parse_answer("**Final Answer: Final Answer: São Paulo**"), "São Paulo")
+        self.assertEqual(parse_answer("Final Answer: **[1, 2]**"), "[1, 2]")
+        self.assertEqual(parse_answer("**Final Answer: 42**"), "42")
+
     def test_successful_tool_answer_uses_the_code_completion_protocol(self):
         with TemporaryDirectory() as temp:
             with patch("systems.code_agent_system.os.makedirs"):
