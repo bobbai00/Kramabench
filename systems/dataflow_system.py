@@ -17,6 +17,26 @@ from systems.data_source_utils import expand_data_sources
 from utils.answer_parser import parse_answer
 
 
+def extract_native_answer(result: MessageResult, steps: List[Dict]) -> str:
+    """Only accepted Answer content is a submission; failure text is diagnostic."""
+    if result.error or result.stopped:
+        return ""
+    for step in reversed(steps):
+        for tool_result in reversed(step.get("toolResults") or []):
+            output = tool_result.get("output")
+            if not isinstance(output, dict) or output.get("kind") != "dataflow-actions":
+                continue
+            actions = output.get("actions") or []
+            if (output.get("status") == "completed" and len(actions) == 1
+                    and actions[0].get("status") == "ok"
+                    and actions[0].get("action", {}).get("type") == "answer"
+                    and isinstance(output.get("answer"), str)):
+                return output["answer"].strip()
+    # Completion alone is not proof: transport errors can also close a turn.
+    # Never turn diagnostic text or a pending plain reply into a submission.
+    return ""
+
+
 class DataflowSystem(System):
     """
     KramaBench System wrapper for Texera DataflowAgent.
@@ -448,6 +468,13 @@ class DataflowSystem(System):
             if getattr(self, "list_all_files", False)
             else ""
         )
+        submission = (
+            'Finish with a dataflow call whose only action is '
+            '{"type":"answer","content":"<value>"}. Put the requested answer format '
+            'in answer.content. Submit the value without a Final Answer label.'
+            if self.agent_mode == "native"
+            else "Your last line MUST BE: **Final Answer: <value>**"
+        )
         prompt = f"""You are a data scientist. Answer the following question based on the data files.
 
 Data files available (use these paths to read the data):
@@ -459,7 +486,7 @@ Question: {query}
 
 Answer format: {format_hint}
 
-Your last line MUST BE: **Final Answer: <value>**"""
+{submission}"""
 
         return prompt
 
@@ -727,7 +754,8 @@ Your last line MUST BE: **Final Answer: <value>**"""
             json.dump(stats, f, indent=2)
 
         # Parse answer from response (or from messages if response is empty)
-        answer = parse_answer(result.response, result.messages)
+        answer = (extract_native_answer(result, react_steps) if self.agent_mode == "native"
+                  else parse_answer(result.response, result.messages))
 
         if self.verbose:
             print(f"[DataflowSystem] Answer: {answer[:200]}..." if len(str(answer)) > 200 else f"[DataflowSystem] Answer: {answer}")
